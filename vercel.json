@@ -1,0 +1,19 @@
+{
+  "buildCommand": "node node_modules/vite/bin/vite.js build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+  "rewrites": [
+    { "source": "/proxy-image/:path*", "destination": "https://xpclass.vn/:path*" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron/award-daily-challenge-winners", "schedule": "5 17 * * *" },
+    { "path": "/api/cron/award-weekly-scramble-champion", "schedule": "5 17 * * 0" },
+    { "path": "/api/cron/award-weekly-xp-champion", "schedule": "10 17 * * 0" },
+    { "path": "/api/cron/award-monthly-xp-champion", "schedule": "10 17 1 * *" },
+    { "path": "/api/cron/cleanup-training-scores", "schedule": "0 0 * * *" }
+  ]
+}

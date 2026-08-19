@@ -1,0 +1,112 @@
+These are the 3 item categories and 2 mechanics from the system we just built. Here's what each one is for in a classroom context:
+
+Item Types
+Fragments
+Collect X copies of the same item to assemble something. Think puzzle pieces.
+
+Example: Students collect 5x "Dragon Scale" fragments from exercises → exchange for "Dragon Avatar" via a recipe.
+
+Cards/Stickers
+Collect a full set of different items in a group. Think trading cards.
+
+Example: A set called "Animal Cards" has Cat, Dog, Bird, Fish. Student collects all 4 different cards → exchange for an exclusive frame.
+
+Materials
+Different ingredients that combine together. Think crafting in Minecraft.
+
+Example: "Magic Dust" (common) + "Crystal Shard" (rare) + "Gold Ingot" (uncommon) → combine to craft a special avatar.
+
+The difference is conceptual — it helps you as the admin organize items. The code treats them the same way. What matters is how you set up the recipes.
+
+Mechanics
+Chests
+A container with a random loot table. Student earns a chest, opens it, gets random items.
+
+Admin creates a chest (e.g. "Bronze Chest") and defines what items can drop from it with weights
+Students earn chests from milestones (not yet wired — Phase 3 of the plan)
+Student goes to Inventory → Chests tab → clicks "Open" → animation plays → random items revealed
+Recipes
+The exchange/crafting system. Admin defines: "bring me these items, get this reward."
+
+Admin creates a recipe: input = items from inventory, output = exclusive cosmetic/XP/gems
+Student goes to Inventory → Crafting tab → sees recipes with ingredient progress (e.g. 3/5 Dragon Scales)
+When they have enough → click "Craft" → ingredients consumed → reward granted
+The full loop
+
+Exercise completion (75%+)
+    → 30% chance of random item drop
+    → Item goes to inventory
+    → Collect enough items
+    → Use recipe to craft exclusive reward
+Right now you as admin define everything: which items exist, what rarity, what drops from chests, and what recipes are available. The students just play and collect.
+
+Good now write a summary so I can continue in another chat
+Inventory System - Implementation Summary
+What was built
+A game-like inventory system where students collect items from exercises, open chests, and craft recipes for exclusive rewards.
+
+Database (run in Supabase SQL Editor)
+7 new tables + 5 RPC functions added to Schema.sql (lines 1080-1563):
+
+Table	Purpose
+collectible_items	Item catalog: name, type (fragment/card/material), rarity, set_name
+user_inventory	Per-user item ownership with quantity
+chests	Chest definitions with JSONB loot tables
+user_chests	Chests earned by users (opened_at NULL = unopened)
+recipes	Crafting recipes: ingredients → reward (cosmetic/xp/gems)
+user_crafts	Craft history log
+drop_config	Key-value config for drop rates and milestone mappings
+RPC functions (all SECURITY DEFINER): roll_exercise_drop, open_chest, craft_recipe, award_milestone_chest + default drop config seeded (30% base chance).
+
+You still need to run RLS policies (see previous message for the SQL).
+
+New files created
+File	Purpose
+src/hooks/useInventory.jsx	Context provider: inventory state, openChest, craftRecipe, rollForItemDrop
+src/components/inventory/Inventory.jsx	Student page: 3 tabs (My Items, Chests, Crafting)
+src/components/inventory/ChestOpenAnimation.jsx	Animated chest reveal modal
+src/components/inventory/RecipeCard.jsx	Recipe card with ingredient progress + craft button
+src/components/inventory/ItemDropNotification.jsx	Toast popup on item drop (listens to inventory-item-drop window event)
+src/components/admin/InventoryManagement.jsx	Admin CRUD: 4 sub-tabs (Items, Chests, Recipes, Drop Config)
+Modified files
+File	What changed
+Schema.sql	Added 7 tables + 5 RPC functions before the daily challenge winner function
+App.jsx	Added InventoryProvider wrapper + /inventory route
+Layout.jsx	Added global <ItemDropNotification />
+AdminDashboard.jsx	Added Package icon import, InventoryManagement import, "Inventory" tab + route
+useProgress.jsx	After XP award in completeExerciseWithXP: calls roll_exercise_drop RPC, dispatches inventory-item-drop window event. Return object now includes itemDrop field
+BottomNavigation.jsx	Added Inventory nav item with Package icon + unopened chest badge
+LeftSidebar.jsx	Added Inventory nav item ("Kho đồ") with Package icon + unopened chest badge
+What's NOT done yet (Phase 3-5 from plan)
+Chest awarding on milestones — award_milestone_chest RPC exists but is not called from session completion or streak milestones yet
+Chest purchases in Shop — shop doesn't sell chests yet
+Daily challenge top 3 chest rewards — not wired into award_daily_challenge_winners
+Set completion progress indicators — no UI showing "3/5 cards collected in Dragon Set"
+How item drops work
+useProgress.jsx → completeExerciseWithXP → if score >= 75% and first completion → calls roll_exercise_drop RPC → 30% chance → random item weighted by rarity → dispatches window event → ItemDropNotification shows toast → useInventory refreshes.
+
+Cross-context communication
+useProgress and useInventory are separate React contexts. They communicate via window.dispatchEvent(new CustomEvent('inventory-item-drop')) since useProgress can't import useInventory directly (they're sibling providers).
+
+For the loot_table field when creating a chest:
+
+[
+  { "item_id": "UUID_OF_MAGIC_DUST", "weight": 60, "min_qty": 1, "max_qty": 3 },
+  { "item_id": "UUID_OF_DRAGON_CLAW", "weight": 25, "min_qty": 1, "max_qty": 1 },
+  { "item_id": "UUID_OF_DRAGON_SCALE", "weight": 12, "min_qty": 1, "max_qty": 1 },
+  { "item_id": "UUID_OF_GOLDEN_EGG", "weight": 3, "min_qty": 1, "max_qty": 1 }
+]
+
+For guaranteed_items (always given in addition to random draws):
+
+[
+  { "item_id": "UUID_OF_MAGIC_DUST", "quantity": 2 }
+]
+
+For the ingredients field when creating a recipe:
+
+[
+  { "item_id": "UUID_OF_DRAGON_SCALE", "quantity": 5 },
+  { "item_id": "UUID_OF_DRAGON_CLAW", "quantity": 3 },
+  { "item_id": "UUID_OF_MAGIC_DUST", "quantity": 10 }
+]

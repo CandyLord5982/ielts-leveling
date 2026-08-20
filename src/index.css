@@ -255,7 +255,7 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background-image: var(--quiz-bg-url, url('https://bhlpjvcplrofixogcrqp.supabase.co/storage/v1/object/public/ui-assets/Quiz_bg.jpg'));
+      background-image: var(--quiz-bg-url, url('https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/Quiz_bg.jpg'));
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;

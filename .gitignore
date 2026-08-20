@@ -184,3 +184,6 @@ Thumbs.db
 
 # Bomb Party word-list source downloads (regenerate with npm run build:bombparty-words)
 scripts/.cache/
+
+# Supabase CLI local state
+supabase/.temp/

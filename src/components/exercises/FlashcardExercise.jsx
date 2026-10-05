@@ -19,7 +19,6 @@ import {
   X,
   Play,
 } from "lucide-react";
-import { assessPronunciation } from "../../utils/azurePronunciationService";
 import { usePermissions } from '../../hooks/usePermissions'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 
@@ -271,7 +270,6 @@ const FlashcardExercise = () => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
-  const [azureAvailable, setAzureAvailable] = useState(false);
   const [cardScores, setCardScores] = useState({});
   const [colorTheme, setColorTheme] = useState('blue');
   const [showTutorial, setShowTutorial] = useState(false);
@@ -746,7 +744,7 @@ const FlashcardExercise = () => {
     });
   };
 
-  // Toggle recording with Azure pronunciation assessment
+  // Toggle recording with AssemblyAI pronunciation assessment
   const toggleRecording = async () => {
     if (isRecording) {
       // Stop recording
@@ -761,8 +759,8 @@ const FlashcardExercise = () => {
         recognitionRef.current = null;
       }
       setIsRecording(false);
-    } else if (!azureAvailable) {
-      // Fallback: Use MediaRecorder + AssemblyAI speech-to-text
+    } else {
+      // Record with MediaRecorder, then transcribe via AssemblyAI
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -932,145 +930,6 @@ const FlashcardExercise = () => {
           setTimeout(() => setPronunciationResult(null), 3000);
         };
 
-        mediaRecorder.start(100);
-        setIsRecording(true);
-
-        // Auto-stop after 5 seconds
-        setTimeout(() => {
-          if (mediaRecorder.state === "recording") {
-            mediaRecorder.stop();
-            setIsRecording(false);
-          }
-        }, 5000);
-      } catch (error) {
-        console.error("Error accessing microphone:", error);
-        alert("Failed to access microphone. Please check permissions.");
-        setIsRecording(false);
-      }
-    } else {
-      // Start recording
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        audioChunksRef.current = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.onstop = async () => {
-          // Stop all tracks
-          stream.getTracks().forEach((track) => track.stop());
-
-          // Create audio blob
-          const audioBlob = new Blob(audioChunksRef.current, {
-            type: "audio/webm",
-          });
-
-          console.log("🎤 Recording stopped, blob size:", audioBlob.size);
-
-          // Show loading state
-          setPronunciationResult({
-            loading: true,
-          });
-
-          // Assess pronunciation using Azure
-          const referenceText = currentFlashcard?.front || "";
-          const result = await assessPronunciation(
-            referenceText,
-            audioBlob,
-            "en-US"
-          );
-
-          console.log("📊 Azure assessment result:", result);
-
-          if (result.success) {
-            // Use syllable score as the main score (first word's first syllable)
-            const syllableScore =
-              result.words?.[0]?.syllables?.[0]?.accuracyScore ||
-              result.overallScore;
-
-            // Update card scores - keep best score per card
-            const cardId = currentFlashcard?.id;
-            setCardScores((prev) => {
-              const existing = prev[cardId];
-              const newBestScore = existing
-                ? Math.max(existing.bestScore, syllableScore)
-                : syllableScore;
-              const newAttempts = existing ? existing.attempts + 1 : 1;
-
-              return {
-                ...prev,
-                [cardId]: {
-                  word: currentFlashcard?.front,
-                  bestScore: newBestScore,
-                  attempts: newAttempts,
-                  lastAttempt: new Date(),
-                },
-              };
-            });
-
-            setPronunciationResult({
-              transcript: result.recognizedText,
-              targetWord: currentFlashcard?.front,
-              accuracy: syllableScore, // Show syllable score instead of overall
-              accuracyScore: result.accuracyScore,
-              fluencyScore: result.fluencyScore,
-              completenessScore: result.completenessScore,
-              prosodyScore: result.prosodyScore,
-              feedback: result.feedback,
-              words: result.words,
-              isCorrect: syllableScore >= 70,
-              error: false,
-            });
-
-            // Play meme + sound feedback based on score
-            playFeedback(syllableScore >= 80);
-          } else {
-            // If Azure service error (quota exhausted, etc.), switch to browser fallback
-            if (result.error === 'SERVICE_ERROR' || result.error === 'RECOGNITION_FAILED') {
-              setAzureAvailable(false);
-              console.warn('⚠️ Azure unavailable, switching to browser Speech Recognition fallback');
-            }
-            setPronunciationResult({
-              transcript: result.error === 'SERVICE_ERROR'
-                ? "Azure unavailable — try again, using browser mode"
-                : (result.message || "Error"),
-              targetWord: currentFlashcard?.front,
-              accuracy: 0,
-              isCorrect: false,
-              error: true,
-            });
-          }
-
-          // Auto-hide result after 8 seconds
-          setTimeout(() => {
-            setPronunciationResult(null);
-          }, 5000);
-        };
-
-        mediaRecorder.onerror = (error) => {
-          console.error("MediaRecorder error:", error);
-          stream.getTracks().forEach((track) => track.stop());
-          setIsRecording(false);
-          setPronunciationResult({
-            transcript: "Recording error",
-            targetWord: currentFlashcard?.front,
-            accuracy: 0,
-            isCorrect: false,
-            error: true,
-          });
-          setTimeout(() => {
-            setPronunciationResult(null);
-          }, 3000);
-        };
-
-        // Start recording with timeslice to capture data regularly (every 100ms)
         mediaRecorder.start(100);
         setIsRecording(true);
 

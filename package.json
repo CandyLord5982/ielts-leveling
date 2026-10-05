@@ -23,7 +23,6 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.263.1",
-    "microsoft-cognitiveservices-speech-sdk": "^1.46.0",
     "phaser": "^3.90.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

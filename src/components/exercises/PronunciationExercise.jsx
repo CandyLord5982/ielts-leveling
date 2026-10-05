@@ -10,7 +10,7 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import RichTextRenderer from '../ui/RichTextRenderer'
 import { Mic, Square, CheckCircle, XCircle, ArrowRight, ArrowLeft, Star } from 'lucide-react'
 import AudioPlayer from '../ui/AudioPlayer'
-import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
+import { assessPronunciation } from '../../utils/assemblyPronunciationService'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 
 import { assetUrl } from '../../hooks/useBranding';
@@ -98,6 +98,7 @@ const PronunciationExercise = () => {
 
   // Pronunciation state
   const [isRecording, setIsRecording] = useState(false)
+  const [isAssessing, setIsAssessing] = useState(false)
   const [transcription, setTranscription] = useState('')
   const [pronunciationScore, setPronunciationScore] = useState(null)
   const [accuracyScore, setAccuracyScore] = useState(null)
@@ -112,13 +113,10 @@ const PronunciationExercise = () => {
   const [timerActive, setTimerActive] = useState(false)
   const timerIntervalRef = useRef(null)
 
-  // Azure Speech SDK refs
-  const recognizerRef = useRef(null)
-  const audioConfigRef = useRef(null)
-
-  // Azure Speech Service configuration (should be in environment variables)
-  const AZURE_SPEECH_KEY = import.meta.env.VITE_AZURE_SPEECH_KEY || ''
-  const AZURE_SPEECH_REGION = import.meta.env.VITE_AZURE_SPEECH_REGION || 'southeastasia'
+  // Recording refs (audio is transcribed and scored via AssemblyAI)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
+  const streamRef = useRef(null)
 
   useEffect(() => {
     if (exerciseId) {
@@ -135,6 +133,19 @@ const PronunciationExercise = () => {
       fetchSessionInfo()
     }
   }, [sessionId])
+
+  // Release the microphone if the student leaves mid-recording
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (isQuizComplete && questionResults.length > 0) {
@@ -266,25 +277,22 @@ const PronunciationExercise = () => {
   const totalQuestions = questions.length
   const currentQuestionNumber = currentQuestionIndex + 1
 
-  const startPronunciationAssessment = async () => {
-    if (!AZURE_SPEECH_KEY) {
-      console.error('Azure Speech API key not configured')
-      alert('Azure Speech Service not configured. Please add VITE_AZURE_SPEECH_KEY to your .env file')
-      return
+  const releaseMicrophone = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
     }
+  }
 
+  // Strip HTML tags so the reference text matches what the student actually reads
+  const getReferenceText = () => {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = currentQuestion?.text || ''
+    return (tempDiv.textContent || tempDiv.innerText || '').trim()
+  }
+
+  const startPronunciationAssessment = async () => {
     try {
-      // Clean up any existing recognizer
-      if (recognizerRef.current) {
-        recognizerRef.current.close()
-        recognizerRef.current = null
-      }
-      if (audioConfigRef.current) {
-        audioConfigRef.current.close()
-        audioConfigRef.current = null
-      }
-
-      setIsRecording(true)
       setPronunciationScore(null)
       setAccuracyScore(null)
       setFluencyScore(null)
@@ -293,98 +301,70 @@ const PronunciationExercise = () => {
       setTranscription('')
       setShowExplanation(false)
 
-      const speechConfig = sdk.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION)
-      speechConfig.speechRecognitionLanguage = 'en-US'
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
 
-      audioConfigRef.current = sdk.AudioConfig.fromDefaultMicrophoneInput()
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
 
-      // Configure pronunciation assessment
-      // Strip HTML tags from reference text
-      const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = currentQuestion.text
-      const referenceText = (tempDiv.textContent || tempDiv.innerText || '').trim()
-
-      console.log('Reference text being sent to Azure:', referenceText)
-      console.log('Current question text:', currentQuestion.text)
-
-      const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
-        referenceText,
-        sdk.PronunciationAssessmentGradingSystem.HundredMark,
-        sdk.PronunciationAssessmentGranularity.Phoneme,
-        true
-      )
-
-      // Create speech recognizer
-      recognizerRef.current = new sdk.SpeechRecognizer(speechConfig, audioConfigRef.current)
-
-      // Apply pronunciation assessment config
-      pronunciationAssessmentConfig.applyTo(recognizerRef.current)
-
-      // Use recognizeOnceAsync for single-phrase pronunciation assessment
-      // This properly handles completeness scoring unlike continuous recognition
-      recognizerRef.current.recognizeOnceAsync(
-        (result) => {
-          console.log('Recognition completed')
-          if (result.reason === sdk.ResultReason.RecognizedSpeech) {
-            const pronunciationResult = sdk.PronunciationAssessmentResult.fromResult(result)
-
-            console.log('Azure Pronunciation Result:', {
-              pronunciationScore: pronunciationResult.pronunciationScore,
-              accuracyScore: pronunciationResult.accuracyScore,
-              fluencyScore: pronunciationResult.fluencyScore,
-              completenessScore: pronunciationResult.completenessScore,
-              prosodyScore: pronunciationResult.prosodyScore
-            })
-
-            setTranscription(result.text)
-            setPronunciationScore(pronunciationResult.pronunciationScore)
-            setAccuracyScore(pronunciationResult.accuracyScore)
-            setFluencyScore(pronunciationResult.fluencyScore)
-            setCompletenessScore(pronunciationResult.completenessScore)
-
-            // Get word-level scores
-            const words = result.properties.getProperty(sdk.PropertyId.SpeechServiceResponse_JsonResult)
-            if (words) {
-              const parsedWords = JSON.parse(words)
-              console.log('Full Azure Response:', parsedWords)
-              if (parsedWords.NBest && parsedWords.NBest[0] && parsedWords.NBest[0].Words) {
-                setWordScores(parsedWords.NBest[0].Words)
-              }
-            }
-
-            setShowExplanation(true)
-            setIsRecording(false)
-          } else if (result.reason === sdk.ResultReason.NoMatch) {
-            setTranscription('Could not understand speech. Please try again.')
-            setIsRecording(false)
-          }
-        },
-        (err) => {
-          console.error('Failed to recognize speech:', err)
-          setTranscription('Error: ' + err)
-          setIsRecording(false)
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
         }
-      )
+      }
 
+      mediaRecorder.onstop = async () => {
+        releaseMicrophone()
+        setIsRecording(false)
+        setIsAssessing(true)
+
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+          const result = await assessPronunciation(getReferenceText(), audioBlob)
+
+          if (result.success) {
+            setTranscription(result.text)
+            setPronunciationScore(result.pronunciationScore)
+            setAccuracyScore(result.accuracyScore)
+            setFluencyScore(result.fluencyScore)
+            setCompletenessScore(result.completenessScore)
+            setWordScores(result.words)
+            setShowExplanation(true)
+          } else {
+            setTranscription(result.message || 'Could not understand speech. Please try again.')
+          }
+        } finally {
+          setIsAssessing(false)
+        }
+      }
+
+      mediaRecorder.onerror = (event) => {
+        console.error('Recording error:', event)
+        releaseMicrophone()
+        setIsRecording(false)
+        setTranscription('Recording error. Please try again.')
+      }
+
+      // Timeslice keeps data flowing so short recordings are not lost
+      mediaRecorder.start(100)
+      setIsRecording(true)
     } catch (error) {
       console.error('Error starting pronunciation assessment:', error)
-      alert('Failed to start pronunciation assessment: ' + error.message)
+      releaseMicrophone()
       setIsRecording(false)
+      alert('Failed to access microphone. Please check permissions.')
     }
   }
 
   const stopRecording = () => {
-    if (recognizerRef.current) {
-      recognizerRef.current.close()
-      recognizerRef.current = null
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    } else {
+      releaseMicrophone()
+      setIsRecording(false)
     }
-    if (audioConfigRef.current) {
-      audioConfigRef.current.close()
-      audioConfigRef.current = null
-    }
-    setIsRecording(false)
   }
-
   // Removed playAudio function - now using AudioPlayer component
 
   const handleNextQuestion = () => {
@@ -728,10 +708,13 @@ const PronunciationExercise = () => {
               <div className="flex flex-col items-center space-y-4">
                 <button
                   onClick={isRecording ? stopRecording : startPronunciationAssessment}
+                  disabled={isAssessing}
                   className={`w-20 h-20 rounded-full flex items-center justify-center transition-all transform hover:scale-105 ${
-                    isRecording
-                      ? 'bg-red-500 animate-pulse shadow-lg'
-                      : 'bg-blue-600 hover:bg-blue-700 shadow-md'
+                    isAssessing
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : isRecording
+                        ? 'bg-red-500 animate-pulse shadow-lg'
+                        : 'bg-blue-600 hover:bg-blue-700 shadow-md'
                   }`}
                 >
                   {isRecording ? (
@@ -740,6 +723,9 @@ const PronunciationExercise = () => {
                     <Mic className="w-8 h-8 text-white" />
                   )}
                 </button>
+                {isAssessing && (
+                  <p className="text-sm text-gray-600">Checking your pronunciation…</p>
+                )}
               </div>
 
               {/* Pronunciation Results */}
@@ -747,7 +733,7 @@ const PronunciationExercise = () => {
                 <div className="space-y-4">
                   {pronunciationScore !== null && typeof pronunciationScore === 'number' && !isNaN(pronunciationScore) ? (
                     <>
-                      {/* Expected text with Azure word-level scores */}
+                      {/* Expected text with word-level scores */}
                       {transcription && (
                         <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                           <h3 className="font-semibold text-gray-900 mb-3">Pronunciation Assessment:</h3>

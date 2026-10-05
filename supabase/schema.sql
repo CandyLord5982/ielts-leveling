@@ -4758,27 +4758,6 @@ CREATE TABLE public.achievements (
 
 
 --
--- Name: attendance_records; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.attendance_records (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    course_id uuid NOT NULL,
-    student_id uuid NOT NULL,
-    session_date date NOT NULL,
-    status text DEFAULT 'present'::text NOT NULL,
-    participation_level text DEFAULT 'medium'::text,
-    notes text,
-    recorded_by uuid,
-    recorded_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    session_id uuid,
-    CONSTRAINT attendance_records_participation_level_check CHECK ((participation_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text]))),
-    CONSTRAINT attendance_records_status_check CHECK ((status = ANY (ARRAY['present'::text, 'absent'::text, 'late'::text, 'excused'::text])))
-);
-
-
---
 -- Name: avatar_uploads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -6244,22 +6223,6 @@ ALTER TABLE ONLY public.achievements
 
 
 --
--- Name: attendance_records attendance_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_pkey PRIMARY KEY (id);
-
-
---
--- Name: attendance_records attendance_records_unique; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_unique UNIQUE (session_id, student_id, session_date);
-
-
---
 -- Name: avatar_uploads avatar_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7140,27 +7103,6 @@ ALTER TABLE ONLY public.wild_area_logs
 
 
 --
--- Name: idx_attendance_course_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_attendance_course_date ON public.attendance_records USING btree (course_id, session_date DESC);
-
-
---
--- Name: idx_attendance_session_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_attendance_session_date ON public.attendance_records USING btree (session_id, session_date DESC);
-
-
---
--- Name: idx_attendance_student; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_attendance_student ON public.attendance_records USING btree (student_id, session_date DESC);
-
-
---
 -- Name: idx_avatar_uploads_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7788,38 +7730,6 @@ CREATE TRIGGER update_user_progress_updated_at BEFORE UPDATE ON public.user_prog
 --
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: attendance_records attendance_records_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.courses(id) ON DELETE CASCADE;
-
-
---
--- Name: attendance_records attendance_records_recorded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id) ON DELETE SET NULL;
-
-
---
--- Name: attendance_records attendance_records_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE;
-
-
---
--- Name: attendance_records attendance_records_student_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.attendance_records
-    ADD CONSTRAINT attendance_records_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -9706,13 +9616,6 @@ CREATE POLICY "Students can view all submissions for same exercise" ON public.vi
 
 
 --
--- Name: attendance_records Students can view their own attendance; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Students can view their own attendance" ON public.attendance_records FOR SELECT USING ((student_id = auth.uid()));
-
-
---
 -- Name: lesson_records Students can view their own lesson records; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -9752,17 +9655,6 @@ CREATE POLICY "System can update weekly XP tracking" ON public.weekly_xp_trackin
 
 
 --
--- Name: attendance_records Teachers can delete attendance for their courses; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Teachers can delete attendance for their courses" ON public.attendance_records FOR DELETE USING (((EXISTS ( SELECT 1
-   FROM public.course_teachers ct
-  WHERE ((ct.course_id = attendance_records.course_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
-   FROM public.users u
-  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
-
-
---
 -- Name: lesson_info Teachers can delete lesson info; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -9781,17 +9673,6 @@ CREATE POLICY "Teachers can delete lesson records" ON public.lesson_records FOR 
    FROM (public.lesson_info li
      JOIN public.course_teachers ct ON ((ct.course_id = li.course_id)))
   WHERE ((li.id = lesson_records.lesson_info_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
-   FROM public.users u
-  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
-
-
---
--- Name: attendance_records Teachers can insert attendance for their courses; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Teachers can insert attendance for their courses" ON public.attendance_records FOR INSERT WITH CHECK (((EXISTS ( SELECT 1
-   FROM public.course_teachers ct
-  WHERE ((ct.course_id = attendance_records.course_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
    FROM public.users u
   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
 
@@ -9820,17 +9701,6 @@ CREATE POLICY "Teachers can insert lesson records" ON public.lesson_records FOR 
 
 
 --
--- Name: attendance_records Teachers can update attendance for their courses; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Teachers can update attendance for their courses" ON public.attendance_records FOR UPDATE USING (((EXISTS ( SELECT 1
-   FROM public.course_teachers ct
-  WHERE ((ct.course_id = attendance_records.course_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
-   FROM public.users u
-  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
-
-
---
 -- Name: lesson_info Teachers can update lesson info; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -9849,17 +9719,6 @@ CREATE POLICY "Teachers can update lesson records" ON public.lesson_records FOR 
    FROM (public.lesson_info li
      JOIN public.course_teachers ct ON ((ct.course_id = li.course_id)))
   WHERE ((li.id = lesson_records.lesson_info_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
-   FROM public.users u
-  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
-
-
---
--- Name: attendance_records Teachers can view attendance for their courses; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Teachers can view attendance for their courses" ON public.attendance_records FOR SELECT USING (((EXISTS ( SELECT 1
-   FROM public.course_teachers ct
-  WHERE ((ct.course_id = attendance_records.course_id) AND (ct.teacher_id = auth.uid())))) OR (EXISTS ( SELECT 1
    FROM public.users u
   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))));
 
@@ -10261,12 +10120,6 @@ CREATE POLICY "Users read own crafts" ON public.user_crafts FOR SELECT USING ((a
 
 CREATE POLICY "Users read own inventory" ON public.user_inventory FOR SELECT USING ((auth.uid() = user_id));
 
-
---
--- Name: attendance_records; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: avatar_uploads; Type: ROW SECURITY; Schema: public; Owner: -

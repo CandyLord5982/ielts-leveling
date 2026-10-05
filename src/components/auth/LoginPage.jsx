@@ -219,8 +219,8 @@ const LoginPage = () => {
         <div className="relative z-10 flex flex-col justify-center items-center w-full p-12 text-white">
           <div>
             <img
-              src={assetUrl('/image/Logo_Pinta.png')}
-              alt="Pinta Logo"
+              src={assetUrl('/branding/logo.png')}
+              alt="lelving Logo"
               className="mb-8 max-w-[200px] h-auto"
             />
 
@@ -262,7 +262,7 @@ const LoginPage = () => {
           {/* Logo - Top Left */}
           <div className="absolute top-1 md:top-6 left-4">
             <img
-              src={assetUrl('/Asset%205.png')}
+              src={assetUrl('/branding/logo.png')}
               alt="Logo"
               width={64}
               height={64}

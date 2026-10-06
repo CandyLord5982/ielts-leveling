@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { supabase } from '../../../supabase/client'
-import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus } from 'lucide-react'
+import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus, Headphones } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
 import FlashcardEditor from '../editors/FlashcardEditor'
 import MultipleChoiceEditor from '../editors/MultipleChoiceEditor'
@@ -13,6 +13,8 @@ import ImageHotspotEditor from '../editors/ImageHotspotEditor'
 import PDFWorksheetEditor from '../editors/PDFWorksheetEditor'
 import SpeakingAssessmentEditor from '../editors/SpeakingAssessmentEditor'
 import VideoUploadEditor from '../editors/VideoUploadEditor'
+import IeltsReadingEditor from '../editors/IeltsReadingEditor'
+import ListeningDictationEditor from '../editors/ListeningDictationEditor'
 
 const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allowedTypes = null }) => {
   const [formData, setFormData] = useState({
@@ -42,6 +44,8 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
     { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText },
     { value: 'speaking_assessment', label: 'Speaking Assessment', icon: Mic },
     { value: 'video_upload', label: 'Video Upload', icon: Video },
+    { value: 'ielts_reading', label: 'IELTS Reading', icon: BookOpen },
+    { value: 'listening_dictation', label: 'Listening Dictation', icon: Headphones },
   ]
   const exerciseTypes = allowedTypes
     ? allExerciseTypes.filter(t => allowedTypes.includes(t.value))
@@ -389,6 +393,21 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
                 onQuestionsChange={(questions) => handleContentChange('questions', questions)}
                 onLevelChange={(level) => handleContentChange('level', level)}
                 onSkipScoringChange={(val) => handleContentChange('skip_scoring', val)}
+              />
+            )}
+
+            {formData.exercise_type === 'ielts_reading' && (
+              <IeltsReadingEditor
+                content={formData.content}
+                onContentChange={(content) => setFormData(prev => ({ ...prev, content }))}
+                folderPath={getFolderPath(formData.folder_id)}
+              />
+            )}
+
+            {formData.exercise_type === 'listening_dictation' && (
+              <ListeningDictationEditor
+                content={formData.content}
+                onContentChange={(content) => setFormData(prev => ({ ...prev, content }))}
               />
             )}
           </div>

@@ -53,7 +53,7 @@ const getThemeSideImages = (theme) => {
   return themeSideImages[theme] || themeSideImages.blue
 }
 
-const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
+const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null, embedded = false }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -1003,10 +1003,10 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   // Teacher view: read-only preview showing all questions with correct answers filled in
   if (isTeacherView && teacherMode === 'review') {
     return (
-      <div className="max-w-4xl mx-auto py-8 px-4">
-        {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'Fill in the Blank'}</h2>
+      <div className={embedded ? "w-full" : "max-w-4xl mx-auto py-8 px-4"}>
+        {!embedded && isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
+        <div className={`flex items-center justify-between mb-6 ${embedded ? 'flex-row-reverse' : ''}`}>
+          {!embedded && <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'Fill in the Blank'}</h2>}
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setTeacherMode('review')}
@@ -1021,9 +1021,11 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
               Do
             </button>
           </div>
-          <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
-            <ArrowLeft className="w-4 h-4" /> Back
-          </button>
+          {!embedded && (
+            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+              <ArrowLeft className="w-4 h-4" /> Back
+            </button>
+          )}
         </div>
         {exercise?.content?.intro && String(exercise.content.intro).trim() && (
           <div className="mb-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -1052,7 +1054,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
                 )}
                 <div className="flex items-start gap-3">
                   <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">{qIndex + 1}</span>
-                  <div className="text-lg leading-relaxed flex-1">
+                  <div className={`${embedded ? 'text-base font-medium text-gray-900' : 'text-lg'} leading-relaxed flex-1`}>
                     {strippedText.split(/(_{3,}|\[blank\])/gi).map((part, index) => {
                       if (part.match(/^_{3,}$/) || part.toLowerCase() === '[blank]') {
                         const currentBlankIdx = blankIdx++
@@ -1139,7 +1141,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
                     ))}
                   </div>
                 )}
-                <div className="text-lg leading-relaxed">
+                <div className={`${embedded ? 'text-base font-medium text-gray-900' : 'text-lg'} leading-relaxed`}>
                   {renderQuestionText(qIndex)}
                 </div>
                 {questionAudio.length > 0 && (

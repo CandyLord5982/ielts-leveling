@@ -14,6 +14,8 @@ import PDFWorksheetExercise from '../exercises/PDFWorksheetExercise'
 import SpeakingAssessmentExercise from '../exercises/SpeakingAssessmentExercise'
 import VideoUploadExercise from '../exercises/VideoUploadExercise'
 import TestRunner from '../test/TestRunner'
+import IeltsReading from '../../pages/study/IeltsReading'
+import ListeningDictation from '../../pages/study/ListeningDictation'
 
 const StudyModule = () => {
   return (
@@ -45,6 +47,8 @@ const StudyModule = () => {
       <Route path="pdf-worksheet" element={<PDFWorksheetExercise />} />
       <Route path="speaking-assessment" element={<SpeakingAssessmentExercise />} />
       <Route path="video-upload" element={<VideoUploadExercise />} />
+      <Route path="ielts-reading" element={<IeltsReading />} />
+      <Route path="listening-dictation" element={<ListeningDictation />} />
     </Routes>
   )
 }

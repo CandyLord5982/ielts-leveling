@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../supabase/client'
@@ -17,6 +17,15 @@ const Layout = () => {
   const { loading, user } = useAuth()
   const location = useLocation()
   const [showReportModal, setShowReportModal] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
+  })
+  const handleSidebarCollapsed = useCallback((val) => setSidebarCollapsed(val), [])
+
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('right_sidebar_collapsed') === 'true' } catch { return false }
+  })
+  const handleRightSidebarCollapsed = useCallback((val) => setRightSidebarCollapsed(val), [])
 
   // Heartbeat: update last_seen_at only when user is active
   useEffect(() => {
@@ -70,7 +79,9 @@ const Layout = () => {
     '/study/image-hotspot',
     '/study/dropdown',
     '/study/ai-fill-blank',
-    '/study/pdf-worksheet'
+    '/study/pdf-worksheet',
+    '/study/ielts-reading',
+    '/study/listening-dictation'
   ]
 
   // Check if on session/exercise list page (e.g., /study/course/123/unit/456/session/789)
@@ -78,7 +89,7 @@ const Layout = () => {
 
   const isTestPage = location.pathname.startsWith('/study/test-runner')
   const isAdminPage = location.pathname.startsWith('/admin')
-  const isFullWidthPage = location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets'
+  const isFullWidthPage = location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/listening-dictation')
 
   const hideBottomNav = exercisePaths.some(p => location.pathname.startsWith(p)) || isSessionPage || isTestPage
   const isLiveBattle = location.pathname.startsWith('/teacher/live-battle')
@@ -100,13 +111,19 @@ const Layout = () => {
       {!isInsideCourse && <PvPIncomingBanner />}
 
       {/* Left Sidebar - Desktop and Mobile */}
-      {!hideSidebar && <LeftSidebar onOpenReport={() => setShowReportModal(true)} />}
+      {!hideSidebar && <LeftSidebar onOpenReport={() => setShowReportModal(true)} onCollapsedChange={handleSidebarCollapsed} />}
 
       {/* Right Sidebar - Online Users */}
-      {!hideSidebar && <OnlineUsers />}
+      {!hideSidebar && <OnlineUsers onCollapsedChange={handleRightSidebarCollapsed} />}
 
       {/* Main Content */}
-      <main className={`${hideSidebar ? 'lg:pl-0' : 'lg:pl-64'} ${hideSidebar ? '' : 'xl:pr-56'} min-h-screen ${hideBottomNav ? 'pb-0' : 'pb-16 lg:pb-0'}`}>
+      <main
+        className={`min-h-screen ${hideBottomNav ? 'pb-0' : 'pb-16 lg:pb-0'} transition-all duration-300 ease-in-out ${
+          hideSidebar ? '' : (sidebarCollapsed ? 'lg:pl-[60px]' : 'lg:pl-64')
+        } ${
+          hideSidebar ? '' : (rightSidebarCollapsed ? 'xl:pr-[60px]' : 'xl:pr-56')
+        }`}
+      >
         <div className={isAdminPage || isFullWidthPage || isLiveBattle ? '' : isCoursePage ? 'mx-auto px-1 sm:px-4 py-2 sm:py-6' : isSessionPage ? '' : hideSidebar ? 'container mx-auto px-1 sm:px-4 py-2 sm:py-6 max-w-7xl' : 'container mx-auto px-4 py-6 max-w-7xl'}>
           <Outlet />
         </div>

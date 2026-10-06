@@ -26,6 +26,38 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
   const [assignments, setAssignments] = useState([])
   const [loadingAssignments, setLoadingAssignments] = useState(false)
   const menuRef = useRef(null)
+  const buttonRef = useRef(null)
+  const [menuStyle, setMenuStyle] = useState({})
+
+  // Compute fixed position for dropdown
+  useEffect(() => {
+    if (showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+        zIndex: 9999
+      })
+    }
+  }, [showMenu])
+
+  // Close menu on scroll to prevent detachment
+  useEffect(() => {
+    if (showMenu) {
+      const handleScroll = (e) => {
+        // Don't close if scrolling inside the menu itself
+        if (menuRef.current && menuRef.current.contains(e.target) && e.target !== document) {
+            // Check if the scroll target is the menu or its children
+            const isMenuScroll = e.target.closest('.exercise-menu-dropdown')
+            if(isMenuScroll) return;
+        }
+        setShowMenu(false)
+      }
+      window.addEventListener('scroll', handleScroll, true)
+      return () => window.removeEventListener('scroll', handleScroll, true)
+    }
+  }, [showMenu])
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -65,6 +97,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         return FileText
       case 'video_upload':
         return Video
+      case 'ielts_reading':
+        return BookOpen
       default:
         return BookOpen
     }
@@ -94,6 +128,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         return 'Speaking Assessment'
       case 'video_upload':
         return 'Video Upload'
+      case 'ielts_reading':
+        return 'IELTS Reading'
       default:
         return 'Exercise'
     }
@@ -119,6 +155,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         break
       case 'pdf_worksheet':
         return c.pdf_url ? `PDF: ${count} question${count !== 1 ? 's' : ''}` : 'PDF worksheet'
+      case 'ielts_reading':
+        return c.passage?.title ? `Passage: ${c.passage.title}` : 'IELTS Reading'
       default:
         firstText = first.question || first.prompt || first.text || first.sentence || ''
     }
@@ -171,6 +209,10 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
           return `/study/speaking-assessment?exerciseId=${exercise.id}`
         case 'video_upload':
           return `/study/video-upload?exerciseId=${exercise.id}`
+        case 'ielts_reading':
+          return `/study/ielts-reading?exerciseId=${exercise.id}`
+        case 'listening_dictation':
+          return `/study/listening-dictation?exerciseId=${exercise.id}`
         default:
           return null
       }
@@ -323,70 +365,76 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
   if (viewMode === 'list') {
     return (
       <div className="bg-white rounded-lg border hover:border-blue-200 transition-colors">
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 flex-1 min-w-0">
-              {/* Type Icon */}
-              <div className="flex-shrink-0">
-                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <TypeIcon className="w-5 h-5 text-blue-600" />
-                </div>
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-4 flex-1 min-w-0">
+            {/* Type Icon */}
+            <div className="flex-shrink-0">
+              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+                <TypeIcon className="w-6 h-6 text-blue-600 stroke-[1.5]" />
               </div>
-
-              {/* Exercise Info */}
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-gray-900 truncate">
-                  {exercise.title}
-                </h3>
-                <div className="flex items-center space-x-4 mt-1">
-                  <span className="text-xs text-gray-500">
-                    {getTypeLabel(exercise.exercise_type)}
-                  </span>
-                  {exercise.exercise_folders && (
-                    <div className="flex items-center space-x-1">
-                      <FolderOpen className="w-3 h-3 text-gray-400" />
-                      <span className="text-xs text-gray-500">
-                        {exercise.exercise_folders.name}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center space-x-1">
-                    <Star className="w-3 h-3 text-orange-400" />
-                    <span className="text-xs text-gray-500">
-                      {exercise.xp_reward || 0} XP
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Difficulty */}
-              <div className="flex-shrink-0">
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(exercise.difficulty_level)}`}>
-                  Level {exercise.difficulty_level || 1}
-                </span>
-              </div>
-
-              {/* Tags */}
-              {exercise.tags && exercise.tags.length > 0 && (
-                <div className="flex items-center space-x-1">
-                  <Tag className="w-3 h-3 text-gray-400" />
-                  <div className="flex space-x-1">
-                    {exercise.tags.slice(0, 2).map((tag, index) => (
-                      <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                        {tag}
-                      </span>
-                    ))}
-                    {exercise.tags.length > 2 && (
-                      <span className="text-xs text-gray-500">+{exercise.tags.length - 2}</span>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
+            {/* Exercise Info */}
+            {/* Exercise Info */}
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              {/* Top Row: Title */}
+              <div className="flex items-center mb-0.5 min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900 truncate">
+                  {exercise.title}
+                </h3>
+              </div>
+
+              {/* Bottom Row: Type, Folder, XP, Tags */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-xs text-gray-500 flex-shrink-0">
+                  {getTypeLabel(exercise.exercise_type)}
+                </span>
+                
+                {exercise.exercise_folders && (
+                  <div className="flex items-center space-x-1 flex-shrink-0">
+                    <FolderOpen className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-xs text-gray-500">
+                      {exercise.exercise_folders.name}
+                    </span>
+                  </div>
+                )}
+                
+                <div className="flex items-center space-x-1 flex-shrink-0">
+                  <Star className="w-3.5 h-3.5 text-orange-400" strokeWidth={1.5} fill="none" />
+                  <span className="text-xs text-gray-500">
+                    {exercise.xp_reward || 0} XP
+                  </span>
+                </div>
+
+                {exercise.tags && exercise.tags.length > 0 && (
+                  <div className="flex items-center space-x-1.5 flex-shrink-0 border-l border-gray-200 pl-3">
+                    <Tag className="w-3 h-3 text-gray-400" />
+                    <div className="flex items-center space-x-1">
+                      {exercise.tags.slice(0, 2).map((tag, index) => (
+                        <span key={index} className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded">
+                          {tag}
+                        </span>
+                      ))}
+                      {exercise.tags.length > 2 && (
+                        <span className="text-[10px] text-gray-500">+{exercise.tags.length - 2}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Section: Level & Actions */}
+          <div className="flex items-center space-x-3 ml-4 flex-shrink-0">
+            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(exercise.difficulty_level)}`}>
+              Level {exercise.difficulty_level || 1}
+            </span>
+
             {/* Actions */}
-            <div className="flex items-center space-x-2 relative" ref={menuRef}>
+            <div className="relative" ref={menuRef}>
               <button
+                ref={buttonRef}
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
               >
@@ -394,7 +442,10 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
               </button>
 
               {showMenu && (
-                <div className="absolute right-0 top-10 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 min-w-[160px]">
+                <div 
+                  className="exercise-menu-dropdown bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+                  style={menuStyle}
+                >
                   <button
                     onClick={handlePreview}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center space-x-2"
@@ -504,16 +555,17 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <TypeIcon className="w-4 h-4 text-blue-600" />
             </div>
-            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(exercise.difficulty_level)}`}>
+            <span className={`whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(exercise.difficulty_level)}`}>
               Level {exercise.difficulty_level || 1}
             </span>
           </div>
 
           <div className="relative" ref={menuRef}>
             <button
+              ref={buttonRef}
               onClick={() => setShowMenu(!showMenu)}
               className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
             >
@@ -521,7 +573,10 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 min-w-[140px]">
+              <div 
+                className="exercise-menu-dropdown bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[140px]"
+                style={menuStyle}
+              >
                 <button
                   onClick={handlePreview}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center space-x-2"
@@ -590,23 +645,23 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center justify-between text-xs text-gray-500 gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             {exercise.exercise_folders && (
-              <div className="flex items-center space-x-1">
-                <FolderOpen className="w-3 h-3" />
-                <span>{exercise.exercise_folders.name}</span>
+              <div className="flex items-center space-x-1 whitespace-nowrap">
+                <FolderOpen className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate max-w-[80px]">{exercise.exercise_folders.name}</span>
               </div>
             )}
-            <div className="flex items-center space-x-1">
-              <Star className="w-3 h-3 text-orange-400" />
+            <div className="flex items-center space-x-1 whitespace-nowrap">
+              <Star className="w-3 h-3 text-orange-400 flex-shrink-0" />
               <span>{exercise.xp_reward || 0} XP</span>
             </div>
           </div>
 
           {exercise.estimated_duration && (
-            <div className="flex items-center space-x-1">
-              <Clock className="w-3 h-3" />
+            <div className="flex items-center space-x-1 whitespace-nowrap">
+              <Clock className="w-3 h-3 flex-shrink-0" />
               <span>{exercise.estimated_duration}m</span>
             </div>
           )}
@@ -616,12 +671,12 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         {exercise.tags && exercise.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {exercise.tags.slice(0, 3).map((tag, index) => (
-              <span key={index} className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded">
+              <span key={index} className="whitespace-nowrap px-2 py-1 text-[11px] bg-blue-50 text-blue-600 rounded max-w-[200px] truncate">
                 {tag}
               </span>
             ))}
             {exercise.tags.length > 3 && (
-              <span className="text-xs text-gray-500">+{exercise.tags.length - 3}</span>
+              <span className="whitespace-nowrap text-[11px] text-gray-500 mt-1">+{exercise.tags.length - 3}</span>
             )}
           </div>
         )}

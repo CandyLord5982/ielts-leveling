@@ -224,6 +224,7 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
     { value: 'drag_drop', label: 'Drag & Drop', icon: Copy },
     { value: 'ai_fill_blank', label: 'Fill in AI Score', icon: Brain },
     { value: 'video_upload', label: 'Video Upload', icon: Video },
+    { value: 'ielts_reading', label: 'IELTS Reading', icon: BookOpen },
   ]
 
   const breadcrumbs = () => {
@@ -384,7 +385,7 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
               <>
                 <div className={
                   viewMode === 'grid'
-                    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
+                    ? 'grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4'
                     : 'space-y-2'
                 }>
                   {exercises.map(exercise => (

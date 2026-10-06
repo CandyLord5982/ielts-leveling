@@ -13,6 +13,8 @@ import ImageHotspotEditor from '../editors/ImageHotspotEditor'
 import PDFWorksheetEditor from '../editors/PDFWorksheetEditor'
 import SpeakingAssessmentEditor from '../editors/SpeakingAssessmentEditor'
 import VideoUploadEditor from '../editors/VideoUploadEditor'
+import IeltsReadingEditor from '../editors/IeltsReadingEditor'
+import ListeningDictationEditor from '../editors/ListeningDictationEditor'
 
 const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
   const [formData, setFormData] = useState({
@@ -270,6 +272,21 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
             onSkipScoringChange={(val) => handleContentChange({ ...content, skip_scoring: val })}
           />
         )
+      case 'ielts_reading':
+        return (
+          <IeltsReadingEditor
+            content={content}
+            onContentChange={(newContent) => handleContentChange(newContent)}
+            folderPath={getFolderPath(formData.folder_id)}
+          />
+        )
+      case 'listening_dictation':
+        return (
+          <ListeningDictationEditor
+            content={content}
+            onContentChange={(newContent) => handleContentChange(newContent)}
+          />
+        )
       default:
         return (
           <div className="text-center py-8 text-gray-500">
@@ -355,6 +372,8 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
                   <option value="image_hotspot">Image Hotspot</option>
                   <option value="pdf_worksheet">PDF Worksheet</option>
                   <option value="speaking_assessment">Speaking Assessment</option>
+                  <option value="video_upload">Video Upload</option>
+                  <option value="ielts_reading">IELTS Reading</option>
                 </select>
               </div>
 

@@ -1006,9 +1006,9 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h3 className="text-lg font-medium text-gray-900">Multiple Choice Questions</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
         
           {/* Exercise Intro (applies to all questions) */}
           

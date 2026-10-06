@@ -450,7 +450,7 @@ const UserManagement = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <span className="ml-3">Đang tải danh sách người dùng...</span>
@@ -461,7 +461,7 @@ const UserManagement = () => {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
             <AlertCircle className="h-5 w-5 text-red-400" />
@@ -481,7 +481,7 @@ const UserManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
 
       {/* Users Table */}
       <Card>

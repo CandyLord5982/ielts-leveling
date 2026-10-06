@@ -170,7 +170,7 @@ const ClassWarManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {notification && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white text-sm ${
           notification.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>

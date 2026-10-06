@@ -102,13 +102,12 @@ const BrandingSettings = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto flex flex-col gap-6">
       {notification && (
-        <div className={`p-3 rounded-lg text-sm font-medium ${
-          notification.type === 'error'
+        <div className={`p-3 rounded-lg text-sm font-medium ${notification.type === 'error'
             ? 'bg-red-50 text-red-700 border border-red-200'
             : 'bg-green-50 text-green-700 border border-green-200'
-        }`}>
+          }`}>
           {notification.message}
         </div>
       )}

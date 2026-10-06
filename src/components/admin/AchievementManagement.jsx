@@ -199,7 +199,7 @@ const AchievementManagement = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-900">Quản lý Thành tích</h2>
         </div>
@@ -211,7 +211,7 @@ const AchievementManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Button onClick={() => handleOpenModal()} className="flex items-center space-x-2">

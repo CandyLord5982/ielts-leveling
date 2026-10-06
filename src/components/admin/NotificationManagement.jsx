@@ -63,7 +63,7 @@ const NotificationManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Create Announcement Form */}
       <div className="bg-white rounded-xl border shadow-sm p-6">
         <div className="flex items-center gap-2 mb-4">

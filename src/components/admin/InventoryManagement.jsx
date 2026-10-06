@@ -415,7 +415,7 @@ const InventoryManagement = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
         <div className="text-center py-8 text-gray-600">Loading...</div>
       </div>
@@ -423,7 +423,7 @@ const InventoryManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -1246,7 +1246,7 @@ const DropConfigEditor = ({ dropConfig, onSave, saving, items }) => {
   const inputClass = "w-full px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Exercise Drop Rate</h3>
         <p className="text-sm text-gray-500 mb-4">Controls the chance of item drops when a student completes an exercise (score &gt;= 75%)</p>

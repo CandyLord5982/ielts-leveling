@@ -118,11 +118,9 @@ const Layout = () => {
 
       {/* Main Content */}
       <main
-        className={`min-h-screen ${hideBottomNav ? 'pb-0' : 'pb-16 lg:pb-0'} transition-all duration-300 ease-in-out ${
-          hideSidebar ? '' : (sidebarCollapsed ? 'lg:pl-[60px]' : 'lg:pl-64')
-        } ${
-          hideSidebar ? '' : (rightSidebarCollapsed ? 'xl:pr-[60px]' : 'xl:pr-56')
-        }`}
+        className={`min-h-screen ${hideBottomNav ? 'pb-0' : 'pb-16 lg:pb-0'} transition-all duration-300 ease-in-out ${hideSidebar ? '' : (sidebarCollapsed ? 'lg:pl-[60px]' : 'lg:pl-64')
+          } ${hideSidebar ? '' : (rightSidebarCollapsed ? 'xl:pr-[60px]' : 'xl:pr-56')
+          }`}
       >
         <div className={isAdminPage || isFullWidthPage || isLiveBattle ? '' : isCoursePage ? 'mx-auto px-1 sm:px-4 py-2 sm:py-6' : isSessionPage ? '' : hideSidebar ? 'container mx-auto px-1 sm:px-4 py-2 sm:py-6 max-w-7xl' : 'container mx-auto px-4 py-6 max-w-7xl'}>
           <Outlet />

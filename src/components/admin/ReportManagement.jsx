@@ -109,7 +109,7 @@ const ReportManagement = () => {
   const pendingCount = reports.filter(r => r.status === 'pending').length
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {STATUS_OPTIONS.map(s => {

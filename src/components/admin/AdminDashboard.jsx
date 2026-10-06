@@ -63,7 +63,7 @@ const AdminDashboard = () => {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [stats, setStats] = useState(null);
@@ -110,7 +110,7 @@ const AdminDashboard = () => {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending')
       if (!error) setPendingAvatarsCount(count || 0)
-    } catch {}
+    } catch { }
   }
 
   const fetchPendingReportsCount = async () => {
@@ -120,7 +120,7 @@ const AdminDashboard = () => {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending')
       if (!error) setPendingReportsCount(count || 0)
-    } catch {}
+    } catch { }
   }
 
   const showNotification = (message, type = 'success') => {
@@ -172,7 +172,7 @@ const AdminDashboard = () => {
   const handleExportContent = async () => {
     try {
       setLoading(true);
-      
+
       const [coursesData, unitsData, sessionsData, exercisesData] = await Promise.all([
         supabase.from('courses').select('*'),
         supabase.from('units').select('*'),
@@ -196,7 +196,7 @@ const AdminDashboard = () => {
       link.href = url;
       link.download = `ielts-leveling-content-${new Date().toISOString().split('T')[0]}.json`;
       link.click();
-      
+
       showNotification('Content exported successfully!');
     } catch (error) {
       showNotification('Error exporting content: ' + error.message, 'error');
@@ -228,7 +228,7 @@ const AdminDashboard = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Home },
-{ id: 'bank', label: 'Exercise Bank', icon: FileText },
+    { id: 'bank', label: 'Exercise Bank', icon: FileText },
     { id: 'courses', label: 'Courses', icon: BookOpen },
     { id: 'cohorts', label: 'Cohorts', icon: Users },
     { id: 'enrollments', label: 'Enrollments', icon: Users },
@@ -284,11 +284,10 @@ const AdminDashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                    activeTab === tab.id
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${activeTab === tab.id
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <IconComponent className="w-4 h-4" />
                   {tab.label}
@@ -434,11 +433,10 @@ const AdminDashboard = () => {
 
       {/* Notification Display */}
       {notification && (
-        <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
-          notification.type === 'error' 
-            ? 'bg-red-500 text-white' 
+        <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${notification.type === 'error'
+            ? 'bg-red-500 text-white'
             : 'bg-green-500 text-white'
-        }`}>
+          }`}>
           <div className="flex items-center gap-2">
             {notification.type === 'error' ? (
               <AlertCircle className="w-5 h-5" />
@@ -501,7 +499,7 @@ const AnalyticsView = ({ stats }) => {
 
       // Average scores
       const completedProgress = userProgress?.filter(p => p.score !== null) || [];
-      const avgScore = completedProgress.length > 0 
+      const avgScore = completedProgress.length > 0
         ? Math.round(completedProgress.reduce((sum, p) => sum + p.score, 0) / completedProgress.length)
         : 0;
 
@@ -529,7 +527,7 @@ const AnalyticsView = ({ stats }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Content Overview */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Content Overview</h3>

@@ -267,7 +267,7 @@ const StudentEnrollmentManagement = () => {
   const selectedCourseData = courses.find(course => course.id === selectedCourse);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
 
       {/* Course Selection */}
       <div className="bg-white rounded-lg shadow-sm border p-6">

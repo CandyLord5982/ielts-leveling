@@ -184,7 +184,7 @@ const ExerciseManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -1831,7 +1831,7 @@ Explanation: Good morning is Chào buổi sáng.`}
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         {localQuestions.map((question, index) => (
           <div key={question.id} className="border border-gray-200 rounded-lg p-4 bg-orange-50">
             <div className="flex justify-between items-center mb-3">

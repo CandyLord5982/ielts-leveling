@@ -211,7 +211,7 @@ const ShopManagement = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <h2 className="text-2xl font-bold text-gray-900">Quản lý Shop</h2>
         <div className="text-center py-8 text-gray-600">Đang tải dữ liệu...</div>
       </div>
@@ -219,7 +219,7 @@ const ShopManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

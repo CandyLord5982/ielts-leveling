@@ -262,8 +262,8 @@ const StudentLevelsManagement = () => {
                     />
                     {formData.badge_icon && (
                       <div className="flex items-center space-x-2">
-                        <img 
-                          src={formData.badge_icon} 
+                        <img
+                          src={formData.badge_icon}
                           alt="Badge preview"
                           className="w-8 h-8 rounded-full object-cover border"
                           onError={(e) => {
@@ -396,11 +396,10 @@ const StudentLevelsManagement = () => {
 
       {/* Message Display */}
       {message.text && (
-        <div className={`p-4 rounded-lg mb-6 ${
-          message.type === 'success' 
-            ? 'bg-green-100 text-green-800 border border-green-200' 
+        <div className={`p-4 rounded-lg mb-6 ${message.type === 'success'
+            ? 'bg-green-100 text-green-800 border border-green-200'
             : 'bg-red-100 text-red-800 border border-red-200'
-        }`}>
+          }`}>
           {message.text}
         </div>
       )}
@@ -453,11 +452,10 @@ const StudentLevelsManagement = () => {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => toggleLevelStatus(level)}
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          level.is_active
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${level.is_active
                             ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
-                        }`}
+                          }`}
                       >
                         {level.is_active ? 'Active' : 'Inactive'}
                       </button>

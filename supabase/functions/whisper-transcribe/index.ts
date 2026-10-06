@@ -15,41 +15,41 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-    if (!OPENAI_API_KEY) {
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+    if (!GROQ_API_KEY) {
       return new Response(
-        JSON.stringify({ error: 'OPENAI_API_KEY not set in Edge Function secrets' }),
+        JSON.stringify({ error: 'GROQ_API_KEY not set in Edge Function secrets' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Forward the multipart FormData to OpenAI Whisper API
+    // Forward the multipart FormData to Groq Speech-to-Text API
     const formData = await req.formData()
 
-    // Ensure required Whisper params are set
-    if (!formData.has('model')) formData.set('model', 'whisper-1')
-    if (!formData.has('response_format')) formData.set('response_format', 'verbose_json')
+    // Ensure required Groq params are set
+    formData.set('model', 'whisper-large-v3')
+    formData.set('response_format', 'verbose_json')
     if (!formData.has('timestamp_granularities[]')) {
       formData.append('timestamp_granularities[]', 'segment')
     }
 
-    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
       body: formData,
     })
 
-    if (!whisperRes.ok) {
-      const errText = await whisperRes.text()
+    if (!groqRes.ok) {
+      const errText = await groqRes.text()
       return new Response(
         JSON.stringify({ error: errText }),
-        { status: whisperRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: groqRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const data = await whisperRes.json()
+    const data = await groqRes.json()
 
-    // Map Whisper verbose_json segments → our schema
+    // Map Groq verbose_json segments → our schema
     const segments = (data.segments || []).map((s) => ({
       start_time: parseFloat(Number(s.start).toFixed(2)),
       end_time:   parseFloat(Number(s.end).toFixed(2)),

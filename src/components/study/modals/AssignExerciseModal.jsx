@@ -28,7 +28,8 @@ const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
     { value: 'drag_drop', label: 'Drag & Drop', icon: Copy },
     { value: 'ai_fill_blank', label: 'Fill in AI Score', icon: Brain },
     { value: 'image_hotspot', label: 'Image Hotspot', icon: Image },
-    { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText }
+    { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText },
+    { value: 'listening_dictation', label: 'Listening Dictation', icon: BookOpen }
   ]
 
   useEffect(() => {
@@ -286,7 +287,8 @@ const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
       ai_fill_blank: 'ai-fill-blank',
       image_hotspot: 'image-hotspot',
       pdf_worksheet: 'pdf-worksheet',
-      speaking_assessment: 'speaking-assessment'
+      speaking_assessment: 'speaking-assessment',
+      listening_dictation: 'listening-dictation'
     }
     const route = typeToRoute[exercise.exercise_type]
     if (route) {

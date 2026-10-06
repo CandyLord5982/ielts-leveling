@@ -14,9 +14,10 @@ const exerciseTypes = [
   { value: 'pronunciation', label: 'Pronunciation', icon: Mic },
   { value: 'image_hotspot', label: 'Image Hotspot', icon: Image },
   { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText },
+  { value: 'listening_dictation', label: 'Listening Dictation', icon: BookOpen },
 ]
 
-const supportedTypes = ['multiple_choice', 'fill_blank', 'dropdown', 'flashcard']
+const supportedTypes = ['multiple_choice', 'fill_blank', 'dropdown', 'flashcard', 'listening_dictation']
 
 const getExerciseIcon = (type) => {
   const t = exerciseTypes.find(t => t.value === type)
@@ -149,6 +150,7 @@ const ExercisePickerModal = ({ onSelect, onClose }) => {
       ai_fill_blank: 'ai-fill-blank',
       image_hotspot: 'image-hotspot',
       pdf_worksheet: 'pdf-worksheet',
+      listening_dictation: 'listening-dictation',
     }
     const route = typeToRoute[exercise.exercise_type]
     if (route) {

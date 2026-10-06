@@ -76,6 +76,16 @@ const StudyDashboard = () => {
       duration: '10-15 phút',
       path: '/study/ai-fill-blank'
     },
+    {
+      id: 'listening_dictation',
+      title: 'Listening Dictation',
+      description: 'Nghe và chép chính tả',
+      icon: BookOpen,
+      color: 'bg-indigo-600',
+      difficulty: 'Khó',
+      duration: '15-30 phút',
+      path: '/study/listening-dictation'
+    },
   ]
 
   const getDifficultyColor = (difficulty) => {

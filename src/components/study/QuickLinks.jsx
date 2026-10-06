@@ -37,26 +37,22 @@ export default function QuickLinks({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-[#cbe0ff] shadow-xs overflow-hidden mt-4 transition-all">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden transition-all">
       {/* Header bar */}
       <button
         type="button"
         onClick={() => setIsOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-[#dce7ff] hover:bg-[#d4e2ff] transition-colors select-none text-left"
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
       >
-        <span className="text-[16px] font-medium text-[#0f2942] tracking-tight">
+        <span className="text-sm font-semibold text-gray-800">
           Quick links
         </span>
-        {isOpen ? (
-          <ChevronUp className="w-5 h-5 text-[#0f2942]" />
-        ) : (
-          <ChevronDown className="w-5 h-5 text-[#0f2942]" />
-        )}
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Content body */}
       {isOpen && (
-        <div className="p-5 md:p-6 bg-white border-t border-[#dbeafc]">
+        <div className="p-6 border-t border-gray-100">
           {nextExercises.length > 0 ? (
             <ul className="space-y-3 font-normal text-[15px] text-[#1e293b]">
               {nextExercises.map((exercise) => (

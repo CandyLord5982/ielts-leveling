@@ -213,7 +213,28 @@ const SegmentRow = ({ seg, index, audioRef, audioDuration, errors, onUpdate, onD
 
           {/* Translation */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Translation / Dịch nghĩa</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-gray-600">Translation / Dịch nghĩa</label>
+              <button 
+                type="button"
+                onClick={async () => {
+                  if (!seg.text_content) return;
+                  try {
+                    const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(seg.text_content)}`);
+                    const data = await res.json();
+                    const vi = data[0].map(x => x[0]).join('');
+                    onUpdate(index, 'translation', vi);
+                  } catch (e) {
+                    alert('Lỗi khi dịch: ' + e.message);
+                  }
+                }}
+                className="text-[10px] bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded font-semibold transition-colors flex items-center gap-1"
+                title="Tự động dịch từ Transcript bằng Google Translate"
+              >
+                <Wand2 className="w-3 h-3" />
+                Dịch tự động
+              </button>
+            </div>
             <textarea
               rows={2}
               value={seg.translation || ''}
@@ -589,7 +610,8 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
       if (!mapped.length) throw new Error('Không tạo được phân đoạn. Thử lại hoặc nhập thủ công.')
       update({ segments: mapped })
     } catch (err) {
-      setTranscribeError('Auto-Transcribe thất bại: ' + err.message)
+      console.error('Transcribe error:', err);
+      setTranscribeError('Không thể tự động tạo transcript. Vui lòng thử lại.');
     } finally {
       setTranscribing(false)
     }
@@ -697,7 +719,7 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Gửi audio lên <strong>OpenAI Whisper</strong> để tự động tạo segments và timestamp. Cần OpenAI API Key.
+              Gửi audio lên <strong>Groq Whisper</strong> để tự động tạo transcript, segments và timestamp. Groq API Key được cấu hình ở server.
             </p>
             {transcribeError && (
               <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
@@ -748,10 +770,44 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
                 <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-normal">{segments.length} câu</span>
               </h3>
             </div>
-            <button type="button" onClick={addSegment}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-all">
-              <Plus className="w-3.5 h-3.5" />Thêm câu
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" 
+                id="btn-translate-all"
+                onClick={async (e) => {
+                  const btn = e.currentTarget;
+                  if (!window.confirm('Tự động dịch TẤT CẢ các câu bằng Google Translate? (Sẽ ghi đè các bản dịch hiện tại). Quá trình này sẽ chạy từng câu một.')) return;
+                  
+                  btn.disabled = true;
+                  const originalText = btn.innerHTML;
+                  
+                  const newSegs = [...segments];
+                  for (let i = 0; i < newSegs.length; i++) {
+                    if (newSegs[i].text_content) {
+                      try {
+                        btn.innerHTML = `<span class="animate-pulse">Đang dịch câu ${i+1}/${newSegs.length}...</span>`;
+                        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(newSegs[i].text_content)}`);
+                        const data = await res.json();
+                        const vi = data[0].map(x => x[0]).join('');
+                        newSegs[i] = { ...newSegs[i], translation: vi };
+                        // Update incrementally so user sees progress
+                        update({ segments: [...newSegs] });
+                      } catch (err) { console.error(err); }
+                      await new Promise(r => setTimeout(r, 200)); // prevent rate limit
+                    }
+                  }
+                  
+                  btn.innerHTML = originalText;
+                  btn.disabled = false;
+                }}
+                disabled={segments.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-all">
+                <Wand2 className="w-3.5 h-3.5" />Dịch tất cả
+              </button>
+              <button type="button" onClick={addSegment}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-all">
+                <Plus className="w-3.5 h-3.5" />Thêm câu
+              </button>
+            </div>
           </div>
 
           {/* Validation summary */}

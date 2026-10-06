@@ -8,10 +8,10 @@ import {
   CheckCircle, XCircle, SkipForward, Headphones, Star,
   FileText, Settings, Lightbulb, BookOpen, Volume2, Maximize2,
   ChevronDown, Mic, Check, Search, Info, ChevronUp, Link, Download,
-  Gauge, Repeat, Languages, Clock, MessageSquare, Trash2, MoreVertical
+  Gauge, Repeat, Languages, Clock, MessageSquare, Trash2, MoreVertical, AlertTriangle
 } from 'lucide-react'
 import { Slider } from '../../components/ui/slider'
-import QuickLinks from '../../components/study/QuickLinks'
+
 
 // ─── Diff Engine ─────────────────────────────────────────────────────────────
 const normalizeForCompare = (str) => {
@@ -26,6 +26,7 @@ const normalizeForCompare = (str) => {
 }
 
 const getTokens = (text) => {
+  if (!text) return []
   return text.trim().split(/\s+/).filter(Boolean).map(w => ({
     original: w,
     norm: normalizeForCompare(w)
@@ -91,7 +92,6 @@ const formatTime = (sec) => {
   return `${m}:${s}`
 }
 
-// ─── DiffResult ───────────────────────────────────────────────────────────────
 const DiffResult = ({ tokens }) => (
   <div className="flex flex-wrap gap-x-1.5 gap-y-6 text-[14px] items-start pt-1">
     {tokens.map((t, i) => {
@@ -129,6 +129,40 @@ const DiffResult = ({ tokens }) => (
     })}
   </div>
 )
+
+const ProgressiveHint = ({ input = '', answer = '' }) => {
+  const inputTokens = getTokens(input || '')
+  const ansTokens = getTokens(answer || '')
+  
+  let matchCount = 0
+  for (let i = 0; i < Math.min(inputTokens.length, ansTokens.length); i++) {
+    if (inputTokens[i].norm === ansTokens[i].norm) {
+      matchCount++
+    } else {
+      break
+    }
+  }
+
+  const parts = answer.split(/(\s+)/)
+  let wordIndex = 0
+  
+  return (
+    <div className="text-[16px] text-gray-900 leading-relaxed tracking-wide">
+      {parts.map((part, index) => {
+        if (part.trim() === '') return <span key={index}>{part}</span>
+        
+        const isMatched = wordIndex < matchCount
+        const isNext = wordIndex === matchCount
+        wordIndex++
+        
+        if (isMatched) return <span key={index} className="text-gray-900">{part}</span>
+        if (isNext) return <span key={index} className="text-emerald-600 font-bold">{part}</span>
+        
+        return <span key={index} className="text-gray-900">{part.replace(/./g, '*')}</span>
+      })}
+    </div>
+  )
+}
 
 // ─── Community Comments ────────────────────────────────────────────────────────
 function timeAgo(dateStr) {
@@ -535,6 +569,14 @@ const useSegmentAudio = (audioRef) => {
       setProgress(1)
       setElapsed(end - start)
       setPlaying(false)
+
+      if (settingsRef.current?.autoReplay) {
+        clearTimeout(autoReplayTimerRef.current)
+        autoReplayTimerRef.current = setTimeout(() => {
+          playSegment(start, end, speed, false)
+        }, (settingsRef.current?.replayDelay || 0) * 1000)
+      }
+
       return
     }
 
@@ -616,7 +658,29 @@ const ListeningDictationExercise = () => {
   const [speed, setSpeed] = useState(1.0)
   const [volume, setVolume] = useState(1.0)
   const [showFullAudio, setShowFullAudio] = useState(false)
-  const [showQuickLinks, setShowQuickLinks] = useState(false)
+
+  const defaultSettings = {
+    replayKey: 'Control',
+    playPauseKey: '`',
+    autoReplay: false,
+    replayDelay: 0.5,
+    wordSuggestions: false,
+    showShortcutTips: true
+  }
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('listeningDictationSettings')
+      return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings
+    } catch { return defaultSettings }
+  })
+  const updateSetting = (key, val) => {
+    setSettings(prev => {
+      const next = { ...prev, [key]: val }
+      localStorage.setItem('listeningDictationSettings', JSON.stringify(next))
+      return next
+    })
+  }
+
   const [showSettings, setShowSettings] = useState(false)
   const [autoAdvance, setAutoAdvance] = useState(false)
   const [globalTime, setGlobalTime] = useState(0)
@@ -624,6 +688,13 @@ const ListeningDictationExercise = () => {
   const [fullDuration, setFullDuration] = useState(0)
   const [transcriptSearch, setTranscriptSearch] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
+
+  const settingsRef = useRef(settings)
+  const autoReplayTimerRef = useRef(null)
+
+  useEffect(() => {
+    settingsRef.current = settings
+  }, [settings])
   const [repeatAudio, setRepeatAudio] = useState(false)
   const [activeSegmentIdx, setActiveSegmentIdx] = useState(-1)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -698,16 +769,45 @@ const ListeningDictationExercise = () => {
         setIsEditingNote(false)
       }
 
-      if (e.key === 'Tab') { e.preventDefault(); handleReplay() }
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (!checked) handleCheck(); else handleNext() }
-      if (e.key === ' ' && !inInput) {
-        e.preventDefault()
-        if (mode === 'full' && audioRef.current) {
-          isFullPlaying ? audioRef.current.pause() : audioRef.current.play()
+      // Helper to match key
+      const matchKey = (settingKey, ev) => {
+        if (!settingKey || settingKey === 'None') return false;
+        if (settingKey === 'Control') return ev.key === 'Control' || ev.ctrlKey;
+        if (settingKey === 'Alt') return ev.key === 'Alt' || ev.altKey;
+        if (settingKey === 'Shift') return ev.key === 'Shift' || ev.shiftKey;
+        if (settingKey === 'Space') return ev.key === ' ' || ev.code === 'Space';
+        return ev.key.toLowerCase() === settingKey.toLowerCase();
+      }
+
+      // Dynamic Replay Key
+      if (matchKey(settings.replayKey, e)) {
+        const isModifier = ['Control', 'Alt', 'Shift'].includes(settings.replayKey);
+        const isSpecial = ['`', 'Escape', 'Enter'].includes(settings.replayKey);
+        if (inInput && !isModifier && !isSpecial && !e.ctrlKey && !e.metaKey) {
+          // let user type normally if they set 'r' as shortcut
         } else {
-          playing ? pauseSegment() : handleReplay()
+          e.preventDefault();
+          handleReplay();
         }
       }
+
+      // Dynamic Play/Pause Key
+      if (matchKey(settings.playPauseKey, e)) {
+        const isModifier = ['Control', 'Alt', 'Shift'].includes(settings.playPauseKey);
+        const isSpecial = ['`', 'Escape', 'Enter'].includes(settings.playPauseKey);
+        if (inInput && !isModifier && !isSpecial && !e.ctrlKey && !e.metaKey) {
+          // let user type normally
+        } else {
+          e.preventDefault();
+          if (mode === 'full' && audioRef.current) {
+            isFullPlaying ? audioRef.current.pause() : audioRef.current.play()
+          } else {
+            playing ? pauseSegment() : handleReplay()
+          }
+        }
+      }
+
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (!checked) handleCheck(); else handleNext() }
       if (!inInput) {
         if (e.key === 'ArrowRight') {
           e.preventDefault()
@@ -730,7 +830,7 @@ const ListeningDictationExercise = () => {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [checked, inputText, seg, playing, mode, isFullPlaying, segments, activeSegmentIdx, currentIdx, totalSegments])
+  }, [checked, inputText, seg, playing, mode, isFullPlaying, segments, activeSegmentIdx, currentIdx, totalSegments, settings, showSettings])
 
   // Sync active segment with globalTime
   useEffect(() => {
@@ -773,13 +873,19 @@ const ListeningDictationExercise = () => {
       const d = diffWords(inputText, ans); const acc = calcAccuracy(d)
       if (acc > bestAccuracy || bestDiff === null) { bestAccuracy = acc; bestDiff = d }
     }
-    setDiffResult(bestDiff); setChecked(true)
-    const newResults = [...segmentResults.filter(r => r.idx !== currentIdx),
-    { idx: currentIdx, accuracy: bestAccuracy, skipped: false, userAnswer: inputText, diffResult: bestDiff }]
-    setSegmentResults(newResults)
-
+    setDiffResult(bestDiff);
+    
     const errorsCount = calcErrors(bestDiff)
-    if (autoAdvance && errorsCount === 0 && currentIdx < totalSegments - 1) setTimeout(() => handleNext(), 1200)
+    if (errorsCount === 0) {
+      setChecked(true)
+      const newResults = [...segmentResults.filter(r => r.idx !== currentIdx),
+      { idx: currentIdx, accuracy: bestAccuracy, skipped: false, userAnswer: inputText, diffResult: bestDiff }]
+      setSegmentResults(newResults)
+      if (autoAdvance && currentIdx < totalSegments - 1) setTimeout(() => handleNext(), 1200)
+    } else {
+      // Incorrect - keep checking false so they can continue typing
+      setChecked(false)
+    }
   }
 
   const handleSkip = () => {
@@ -802,11 +908,15 @@ const ListeningDictationExercise = () => {
   }
 
   const handleNext = () => {
+    clearTimeout(autoReplayTimerRef.current)
     if (currentIdx < totalSegments - 1) setCurrentIdx(currentIdx + 1)
     else finishExercise()
   }
 
-  const handlePrev = () => { if (currentIdx > 0) setCurrentIdx(currentIdx - 1) }
+  const handlePrev = () => { 
+    clearTimeout(autoReplayTimerRef.current)
+    if (currentIdx > 0) setCurrentIdx(currentIdx - 1) 
+  }
 
   const finishExercise = async () => {
     setIsComplete(true)
@@ -915,7 +1025,12 @@ const ListeningDictationExercise = () => {
   }
 
   const MoreMenuDropdown = () => (
-    <div className="relative shrink-0 flex items-center">
+    <div className="relative shrink-0 flex items-center gap-1.5">
+      {speed !== 1.0 && (
+        <span className="text-[11px] font-bold text-gray-500 select-none">
+          {speed}x
+        </span>
+      )}
       <button
         onClick={() => { setShowMoreMenu(!showMoreMenu); setActiveSubMenu(null); }}
         className="p-1 hover:bg-gray-200/60 rounded-lg text-gray-500 transition-colors"
@@ -1086,7 +1201,7 @@ const ListeningDictationExercise = () => {
                 }}
                 className={`flex items-center gap-2 px-5 py-2.5 text-sm transition-all rounded-t-xl ${mode === id
                   ? 'text-blue-600 bg-white border border-gray-200 border-b-white -mb-[1px] font-semibold border-t-2 border-t-blue-600'
-                  : 'text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-50/80'
+                  : 'text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-50/80 border border-transparent border-t-2 border-b-0'
                   }`}
               >
                 <Icon className={`w-4 h-4 ${mode === id ? 'text-blue-600' : 'text-gray-400'}`} />
@@ -1191,6 +1306,9 @@ const ListeningDictationExercise = () => {
                             disabled={checked}
                             rows={2}
                             maxLength={500}
+                            autoComplete={settings.wordSuggestions ? "on" : "off"}
+                            autoCorrect={settings.wordSuggestions ? "on" : "off"}
+                            spellCheck={settings.wordSuggestions}
                             className="w-full bg-white text-gray-900 text-sm rounded-xl px-4 py-2.5 border border-gray-200/80 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none transition-all placeholder-gray-300 disabled:bg-gray-50/50 disabled:text-gray-700"
                             placeholder="Type what you hear..."
                             autoFocus
@@ -1202,7 +1320,7 @@ const ListeningDictationExercise = () => {
                         </div>
 
                         {/* Results/Feedback */}
-                        {checked && !skipped && diffResult && (
+                        {diffResult && !skipped && (
                           <div className="mb-4 flex flex-col gap-3">
                             {(() => {
                               const errorsCount = calcErrors(diffResult)
@@ -1218,23 +1336,16 @@ const ListeningDictationExercise = () => {
                               }
 
                               return (
-                                <div className="flex flex-col">
-                                  <div className="p-3 bg-white rounded-xl border border-gray-200/80 shadow-xs flex flex-col gap-2">
-                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Your answer</p>
-                                    <DiffResult tokens={diffResult} />
-                                    <p className="text-[13px] font-medium text-red-500 mt-1">
-                                      {errorsCount} {errorsCount === 1 ? 'mistake' : 'mistakes'}
-                                    </p>
-                                  </div>
-
-                                  <hr className="my-3 border-gray-100 mx-1" />
-
-                                  <div className="flex flex-col gap-1.5 px-1">
-                                    <div className="flex items-center gap-1.5 text-green-700 font-bold text-[12px] uppercase tracking-wider">
-                                      <Check className="w-3.5 h-3.5 stroke-[3]" /> Correct answer
+                                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 shadow-sm flex flex-col gap-3">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[15px]">
+                                      <AlertTriangle className="w-4 h-4" /> Incorrect
                                     </div>
-                                    <p className="text-gray-900 text-[14px] font-medium leading-relaxed">{seg?.text_content}</p>
+                                    <button onClick={handleSkip} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-md text-[13px] font-medium hover:bg-gray-50 transition-colors shadow-sm">
+                                      Skip
+                                    </button>
                                   </div>
+                                  <ProgressiveHint input={inputText} answer={seg?.text_content || ''} />
                                 </div>
                               )
                             })()}
@@ -1261,18 +1372,7 @@ const ListeningDictationExercise = () => {
                             </>
                           ) : (
                             <>
-                              {diffResult && calcErrors(diffResult) > 0 && !skipped && (
-                                <button
-                                  onClick={() => {
-                                    setChecked(false);
-                                    setDiffResult(null);
-                                    if (inputRef.current) inputRef.current.focus()
-                                  }}
-                                  className="px-3.5 h-[30px] bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5 text-gray-500" /> Try Again
-                                </button>
-                              )}
+                              {/* Removed Try Again because it's no longer disabled */}
                               <button onClick={handleNext}
                                 className="px-3.5 h-[30px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5">
                                 {currentIdx < totalSegments - 1 ? 'Next' : 'Hoàn thành'}
@@ -1446,12 +1546,7 @@ const ListeningDictationExercise = () => {
                 )}
               </div>
 
-              {/* ── Quick Links ── */}
-              <QuickLinks
-                currentExerciseId={exerciseId}
-                siblingExercises={siblingExercises}
-                sessionId={sessionId}
-              />
+
 
             </div>
           )}
@@ -1640,10 +1735,13 @@ const ListeningDictationExercise = () => {
                 </div>
 
                 {/* 3. Bottom Hotkey Helper */}
-                <div className="mt-6 pt-4 border-t border-gray-100 text-xs font-medium text-gray-500 flex flex-col gap-1 select-none">
-                  <p>Press &quot;Space&quot; to Play/Pause</p>
-                  <p>Press &larr; and &rarr; to move between sentences.</p>
-                </div>
+                {settings.showShortcutTips && (
+                  <div className="mt-6 pt-4 border-t border-gray-100 text-xs font-medium text-gray-500 flex flex-col gap-1 select-none">
+                    <p>Press &quot;{settings.playPauseKey}&quot; to Play/Pause.</p>
+                    <p>Press &quot;{settings.replayKey}&quot; to Replay sentence.</p>
+                    <p>Press &larr; and &rarr; to move between sentences.</p>
+                  </div>
+                )}
 
               </div>
 

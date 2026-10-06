@@ -638,6 +638,16 @@ const ListeningDictationExercise = () => {
   const searchParams = new URLSearchParams(location.search)
   const exerciseId = searchParams.get('exerciseId')
   const sessionId = searchParams.get('sessionId')
+  const courseId = searchParams.get('courseId')
+  const unitId = searchParams.get('unitId')
+
+  const backToSession = () => {
+    if (sessionId && unitId && courseId) {
+      navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
+    } else {
+      navigate(-1)
+    }
+  }
 
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -980,7 +990,7 @@ const ListeningDictationExercise = () => {
           <div className="flex flex-col gap-2">
             <button onClick={() => { setIsComplete(false); setIsReviewMode(true) }} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors">Xem lại</button>
             <button onClick={() => { setIsComplete(false); setCurrentIdx(0); setSegmentResults([]); setInputText(''); setChecked(false) }} className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors">Làm lại</button>
-            <button onClick={() => navigate(sessionId ? '/study' : '/')} className="w-full py-2.5 text-gray-500 hover:text-gray-700 text-sm transition-colors">Về trang học</button>
+            <button onClick={backToSession}className="w-full py-2.5 text-gray-500 hover:text-gray-700 text-sm transition-colors">Về trang học</button>
           </div>
         </div>
       </div>
@@ -1147,7 +1157,7 @@ const ListeningDictationExercise = () => {
           {/* Row 1: Back to course | Fullscreen */}
           <div className="flex items-center justify-between px-6 pt-2 pb-0">
             <button
-              onClick={() => navigate(-1)}
+              onClick={backToSession}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />Back to course

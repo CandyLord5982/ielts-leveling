@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../supabase/client'
-import { ChevronLeft, ChevronRight, BookOpen, Mic, Edit3, HelpCircle, Copy, Brain, Image, FileText, Layers, MessageSquare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, BookOpen, Mic, Edit3, HelpCircle, Copy, Brain, Image, FileText, Layers, MessageSquare, Headphones } from 'lucide-react'
 
 const typeToRoute = {
   flashcard: '/study/flashcard',
@@ -13,7 +13,9 @@ const typeToRoute = {
   ai_fill_blank: '/study/ai-fill-blank',
   image_hotspot: '/study/image-hotspot',
   pdf_worksheet: '/study/pdf-worksheet',
-  speaking_assessment: '/study/speaking-assessment'
+  speaking_assessment: '/study/speaking-assessment',
+  ielts_reading: '/study/ielts-reading',
+  listening_dictation: '/study/listening-dictation'
 }
 
 const typeIcons = {
@@ -26,7 +28,9 @@ const typeIcons = {
   ai_fill_blank: Brain,
   image_hotspot: Image,
   pdf_worksheet: FileText,
-  speaking_assessment: MessageSquare
+  speaking_assessment: MessageSquare,
+  ielts_reading: BookOpen,
+  listening_dictation: Headphones
 }
 
 const typeLabels = {
@@ -39,7 +43,9 @@ const typeLabels = {
   ai_fill_blank: 'AI Fill Blank',
   image_hotspot: 'Image Hotspot',
   pdf_worksheet: 'PDF Worksheet',
-  speaking_assessment: 'Speaking'
+  speaking_assessment: 'Speaking',
+  ielts_reading: 'IELTS Reading',
+  listening_dictation: 'Dictation'
 }
 
 const TeacherExerciseNav = ({ sessionId, currentExerciseId }) => {

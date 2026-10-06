@@ -2,15 +2,29 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase/client'
 import { ArrowLeft, CheckCircle, Clock, LayoutGrid, X } from 'lucide-react'
-import IeltsInlineFillBlank from '../../components/exercises/IeltsInlineFillBlank'
+import IeltsInlineFillBlank from './IeltsInlineFillBlank'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useAuth } from '../../hooks/useAuth'
+import { useProgress } from '../../hooks/useProgress'
+import { useFeedback } from '../../hooks/useFeedback'
+import CelebrationScreen from '../../components/ui/CelebrationScreen'
+import { splitAnswers } from '../../utils/splitAnswers'
 
-const IeltsReading = () => {
+const IeltsReadingExercise = () => {
   const [searchParams] = useSearchParams()
   const exerciseId = searchParams.get('exerciseId')
+  const sessionId = searchParams.get('sessionId')
+  const courseId = searchParams.get('courseId')
+  const unitId = searchParams.get('unitId')
   const navigate = useNavigate()
   const { canCreateContent } = usePermissions()
   const isTeacher = canCreateContent()
+  const { user } = useAuth()
+  const { startExercise, completeExerciseWithXP } = useProgress()
+  const { passGif } = useFeedback()
+  const [result, setResult] = useState(null) // { correct, total, score }
+  const [xpEarned, setXpEarned] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
 
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -28,6 +42,10 @@ const IeltsReading = () => {
   useEffect(() => {
     fetchExercise()
   }, [exerciseId])
+
+  useEffect(() => {
+    if (exerciseId && user && !isTeacher) startExercise(exerciseId)
+  }, [exerciseId, user])
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -169,12 +187,62 @@ const IeltsReading = () => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
   }
 
-  const handleSubmit = () => {
-    if (window.confirm('Are you sure you want to submit your answers?')) {
-      clearInterval(timerRef.current)
-      alert('Answers submitted successfully!')
-      navigate('/study')
+  const backToSession = () => {
+    if (sessionId && unitId && courseId) {
+      navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
+    } else {
+      navigate(-1)
     }
+  }
+
+  const gradeAnswers = () => {
+    const mcQuestions = exercise.content?.questions || []
+    const fibQuestions = exercise.content?.fillBlankQuestions || []
+    let correct = 0
+    let total = 0
+
+    mcQuestions.forEach((q, idx) => {
+      total++
+      if (answers[q.id || `q_${idx}`] === q.correct_answer) correct++
+    })
+
+    fibQuestions.forEach((q, qIdx) => {
+      q.blanks?.forEach((blank, bIdx) => {
+        total++
+        const userAnswer = (fibAnswers[`${qIdx}-${bIdx}`] || '').trim()
+        const accepted = splitAnswers(blank.answer)
+        const isCorrect = blank.case_sensitive
+          ? accepted.some(a => userAnswer === a)
+          : accepted.some(a => userAnswer.toLowerCase() === a.toLowerCase())
+        if (isCorrect) correct++
+      })
+    })
+
+    return { correct, total, score: total ? Math.round((correct / total) * 100) : 0 }
+  }
+
+  const handleSubmit = async () => {
+    if (submitting || !window.confirm('Are you sure you want to submit your answers?')) return
+    clearInterval(timerRef.current)
+    setSubmitting(true)
+    const graded = gradeAnswers()
+    setResult(graded)
+
+    if (user && !isTeacher) {
+      try {
+        const baseXP = exercise.xp_reward || 10
+        const bonusXP = graded.score >= 95 ? Math.round(baseXP * 0.5) : graded.score >= 90 ? Math.round(baseXP * 0.3) : 0
+        const res = await completeExerciseWithXP(exerciseId, baseXP + bonusXP, {
+          score: graded.score,
+          max_score: 100,
+          time_spent: 60 * 60 - timeLeft
+        })
+        if (res?.xpAwarded > 0) setXpEarned(res.xpAwarded)
+      } catch (err) {
+        console.error('Failed to save IELTS Reading progress:', err)
+      }
+    }
+    setSubmitting(false)
   }
 
   if (loading) return (
@@ -224,7 +292,7 @@ const IeltsReading = () => {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/study')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <button onClick={backToSession} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div>
@@ -254,7 +322,8 @@ const IeltsReading = () => {
           
           <button
             onClick={handleSubmit}
-            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
+            disabled={submitting || !!result}
+            className="flex items-center gap-2 disabled:opacity-60 bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
           >
             <CheckCircle className="w-4 h-4" />
             Submit Test
@@ -480,8 +549,26 @@ const IeltsReading = () => {
           </div>
         </div>
       )}
+
+      {/* Results */}
+      {result && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[200] p-4">
+          <CelebrationScreen
+            score={result.score}
+            correctAnswers={result.correct}
+            totalQuestions={result.total}
+            passThreshold={80}
+            xpAwarded={xpEarned}
+            passGif={passGif}
+            isRetryMode={false}
+            wrongQuestionsCount={result.total - result.correct}
+            onBackToList={backToSession}
+            exerciseId={exerciseId}
+          />
+        </div>
+      )}
     </div>
   )
 }
 
-export default IeltsReading
+export default IeltsReadingExercise

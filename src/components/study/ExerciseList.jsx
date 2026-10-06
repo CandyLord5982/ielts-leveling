@@ -64,6 +64,7 @@ import {
   Map,
   List,
   Video,
+  Headphones,
   Users,
 } from "lucide-react";
 
@@ -757,6 +758,8 @@ const ExerciseList = () => {
         />
       ),
       video_upload: (props) => <Video {...props} />,
+      ielts_reading: (props) => <BookOpen {...props} />,
+      listening_dictation: (props) => <Headphones {...props} />,
     };
     return icons[exerciseType] || ((props) => <BookOpen {...props} />);
   };
@@ -771,6 +774,8 @@ const ExerciseList = () => {
       pdf_worksheet: "text-rose-600 bg-rose-100",
       speaking_assessment: "text-violet-600 bg-violet-100",
       video_upload: "text-teal-600 bg-teal-100",
+      ielts_reading: "text-sky-600 bg-sky-100",
+      listening_dictation: "text-indigo-600 bg-indigo-100",
     };
     return colors[exerciseType] || "text-gray-600 bg-gray-100";
   };
@@ -871,6 +876,8 @@ const ExerciseList = () => {
       pdf_worksheet: "/study/pdf-worksheet",
       speaking_assessment: "/study/speaking-assessment",
       video_upload: "/study/video-upload",
+      ielts_reading: "/study/ielts-reading",
+      listening_dictation: "/study/listening-dictation",
     };
 
     const basePath = paths[exercise.exercise_type] || "/study/flashcard";

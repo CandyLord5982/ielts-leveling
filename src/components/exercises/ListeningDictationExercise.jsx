@@ -1,21 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+/* eslint-disable react/prop-types */
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useProgress } from '../../hooks/useProgress'
 import { supabase } from '../../supabase/client'
 import {
-  ArrowLeft, ArrowRight, RotateCcw, Play, Pause, ChevronRight, ChevronLeft,
-  CheckCircle, XCircle, SkipForward, Headphones, Star,
-  FileText, Settings, Lightbulb, BookOpen, Volume2, Maximize2,
-  ChevronDown, Mic, Check, Search, Info, ChevronUp, Link, Download,
-  Gauge, Repeat, Languages, Clock, MessageSquare, Trash2, MoreVertical, AlertTriangle
+  ArrowLeft, ArrowRight, Play, Pause, ChevronRight,
+  CheckCircle, XCircle, X, SkipForward, Headphones, Star,
+  FileText, Settings, Volume2, Maximize2,
+  ChevronDown, Mic, Check, Download,
+  Gauge, Repeat, Languages, MoreVertical
 } from 'lucide-react'
 import { Slider } from '../../components/ui/slider'
 
 
 // ─── Diff Engine ─────────────────────────────────────────────────────────────
 const normalizeForCompare = (str) => {
-  let s = str.toLowerCase().replace(/[.,\/#!$%\^&*;:{}=\-_`~()"""]/g, '').trim()
+  let s = str.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()"""]/g, '').trim()
   const EQUIVALENTS = {
     'colour': 'color', 'centre': 'center', 'programme': 'program',
     'theatre': 'theater', 'travelled': 'traveled', 'marvellous': 'marvelous',
@@ -92,77 +93,124 @@ const formatTime = (sec) => {
   return `${m}:${s}`
 }
 
-const DiffResult = ({ tokens }) => (
-  <div className="flex flex-wrap gap-x-1.5 gap-y-6 text-[14px] items-start pt-1">
-    {tokens.map((t, i) => {
-      if (t.type === 'correct') {
-        return (
-          <span key={i} className="inline-flex flex-col items-center">
-            <span className="text-gray-900 leading-[20px] h-[20px]">{t.text}</span>
-          </span>
-        )
-      }
-      if (t.type === 'wrong') {
-        return (
-          <span key={i} className="inline-flex flex-col items-center">
-            <span className="text-red-500 underline decoration-red-500 underline-offset-2 leading-[20px] h-[20px]">{t.studentText}</span>
-            <span className="text-green-600 font-medium leading-[20px] mt-1">{t.correctText}</span>
-          </span>
-        )
-      }
-      if (t.type === 'extra') {
-        return (
-          <span key={i} className="inline-flex flex-col items-center">
-            <span className="text-red-500 line-through decoration-red-500 leading-[20px] h-[20px]">{t.text}</span>
-          </span>
-        )
-      }
-      if (t.type === 'missing') {
-        return (
-          <span key={i} className="inline-flex flex-col items-center min-w-[12px]">
-            <span className="opacity-0 select-none leading-[20px] h-[20px]">&nbsp;</span>
-            <span className="text-green-600 font-medium leading-[20px] mt-1">{t.text}</span>
-          </span>
-        )
-      }
-      return null
-    })}
-  </div>
-)
+const SpellCheckWord = ({ studentText = '', correctText = '', type }) => {
+  if (type === 'missing') {
+    return (
+      <span className="inline-block mx-[3px] text-gray-700 font-medium">
+        {correctText}
+      </span>
+    )
+  }
 
-const ProgressiveHint = ({ input = '', answer = '' }) => {
-  const inputTokens = getTokens(input || '')
-  const ansTokens = getTokens(answer || '')
+  if (type === 'extra') {
+    return (
+      <span className="inline-flex gap-[2px] mx-[3px]">
+        {studentText.split('').map((char, i) => (
+          <span key={i} className="border-b-[2px] border-red-500 pb-[1px] leading-none text-gray-900">{char}</span>
+        ))}
+      </span>
+    )
+  }
+
+  if (type === 'correct') {
+    return (
+      <span className="inline-block mx-[3px] font-bold text-[#0B7A42]">
+        {studentText}
+      </span>
+    )
+  }
+
+  // type === 'wrong'
+  const sLower = studentText.toLowerCase();
+  const cLower = correctText.toLowerCase();
   
-  let matchCount = 0
-  for (let i = 0; i < Math.min(inputTokens.length, ansTokens.length); i++) {
-    if (inputTokens[i].norm === ansTokens[i].norm) {
-      matchCount++
-    } else {
-      break
+  const toSorted = (str) => str.split('').sort().join('');
+  const isAnagram = sLower.length === cLower.length && toSorted(sLower) === toSorted(cLower);
+
+  let diffCount = 0;
+  let diffIndex = -1;
+  if (sLower.length === cLower.length) {
+    for (let i = 0; i < sLower.length; i++) {
+      if (sLower[i] !== cLower[i]) {
+        diffCount++;
+        diffIndex = i;
+      }
     }
   }
 
-  const parts = answer.split(/(\s+)/)
-  let wordIndex = 0
-  
+  if (diffCount === 1) {
+    return (
+      <span className="inline-flex gap-[2px] mx-[3px]">
+        {studentText.split('').map((char, i) => (
+          <span key={i} className="relative pb-[1px] leading-none text-gray-900">
+            {char}
+            {i === diffIndex && (
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-[4px] h-[4px] bg-red-500 rounded-full"></span>
+            )}
+          </span>
+        ))}
+      </span>
+    )
+  }
+
+  if (isAnagram) {
+    return (
+      <span className="inline-flex gap-[2px] mx-[3px]">
+        {studentText.split('').map((char, i) => (
+          <span key={i} className="border-b-[2px] border-purple-500 pb-[1px] leading-none text-gray-900">{char}</span>
+        ))}
+      </span>
+    )
+  }
+
   return (
-    <div className="text-[16px] text-gray-900 leading-relaxed tracking-wide">
-      {parts.map((part, index) => {
-        if (part.trim() === '') return <span key={index}>{part}</span>
-        
-        const isMatched = wordIndex < matchCount
-        const isNext = wordIndex === matchCount
-        wordIndex++
-        
-        if (isMatched) return <span key={index} className="text-gray-900">{part}</span>
-        if (isNext) return <span key={index} className="text-emerald-600 font-bold">{part}</span>
-        
-        return <span key={index} className="text-gray-900">{part.replace(/./g, '*')}</span>
+    <span className="inline-flex gap-[2px] mx-[3px]">
+      {studentText.split('').map((char, i) => (
+        <span key={i} className="border-b-[2px] border-red-500 pb-[1px] leading-none text-gray-900">{char}</span>
+      ))}
+    </span>
+  )
+}
+
+const DiffResult = ({ tokens }) => {
+  let consecutiveMissing = 0;
+  return (
+    <div className="flex flex-wrap text-[17px] items-end pt-2 pb-2 leading-[2.5]">
+      {tokens.map((t, i) => {
+        if (t.type === 'missing') {
+          consecutiveMissing++;
+          if (consecutiveMissing === 1) {
+            return (
+              <SpellCheckWord 
+                key={i} 
+                type={t.type} 
+                studentText={t.studentText || t.text} 
+                correctText={t.correctText || t.text} 
+              />
+            )
+          } else {
+            return (
+              <span key={i} className="inline-block mx-[3px] text-gray-700 font-medium tracking-widest">
+                {(t.correctText || t.text).replace(/[a-zA-Z0-9]/g, '*')}
+              </span>
+            )
+          }
+        } else {
+          consecutiveMissing = 0;
+          return (
+            <SpellCheckWord 
+              key={i} 
+              type={t.type} 
+              studentText={t.studentText || t.text} 
+              correctText={t.correctText || t.text} 
+            />
+          )
+        }
       })}
     </div>
   )
 }
+
 
 // ─── Community Comments ────────────────────────────────────────────────────────
 function timeAgo(dateStr) {
@@ -178,11 +226,7 @@ function timeAgo(dateStr) {
   return `${days} days ago`
 }
 
-const HeartIcon = ({ solid, size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-  </svg>
-)
+
 
 const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
   const [comments, setComments] = useState([])
@@ -196,6 +240,9 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
   const [visibleCount, setVisibleCount] = useState(10)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [pendingReactionIds, setPendingReactionIds] = useState(() => new Set())
+  const pendingReactionIdsRef = useRef(new Set())
 
   useEffect(() => {
     if (!exerciseId || sentenceIdx == null) return
@@ -208,21 +255,25 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
           .select(`
             id, content, created_at, user_id, parent_comment_id,
             user:users!user_id(id, full_name, avatar_url),
-            likes:dictation_comment_likes(user_id)
+            likes:dictation_comment_likes(user_id, reaction)
           `)
           .eq('exercise_id', exerciseId)
           .eq('sentence_idx', sentenceIdx)
 
         if (error) throw error
 
-        let processed = (data || []).map(c => ({
-          ...c,
-          likeCount: c.likes?.length || 0,
-          isLiked: c.likes?.some(l => l.user_id === currentUser?.id)
-        }))
+        let processed = (data || []).map(c => {
+          const currentReaction = c.likes?.find(reaction => reaction.user_id === currentUser?.id)
+          return {
+            ...c,
+            likeCount: c.likes?.filter(reaction => reaction.reaction !== 'dislike').length || 0,
+            dislikeCount: c.likes?.filter(reaction => reaction.reaction === 'dislike').length || 0,
+            userReaction: currentReaction?.reaction || (currentReaction ? 'like' : null)
+          }
+        })
 
         if (sortOrder === 'helpful') {
-          processed.sort((a, b) => (b.likeCount - a.likeCount) || (new Date(b.created_at) - new Date(a.created_at)))
+          processed.sort((a, b) => ((b.likeCount - b.dislikeCount) - (a.likeCount - a.dislikeCount)) || (new Date(b.created_at) - new Date(a.created_at)))
         } else {
           processed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         }
@@ -230,6 +281,9 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
         if (isMounted) setComments(processed)
       } catch (e) {
         console.error('Failed to fetch comments', e)
+        if (isMounted && e?.code === '42703') {
+          setErrorMsg('Comment reactions need the latest database migration.')
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -257,7 +311,7 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
 
       if (error) throw error
 
-      const added = { ...data, likeCount: 0, isLiked: false }
+      const added = { ...data, likeCount: 0, dislikeCount: 0, userReaction: null }
       setComments(prev => [added, ...prev])
 
       if (parentId) {
@@ -301,22 +355,72 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
     }
   }
 
-  const handleToggleLike = async (comment) => {
-    if (!currentUser) return
+  const handleReaction = async (comment, reaction) => {
+    if (!currentUser || pendingReactionIdsRef.current.has(comment.id)) return
+
+    // Lock synchronously so a fast double-click cannot send two INSERTs with
+    // the same (comment_id, user_id) primary key before React re-renders.
+    pendingReactionIdsRef.current.add(comment.id)
+    setPendingReactionIds(prev => new Set(prev).add(comment.id))
     setErrorMsg(null)
+
     try {
-      if (comment.isLiked) {
+      const previousReaction = comment.userReaction
+
+      if (previousReaction === reaction) {
         const { error } = await supabase.from('dictation_comment_likes').delete().eq('comment_id', comment.id).eq('user_id', currentUser.id)
         if (error) throw error
-        setComments(prev => prev.map(c => c.id === comment.id ? { ...c, isLiked: false, likeCount: c.likeCount - 1 } : c))
-      } else {
-        const { error } = await supabase.from('dictation_comment_likes').insert({ comment_id: comment.id, user_id: currentUser.id })
+        setComments(prev => prev.map(c => c.id === comment.id
+          ? {
+              ...c,
+              userReaction: null,
+              likeCount: reaction === 'like' ? Math.max(0, c.likeCount - 1) : c.likeCount,
+              dislikeCount: reaction === 'dislike' ? Math.max(0, c.dislikeCount - 1) : c.dislikeCount
+            }
+          : c))
+      } else if (previousReaction) {
+        const { error } = await supabase
+          .from('dictation_comment_likes')
+          .update({ reaction })
+          .eq('comment_id', comment.id)
+          .eq('user_id', currentUser.id)
         if (error) throw error
-        setComments(prev => prev.map(c => c.id === comment.id ? { ...c, isLiked: true, likeCount: c.likeCount + 1 } : c))
+        setComments(prev => prev.map(c => c.id === comment.id
+          ? {
+              ...c,
+              userReaction: reaction,
+              likeCount: reaction === 'like' ? c.likeCount + 1 : Math.max(0, c.likeCount - 1),
+              dislikeCount: reaction === 'dislike' ? c.dislikeCount + 1 : Math.max(0, c.dislikeCount - 1)
+            }
+          : c))
+      } else {
+        const { error } = await supabase.from('dictation_comment_likes').insert({ comment_id: comment.id, user_id: currentUser.id, reaction })
+        // A duplicate means another request/tab already created this like.
+        // Treat it as the desired final state instead of showing an error.
+        if (error && error.code !== '23505') throw error
+        setComments(prev => prev.map(c => c.id === comment.id
+          ? {
+              ...c,
+              userReaction: reaction,
+              likeCount: reaction === 'like' && error?.code !== '23505' ? c.likeCount + 1 : c.likeCount,
+              dislikeCount: reaction === 'dislike' && error?.code !== '23505' ? c.dislikeCount + 1 : c.dislikeCount
+            }
+          : c))
       }
     } catch (e) {
-      console.error(e)
-      setErrorMsg("Couldn't process your reaction.")
+      console.error('Failed to process comment reaction', e)
+      setErrorMsg(e?.code === '42703'
+        ? 'Comment reactions need the latest database migration.'
+        : e?.code === '42501'
+          ? "You don't have permission to react. Please sign in again."
+          : `Couldn't process your reaction. Error: ${e?.message || e?.code || 'Unknown'}`)
+    } finally {
+      pendingReactionIdsRef.current.delete(comment.id)
+      setPendingReactionIds(prev => {
+        const next = new Set(prev)
+        next.delete(comment.id)
+        return next
+      })
     }
   }
 
@@ -325,11 +429,19 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs">
-      <div className="text-[15px] text-gray-800 font-medium mb-4 pb-4 border-b border-gray-100">
-        Comments ({comments.length})
+      <div 
+        className={`text-[15px] text-gray-800 font-medium flex items-center justify-between cursor-pointer select-none ${isExpanded ? 'mb-4 pb-4 border-b border-gray-100' : ''}`}
+        onClick={() => setIsExpanded(v => !v)}
+      >
+        <span>Comments ({comments.length})</span>
+        <button className="p-1 hover:bg-gray-100 rounded-md transition-colors text-gray-500">
+          <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {!loading && (
+      {isExpanded && (
+        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+          {!loading && (
         <div className="flex items-center gap-4 mb-5">
           <span className="text-[13px] text-gray-600 font-medium">{comments.length} comments</span>
           <div className="flex items-center gap-1.5 text-gray-800">
@@ -426,27 +538,48 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
                   )}
 
                   <div className="flex items-center gap-4 mt-2">
-                    <button onClick={() => handleToggleLike(c)} className={`flex items-center gap-1.5 text-[12px] font-medium transition-colors ${c.isLiked ? 'text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}>
+                    <button
+                      type="button"
+                      aria-label="Like comment"
+                      aria-pressed={c.userReaction === 'like'}
+                      disabled={pendingReactionIds.has(c.id)}
+                      onClick={() => handleReaction(c, 'like')}
+                      className={`flex items-center gap-1.5 rounded-full p-1 text-[12px] font-semibold transition-all duration-200 active:scale-125 disabled:cursor-wait disabled:opacity-60 ${c.userReaction === 'like' ? 'scale-110 bg-blue-50 text-blue-600' : 'text-gray-400 hover:scale-110 hover:bg-blue-50 hover:text-blue-600'}`}
+                    >
                       <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M2 9h4v12H2a1 1 0 01-1-1V10a1 1 0 011-1zm20-1h-6V4a1 1 0 00-1-1 1 1 0 00-1 1v4H9a1 1 0 00-1 1v10a1 1 0 001 1h9.28a2 2 0 001.94-1.53l2-8A2 2 0 0022 8z" /></svg>
                       {c.likeCount > 0 ? c.likeCount : ''}
                     </button>
-                    <button className="text-gray-400 hover:text-gray-700">
+                    <button
+                      type="button"
+                      aria-label="Dislike comment"
+                      aria-pressed={c.userReaction === 'dislike'}
+                      disabled={pendingReactionIds.has(c.id)}
+                      onClick={() => handleReaction(c, 'dislike')}
+                      className={`flex items-center gap-1.5 rounded-full p-1 text-[12px] font-semibold transition-all duration-200 active:scale-125 disabled:cursor-wait disabled:opacity-60 ${c.userReaction === 'dislike' ? 'scale-110 bg-red-50 text-red-500' : 'text-gray-400 hover:scale-110 hover:bg-red-50 hover:text-red-500'}`}
+                    >
                       <svg className="w-3.5 h-3.5 fill-current mt-0.5" viewBox="0 0 24 24"><path d="M22 15h-4V3h4a1 1 0 011 1v10a1 1 0 01-1 1zM2 16h6v4a1 1 0 001 1 1 1 0 001-1v-4h5a1 1 0 001-1V5a1 1 0 00-1-1H2.72a2 2 0 00-1.94 1.53l-2 8A2 2 0 002 16z" /></svg>
+                      {c.dislikeCount > 0 ? c.dislikeCount : ''}
                     </button>
                     <button onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)} className="text-[12px] text-gray-700 font-bold hover:bg-gray-100 px-2 py-1 rounded transition-colors">
                       Reply
                     </button>
-                    {currentUser?.id === c.user_id && (
-                      <div className="relative group/menu">
-                        <button className="text-gray-400 hover:text-gray-700 p-1">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a2 2 0 110-4 2 2 0 010 4zm-7 0a2 2 0 110-4 2 2 0 010 4zm14 0a2 2 0 110-4 2 2 0 010 4z" /></svg>
-                        </button>
-                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden hidden group-hover/menu:block z-10 w-24">
-                          <button onClick={() => { setEditingId(c.id); setEditDraft(c.content); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Edit</button>
-                          <button onClick={() => handleDelete(c.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 font-medium">Delete</button>
-                        </div>
+                    <div className="relative group/menu">
+                      <button className="text-gray-400 hover:text-gray-700 p-1">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a2 2 0 110-4 2 2 0 010 4zm-7 0a2 2 0 110-4 2 2 0 010 4zm14 0a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                      </button>
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden hidden group-hover/menu:block z-10 w-36">
+                        <button onClick={() => alert("Subscribe feature coming soon!")} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Subscribe</button>
+                        <button onClick={() => { navigator.clipboard.writeText(window.location.href); alert("Comment link copied to clipboard") }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Copy comment link</button>
+                        <button onClick={() => alert("Report sent to admin!")} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Report</button>
+                        {currentUser?.id === c.user_id && (
+                          <>
+                            <div className="h-px bg-gray-200 my-1"></div>
+                            <button onClick={() => { setEditingId(c.id); setEditDraft(c.content); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Edit</button>
+                            <button onClick={() => handleDelete(c.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 font-medium">Delete</button>
+                          </>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -482,27 +615,48 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
                         )}
 
                         <div className="flex items-center gap-4 mt-1.5">
-                          <button onClick={() => handleToggleLike(r)} className={`flex items-center gap-1.5 text-[12px] font-medium transition-colors ${r.isLiked ? 'text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}>
+                          <button
+                            type="button"
+                            aria-label="Like reply"
+                            aria-pressed={r.userReaction === 'like'}
+                            disabled={pendingReactionIds.has(r.id)}
+                            onClick={() => handleReaction(r, 'like')}
+                            className={`flex items-center gap-1.5 rounded-full p-1 text-[12px] font-semibold transition-all duration-200 active:scale-125 disabled:cursor-wait disabled:opacity-60 ${r.userReaction === 'like' ? 'scale-110 bg-blue-50 text-blue-600' : 'text-gray-400 hover:scale-110 hover:bg-blue-50 hover:text-blue-600'}`}
+                          >
                             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M2 9h4v12H2a1 1 0 01-1-1V10a1 1 0 011-1zm20-1h-6V4a1 1 0 00-1-1 1 1 0 00-1 1v4H9a1 1 0 00-1 1v10a1 1 0 001 1h9.28a2 2 0 001.94-1.53l2-8A2 2 0 0022 8z" /></svg>
                             {r.likeCount > 0 ? r.likeCount : ''}
                           </button>
-                          <button className="text-gray-400 hover:text-gray-700">
+                          <button
+                            type="button"
+                            aria-label="Dislike reply"
+                            aria-pressed={r.userReaction === 'dislike'}
+                            disabled={pendingReactionIds.has(r.id)}
+                            onClick={() => handleReaction(r, 'dislike')}
+                            className={`flex items-center gap-1.5 rounded-full p-1 text-[12px] font-semibold transition-all duration-200 active:scale-125 disabled:cursor-wait disabled:opacity-60 ${r.userReaction === 'dislike' ? 'scale-110 bg-red-50 text-red-500' : 'text-gray-400 hover:scale-110 hover:bg-red-50 hover:text-red-500'}`}
+                          >
                             <svg className="w-3.5 h-3.5 fill-current mt-0.5" viewBox="0 0 24 24"><path d="M22 15h-4V3h4a1 1 0 011 1v10a1 1 0 01-1 1zM2 16h6v4a1 1 0 001 1 1 1 0 001-1v-4h5a1 1 0 001-1V5a1 1 0 00-1-1H2.72a2 2 0 00-1.94 1.53l-2 8A2 2 0 002 16z" /></svg>
+                            {r.dislikeCount > 0 ? r.dislikeCount : ''}
                           </button>
                           <button onClick={() => setReplyingTo(replyingTo === r.id ? null : r.id)} className="text-[11px] text-gray-700 font-bold hover:bg-gray-100 px-2 py-1 rounded transition-colors">
                             Reply
                           </button>
-                          {currentUser?.id === r.user_id && (
-                            <div className="relative group/menu">
-                              <button className="text-gray-400 hover:text-gray-700 p-1">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a2 2 0 110-4 2 2 0 010 4zm-7 0a2 2 0 110-4 2 2 0 010 4zm14 0a2 2 0 110-4 2 2 0 010 4z" /></svg>
-                              </button>
-                              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden hidden group-hover/menu:block z-10 w-24">
-                                <button onClick={() => { setEditingId(r.id); setEditDraft(r.content); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Edit</button>
-                                <button onClick={() => handleDelete(r.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 font-medium">Delete</button>
-                              </div>
+                          <div className="relative group/menu">
+                            <button className="text-gray-400 hover:text-gray-700 p-1">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a2 2 0 110-4 2 2 0 010 4zm-7 0a2 2 0 110-4 2 2 0 010 4zm14 0a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                            </button>
+                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden hidden group-hover/menu:block z-10 w-36">
+                              <button onClick={() => alert("Subscribe feature coming soon!")} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Subscribe</button>
+                              <button onClick={() => { navigator.clipboard.writeText(window.location.href); alert("Comment link copied to clipboard") }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Copy comment link</button>
+                              <button onClick={() => alert("Report sent to admin!")} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Report</button>
+                              {currentUser?.id === r.user_id && (
+                                <>
+                                  <div className="h-px bg-gray-200 my-1"></div>
+                                  <button onClick={() => { setEditingId(r.id); setEditDraft(r.content); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">Edit</button>
+                                  <button onClick={() => handleDelete(r.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 font-medium">Delete</button>
+                                </>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -540,12 +694,14 @@ const DictationComments = ({ exerciseId, sentenceIdx, currentUser }) => {
           )}
         </div>
       )}
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── Segment Audio Hook ───────────────────────────────────────────────────────
-const useSegmentAudio = (audioRef) => {
+const useSegmentAudio = (audioRef, audioSettings = {}, userSettings = {}) => {
   const animRef = useRef(null)
   const currentSegRef = useRef(null)
   const isSeekingRef = useRef(false)
@@ -553,8 +709,11 @@ const useSegmentAudio = (audioRef) => {
   const [progress, setProgress] = useState(0)
   const [elapsed, setElapsed] = useState(0)
   const [segDuration, setSegDuration] = useState(0)
+  const playCountRef = useRef(0)
+  const autoReplayTimerRef = useRef(null)
 
-  useEffect(() => () => { cancelAnimationFrame(animRef.current); audioRef.current?.pause() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => { cancelAnimationFrame(animRef.current); audioRef.current?.pause(); clearTimeout(autoReplayTimerRef.current) }, [])
 
   const setIsSeeking = useCallback((seeking) => {
     isSeekingRef.current = seeking
@@ -562,7 +721,7 @@ const useSegmentAudio = (audioRef) => {
 
   const trackProgress = () => {
     if (!audioRef.current || !currentSegRef.current) return
-    const { start, end } = currentSegRef.current
+    const { start, end, speed } = currentSegRef.current
     const curr = audioRef.current.currentTime
     if (curr >= end && !isSeekingRef.current) {
       audioRef.current.pause()
@@ -570,11 +729,24 @@ const useSegmentAudio = (audioRef) => {
       setElapsed(end - start)
       setPlaying(false)
 
-      if (settingsRef.current?.autoReplay) {
-        clearTimeout(autoReplayTimerRef.current)
-        autoReplayTimerRef.current = setTimeout(() => {
-          playSegment(start, end, speed, false)
-        }, (settingsRef.current?.replayDelay || 0) * 1000)
+      const rawAuto = userSettings.autoReplay;
+      const replayVal = (rawAuto === true || rawAuto === 'Yes') ? 1 : parseInt(rawAuto, 10) || 0;
+      const userLimit = replayVal > 0 ? replayVal + 1 : 0;
+      
+      const adminLimit = audioSettings.maxPlays || 0;
+      let limit = 0;
+      if (adminLimit > 0 && userLimit > 0) limit = Math.min(adminLimit, userLimit);
+      else limit = adminLimit || userLimit;
+
+      const shouldLoop = audioSettings.loop || replayVal > 0;
+      if (shouldLoop) {
+        if (!limit || playCountRef.current < limit) {
+          clearTimeout(autoReplayTimerRef.current)
+          const delay = userSettings.replayDelay || 0
+          autoReplayTimerRef.current = setTimeout(() => {
+            playSegment(start, end, speed, true)
+          }, delay * 1000)
+        }
       }
 
       return
@@ -593,14 +765,22 @@ const useSegmentAudio = (audioRef) => {
     cancelAnimationFrame(animRef.current)
 
     if (!resume || !currentSegRef.current || currentSegRef.current.start !== start) {
-      currentSegRef.current = { start, end }
+      currentSegRef.current = { start, end, speed }
       audioRef.current.currentTime = start
       setProgress(0)
       setElapsed(0)
+      playCountRef.current = 1
     } else if (audioRef.current.currentTime >= end - 0.05) {
       audioRef.current.currentTime = start
       setProgress(0)
       setElapsed(0)
+      playCountRef.current += 1
+    } else {
+      if (!playing) playCountRef.current += 1
+    }
+
+    if (audioSettings.maxPlays && playCountRef.current > audioSettings.maxPlays) {
+      return // limit reached
     }
 
     audioRef.current.playbackRate = speed
@@ -608,12 +788,14 @@ const useSegmentAudio = (audioRef) => {
     setPlaying(true)
     setSegDuration(end - start)
     animRef.current = requestAnimationFrame(trackProgress)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, audioSettings.maxPlays])
 
   const pauseSegment = useCallback(() => {
     cancelAnimationFrame(animRef.current)
     audioRef.current?.pause()
     setPlaying(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const seekSegment = useCallback((ratio, start, end) => {
@@ -623,6 +805,7 @@ const useSegmentAudio = (audioRef) => {
     audioRef.current.currentTime = Math.min(end, Math.max(start, newTime))
     setProgress(ratio)
     setElapsed(ratio * (end - start))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { playing, progress, elapsed, segDuration, playSegment, pauseSegment, seekSegment, setIsSeeking }
@@ -634,14 +817,10 @@ const ListeningDictationExercise = () => {
   const navigate = useNavigate()
 
   const handleBackNavigation = () => {
-    if (typeof session !== 'undefined' && session?.units) {
-      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
-    } else {
-      const path = window.location.pathname;
-      if (path.includes('/admin')) navigate('/admin/exercise-bank');
-      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
-      else navigate('/study');
-    }
+    const path = window.location.pathname;
+    if (path.includes('/admin')) navigate('/admin/exercise-bank');
+    else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+    else navigate('/study');
   };
 
   const { user } = useAuth()
@@ -656,17 +835,42 @@ const ListeningDictationExercise = () => {
   const backToSession = () => {
     if (sessionId && unitId && courseId) {
       navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
+    } else if (courseId) {
+      navigate(`/study/course/${courseId}`)
     } else {
       handleBackNavigation()
     }
   }
 
+  const containerRef = useRef(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (containerRef.current?.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`)
+        })
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+      }
+    }
+  }
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showTimestamps, setShowTimestamps] = useState(false)
-
   const [mode, setMode] = useState('dictation')
+  const [selectedLang, setSelectedLang] = useState('none')
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [inputText, setInputText] = useState('')
   const [checked, setChecked] = useState(false)
@@ -675,7 +879,6 @@ const ListeningDictationExercise = () => {
   const [segmentResults, setSegmentResults] = useState([])
   const [isComplete, setIsComplete] = useState(false)
   const [isReviewMode, setIsReviewMode] = useState(false)
-  const [siblingExercises, setSiblingExercises] = useState([])
   const [xpAwarded, setXpAwarded] = useState(0)
   const [speed, setSpeed] = useState(1.0)
   const [volume, setVolume] = useState(1.0)
@@ -684,7 +887,7 @@ const ListeningDictationExercise = () => {
   const defaultSettings = {
     replayKey: 'Control',
     playPauseKey: '`',
-    autoReplay: false,
+    autoReplay: 0,
     replayDelay: 0.5,
     wordSuggestions: false,
     showShortcutTips: true
@@ -695,6 +898,7 @@ const ListeningDictationExercise = () => {
       return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings
     } catch { return defaultSettings }
   })
+
   const updateSetting = (key, val) => {
     setSettings(prev => {
       const next = { ...prev, [key]: val }
@@ -702,13 +906,10 @@ const ListeningDictationExercise = () => {
       return next
     })
   }
-
   const [showSettings, setShowSettings] = useState(false)
-  const [autoAdvance, setAutoAdvance] = useState(false)
   const [globalTime, setGlobalTime] = useState(0)
   const [isFullPlaying, setIsFullPlaying] = useState(false)
   const [fullDuration, setFullDuration] = useState(0)
-  const [transcriptSearch, setTranscriptSearch] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
 
   const settingsRef = useRef(settings)
@@ -730,9 +931,9 @@ const ListeningDictationExercise = () => {
 
   const audioRef = useRef(null)
   const inputRef = useRef(null)
-  const { playing, progress, elapsed, segDuration, playSegment, pauseSegment, seekSegment, setIsSeeking } = useSegmentAudio(audioRef)
+  const { playing, progress, elapsed, playSegment, pauseSegment, seekSegment, setIsSeeking } = useSegmentAudio(audioRef, exercise?.content?.audio_settings || {}, settings)
 
-  const segments = exercise?.content?.segments || []
+  const segments = useMemo(() => exercise?.content?.segments || [], [exercise?.content?.segments])
   const seg = segments[currentIdx]
   const totalSegments = segments.length
   const answeredCount = segmentResults.length
@@ -748,18 +949,18 @@ const ListeningDictationExercise = () => {
         setExercise(data)
         if (user) startExercise(exerciseId)
 
-        if (data?.session_id) {
-          const { data: siblings } = await supabase.from('exercises')
-            .select('id, title, order_index')
-            .eq('session_id', data.session_id)
-            .eq('is_active', true)
-            .order('order_index')
-          if (siblings) setSiblingExercises(siblings)
-        }
       } catch { setError('Không thể tải bài học') } finally { setLoading(false) }
     }
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exerciseId, user])
+
+  // Init audio settings
+  useEffect(() => {
+    if (exercise?.content?.audio_settings?.playbackRate) {
+      setSpeed(exercise.content.audio_settings.playbackRate)
+    }
+  }, [exercise])
 
   // Apply speed & volume
   useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = speed }, [speed])
@@ -775,9 +976,16 @@ const ListeningDictationExercise = () => {
     } else {
       setInputText(''); setChecked(false); setDiffResult(null); setSkipped(false)
     }
-    const t = setTimeout(() => { if (audioRef.current) audioRef.current.playbackRate = speed; playSegment(seg.start_time, seg.end_time, speed) }, 300)
-    return () => clearTimeout(t)
-  }, [currentIdx, seg?.start_time])
+    
+    const audioSettings = exercise?.content?.audio_settings || {}
+    const shouldAutoplay = audioSettings.autoplay ?? true
+    
+    if (shouldAutoplay) {
+      const t = setTimeout(() => { if (audioRef.current) audioRef.current.playbackRate = speed; playSegment(seg.start_time, seg.end_time, speed) }, 300)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIdx, seg?.start_time, exercise])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -794,11 +1002,30 @@ const ListeningDictationExercise = () => {
       // Helper to match key
       const matchKey = (settingKey, ev) => {
         if (!settingKey || settingKey === 'None') return false;
-        if (settingKey === 'Control') return ev.key === 'Control' || ev.ctrlKey;
-        if (settingKey === 'Alt') return ev.key === 'Alt' || ev.altKey;
-        if (settingKey === 'Shift') return ev.key === 'Shift' || ev.shiftKey;
-        if (settingKey === 'Space') return ev.key === ' ' || ev.code === 'Space';
-        return ev.key.toLowerCase() === settingKey.toLowerCase();
+        
+        switch (settingKey) {
+          case 'Control':
+            return ev.key === 'Control' && !ev.shiftKey && !ev.altKey && !ev.metaKey;
+          case 'Alt':
+            return ev.key === 'Alt' && !ev.ctrlKey && !ev.shiftKey && !ev.metaKey;
+          case 'Shift':
+            return ev.key === 'Shift' && !ev.ctrlKey && !ev.altKey && !ev.metaKey;
+          case 'Command':
+            return ev.key === 'Meta' && !ev.ctrlKey && !ev.altKey && !ev.shiftKey;
+          case 'Ctrl+Shift':
+            return (ev.key === 'Control' || ev.key === 'Shift') && ev.ctrlKey && ev.shiftKey && !ev.altKey && !ev.metaKey;
+          case 'Ctrl+Alt':
+            return (ev.key === 'Control' || ev.key === 'Alt') && ev.ctrlKey && ev.altKey && !ev.shiftKey && !ev.metaKey;
+          case 'Ctrl+Space':
+            return ev.ctrlKey && (ev.key === ' ' || ev.code === 'Space') && !ev.altKey && !ev.shiftKey && !ev.metaKey;
+          case 'Ctrl+B':
+          case 'Ctrl+b':
+            return ev.ctrlKey && ev.key.toLowerCase() === 'b' && !ev.altKey && !ev.shiftKey && !ev.metaKey;
+          case 'Space':
+            return (ev.key === ' ' || ev.code === 'Space') && !ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey;
+          default:
+            return ev.key.toLowerCase() === settingKey.toLowerCase() && !ev.ctrlKey && !ev.altKey && !ev.metaKey;
+        }
       }
 
       // Dynamic Replay Key
@@ -852,6 +1079,7 @@ const ListeningDictationExercise = () => {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, inputText, seg, playing, mode, isFullPlaying, segments, activeSegmentIdx, currentIdx, totalSegments, settings, showSettings])
 
   // Sync active segment with globalTime
@@ -903,7 +1131,6 @@ const ListeningDictationExercise = () => {
       const newResults = [...segmentResults.filter(r => r.idx !== currentIdx),
       { idx: currentIdx, accuracy: bestAccuracy, skipped: false, userAnswer: inputText, diffResult: bestDiff }]
       setSegmentResults(newResults)
-      if (autoAdvance && currentIdx < totalSegments - 1) setTimeout(() => handleNext(), 1200)
     } else {
       // Incorrect - keep checking false so they can continue typing
       setChecked(false)
@@ -965,7 +1192,7 @@ const ListeningDictationExercise = () => {
 
   if (error) return <div className="flex items-center justify-center h-screen text-red-500">{error}</div>
 
-  const accuracy = segmentResults.find(r => r.idx === currentIdx)?.accuracy
+
 
   // ── Completion Screen ────────────────────────────────────────────────────
   if (isComplete) {
@@ -1140,7 +1367,7 @@ const ListeningDictationExercise = () => {
 
   // ── Main Student UI ──────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f0f2f8] flex flex-col" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div ref={containerRef} className={`min-h-screen bg-[#f0f2f8] flex flex-col ${isFullscreen ? 'overflow-y-auto' : ''}`} style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
       <audio
         ref={audioRef}
         src={exercise?.content?.audio_url}
@@ -1174,8 +1401,8 @@ const ListeningDictationExercise = () => {
             >
               <ArrowLeft className="w-4 h-4" />Back to course
             </button>
-            <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-500 transition-colors">
-              <Maximize2 className="w-3 h-3" />Fullscreen
+            <button onClick={toggleFullscreen} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-500 transition-colors">
+              <Maximize2 className="w-3 h-3" />{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             </button>
           </div>
 
@@ -1186,9 +1413,6 @@ const ListeningDictationExercise = () => {
                 <h1 className="text-[22px] font-bold text-gray-900 leading-tight tracking-tight">
                   {exercise?.title || 'Listening Dictation'}
                 </h1>
-                <span className="px-2.5 py-0.5 text-xs font-semibold bg-[#e8eaf6] text-[#3949ab] rounded-md shrink-0">
-                  Vocab level: B1
-                </span>
               </div>
               <p className="text-sm text-gray-500 mt-0.5 truncate">
                 {exercise?.description || 'Listening Dictation'}
@@ -1269,14 +1493,88 @@ const ListeningDictationExercise = () => {
                       <Settings className="w-3.5 h-3.5 text-gray-500" />Settings
                     </button>
                     {showSettings && (
-                      <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-10 w-48">
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                          <div onClick={() => setAutoAdvance(v => !v)}
-                            className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${autoAdvance ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${autoAdvance ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setShowSettings(false)}>
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-[450px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                              <Settings className="w-5 h-5 text-gray-700" /> Settings
+                            </h3>
+                            <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                              <X className="w-5 h-5" />
+                            </button>
                           </div>
-                          <span className="text-xs text-gray-700">Tự động chuyển (≥80%)</span>
-                        </label>
+                          <div className="p-1">
+                            <table className="w-full text-sm text-left">
+                              <tbody>
+                                <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Replay Key</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={settings.replayKey} onChange={e => updateSetting('replayKey', e.target.value)} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value="Control">Ctrl</option>
+                                      <option value="Shift">Shift</option>
+                                      <option value="Alt">Alt</option>
+                                      <option value="Command">Command</option>
+                                      <option value="Ctrl+Shift">Ctrl + Shift</option>
+                                      <option value="Ctrl+Alt">Ctrl + Alt</option>
+                                      <option value="Ctrl+Space">Ctrl + Space</option>
+                                      <option value="Ctrl+b">Ctrl + b</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                                <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Play/Pause Key</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={settings.playPauseKey} onChange={e => updateSetting('playPauseKey', e.target.value)} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value="`">` (backtick)</option>
+                                      <option value="Tab">Tab</option>
+                                      <option value="Enter">Enter</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                                <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Auto Replay</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={(settings.autoReplay === true || settings.autoReplay === 'Yes') ? 1 : parseInt(settings.autoReplay, 10) || 0} onChange={e => updateSetting('autoReplay', parseInt(e.target.value, 10))} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value={0}>No</option>
+                                      {[...Array(10)].map((_, i) => (
+                                        <option key={i+1} value={i+1}>{i+1} time{i > 0 ? 's' : ''}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                </tr>
+                                <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Seconds between replays</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={settings.replayDelay} onChange={e => updateSetting('replayDelay', parseFloat(e.target.value))} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value={0.5}>0.5</option>
+                                      <option value={1}>1.0</option>
+                                      <option value={1.5}>1.5</option>
+                                      <option value={2}>2.0</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                                <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Word suggestions (for smartphones)</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={settings.wordSuggestions ? 'Enabled' : 'Disabled'} onChange={e => updateSetting('wordSuggestions', e.target.value === 'Enabled')} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value="Enabled">Enabled</option>
+                                      <option value="Disabled">Disabled</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                                <tr className="hover:bg-gray-50/50 transition-colors">
+                                  <td className="py-3.5 px-5 font-bold text-gray-800">Shortcut Key Tips</td>
+                                  <td className="py-3.5 px-5 text-right w-[140px]">
+                                    <select value={settings.showShortcutTips ? 'Show' : 'Hide'} onChange={e => updateSetting('showShortcutTips', e.target.value === 'Show')} className="w-full p-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none">
+                                      <option value="Show">Show</option>
+                                      <option value="Hide">Hide</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1324,7 +1622,12 @@ const ListeningDictationExercise = () => {
                           <textarea
                             ref={inputRef}
                             value={inputText}
-                            onChange={e => { if (!checked) setInputText(e.target.value) }}
+                            onChange={e => { 
+                              if (!checked) {
+                                setInputText(e.target.value);
+                                if (diffResult) setDiffResult(null);
+                              }
+                            }}
                             disabled={checked}
                             rows={2}
                             maxLength={500}
@@ -1358,16 +1661,20 @@ const ListeningDictationExercise = () => {
                               }
 
                               return (
-                                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 shadow-sm flex flex-col gap-3">
+                                <div className="p-4 bg-white flex flex-col gap-3">
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[15px]">
-                                      <AlertTriangle className="w-4 h-4" /> Incorrect
+                                    <div className="flex items-center gap-2 text-gray-700 font-medium text-[20px]">
+                                      <svg viewBox="0 0 24 24" className="w-[24px] h-[24px] shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2L22 20H2L12 2Z" fill="#FBBF24"/>
+                                        <path d="M11 10H13V15H11V10ZM11 17H13V19H11V17Z" fill="white"/>
+                                      </svg>
+                                      Incorrect
                                     </div>
-                                    <button onClick={handleSkip} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-md text-[13px] font-medium hover:bg-gray-50 transition-colors shadow-sm">
+                                    <button onClick={handleSkip} className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-[14px] font-medium hover:bg-gray-50 transition-colors">
                                       Skip
                                     </button>
                                   </div>
-                                  <ProgressiveHint input={inputText} answer={seg?.text_content || ''} />
+                                  <DiffResult tokens={diffResult} />
                                 </div>
                               )
                             })()}
@@ -1481,13 +1788,6 @@ const ListeningDictationExercise = () => {
                 </div>
               </div>
 
-              {/* ── Tip box ── */}
-              <div className="flex items-center justify-between bg-amber-50/70 border border-amber-200/60 rounded-xl px-4 py-3.5">
-                <div className="flex items-center gap-2.5 text-xs text-amber-900 font-medium">
-                  <Lightbulb className="w-4 h-4 text-amber-500 shrink-0" />
-                  Repeat each sentence a few times before checking your answer.
-                </div>
-              </div>
 
               {/* ── Full Audio & Plain Transcript ── */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1583,10 +1883,24 @@ const ListeningDictationExercise = () => {
                 {/* 1. Top Toolbar */}
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
                   {/* Translation Selector */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white shadow-sm cursor-pointer hover:border-gray-300 transition-colors select-none">
-                    <Languages className="w-4 h-4 text-gray-500" />
-                    <span className="font-medium text-xs md:text-sm">No translation</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-1" />
+                  <div className="relative z-20">
+                    <div 
+                      onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                      className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white shadow-sm cursor-pointer hover:border-gray-300 transition-colors select-none"
+                    >
+                      <Languages className="w-4 h-4 text-gray-500" />
+                      <span className="font-medium text-xs md:text-sm">
+                        {selectedLang === 'none' ? 'No translation' : selectedLang === 'vi' ? 'Vietnamese' : 'English'}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-1" />
+                    </div>
+                    {isLangMenuOpen && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden w-48">
+                        <button onClick={() => { setSelectedLang('none'); setIsLangMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 ${selectedLang === 'none' ? 'text-blue-600 bg-blue-50/50' : 'text-gray-700'}`}>No translation</button>
+                        <button onClick={() => { setSelectedLang('vi'); setIsLangMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 ${selectedLang === 'vi' ? 'text-blue-600 bg-blue-50/50' : 'text-gray-700'}`}>Vietnamese (Tiếng Việt)</button>
+                        <button onClick={() => { setSelectedLang('en'); setIsLangMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 ${selectedLang === 'en' ? 'text-blue-600 bg-blue-50/50' : 'text-gray-700'}`}>English (Auto-generated)</button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Repeat Checkbox */}
@@ -1646,10 +1960,15 @@ const ListeningDictationExercise = () => {
                     </div>
 
                     {/* Active Sentence Card */}
-                    <div className="bg-white border border-gray-200/90 rounded-2xl p-8 min-h-[220px] flex items-center justify-center text-center shadow-sm">
+                    <div className="bg-white border border-gray-200/90 rounded-2xl p-8 min-h-[220px] flex flex-col items-center justify-center text-center shadow-sm">
                       <p className="text-base md:text-lg font-normal text-gray-700 leading-relaxed max-w-lg">
                         {segments[activeSegmentIdx]?.text_content || 'No text content'}
                       </p>
+                      {selectedLang !== 'none' && segments[activeSegmentIdx]?.translation && (
+                        <p className="text-sm md:text-base text-gray-500 mt-4 italic max-w-lg">
+                          {segments[activeSegmentIdx].translation}
+                        </p>
+                      )}
                     </div>
 
                     {/* Sentence Pagination Controls */}
@@ -1695,7 +2014,7 @@ const ListeningDictationExercise = () => {
                     {/* Scrollable Sentence List */}
                     <div
                       ref={transcriptListRef}
-                      className="border border-gray-200 rounded-xl overflow-y-auto max-h-[420px] bg-white custom-scrollbar divide-y divide-gray-100"
+                      className="relative border border-gray-200 rounded-xl overflow-y-auto max-h-[420px] bg-white custom-scrollbar divide-y divide-gray-100"
                     >
                       {segments.map((segment, i) => {
                         const isActive = activeSegmentIdx === i
@@ -1731,9 +2050,16 @@ const ListeningDictationExercise = () => {
                               <Play className="w-3 h-3 fill-current ml-0.5" />
                             </button>
 
-                            <span className="text-[14px] leading-relaxed flex-1">
-                              {segment.text_content}
-                            </span>
+                            <div className="flex-1 flex flex-col gap-1 mt-0.5">
+                              <span className="text-[14px] leading-relaxed">
+                                {segment.text_content}
+                              </span>
+                              {selectedLang !== 'none' && segment.translation && (
+                                <span className={`text-[13.5px] italic ${isActive ? 'text-gray-700' : 'text-gray-500'}`}>
+                                  {segment.translation}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )
                       })}

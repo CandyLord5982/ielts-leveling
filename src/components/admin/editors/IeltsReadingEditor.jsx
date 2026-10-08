@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+/* eslint-disable react/prop-types */
+import { useState } from 'react'
 import MultipleChoiceEditor from './MultipleChoiceEditor'
 import FillBlankEditor from './FillBlankEditor'
 
@@ -42,7 +43,7 @@ const IeltsReadingEditor = ({ content, onContentChange, folderPath }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[550px]">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[700px]">
       {/* Passage Column */}
       <div className="lg:col-span-5 flex flex-col border border-gray-200 rounded-lg bg-white overflow-hidden h-full">
         <div className="p-3 bg-gray-50 border-b border-gray-200 font-semibold text-gray-700 flex-shrink-0">
@@ -106,7 +107,7 @@ const IeltsReadingEditor = ({ content, onContentChange, folderPath }) => {
                   value={content?.fibInstruction || ''}
                   onChange={e => onContentChange({ ...content, fibInstruction: e.target.value })}
                 />
-                <p className="text-xs text-green-600 mt-1">Bỏ trống để dùng mặc định: "Choose NO MORE THAN TWO WORDS"</p>
+                <p className="text-xs text-green-600 mt-1">Bỏ trống để dùng mặc định: &quot;Choose NO MORE THAN TWO WORDS&quot;</p>
               </div>
               <FillBlankEditor
                 questions={fillBlankQuestions}

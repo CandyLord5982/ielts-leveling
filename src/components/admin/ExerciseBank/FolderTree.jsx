@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
+import PropTypes from 'prop-types'
 import { supabase } from '../../../supabase/client'
 import {
   Folder,
-  FolderOpen,
   ChevronRight,
   ChevronDown,
   MoreVertical,
@@ -43,6 +43,7 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
     }
     setExpandedFolders(newExpanded)
     localStorage.setItem('exerciseBank_expandedFolders', JSON.stringify([...newExpanded]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolder, folders])
 
   const toggleFolder = (folderId) => {
@@ -189,23 +190,22 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
               onClick={async () => {
                 try {
                   // Prevent delete if folder has children or exercises
-                  const { data: childCountData, error: childErr } = await supabase
+                  const { error: childErr, count: childCount } = await supabase
                     .from('exercise_folders')
                     .select('id', { count: 'exact', head: true })
                     .eq('parent_folder_id', folder.id)
                   if (childErr) throw childErr
 
-                  const { data: exCountData, error: exErr } = await supabase
+                  const { error: exErr, count: exCount } = await supabase
                     .from('exercises')
                     .select('id', { count: 'exact', head: true })
                     .eq('folder_id', folder.id)
                   if (exErr) throw exErr
 
-                  const hasChildren = (childCountData?.length === 0 ? 0 : (childCountData || []).length) === 0 ? false : true
-                  // Supabase head+count requires extracting count differently; fall back to folderCounts prop
-                  const approxExerciseCount = folderCounts[folder.id] || 0
+                  const hasChildren = childCount > 0
+                  const hasExercises = exCount > 0 || (folderCounts[folder.id] || 0) > 0
 
-                  if (hasChildren || approxExerciseCount > 0) {
+                  if (hasChildren || hasExercises) {
                     alert('Folder is not empty. Please remove subfolders and exercises first.')
                     setContextMenu(null)
                     return
@@ -311,6 +311,17 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
       )}
     </div>
   )
+}
+
+
+FolderTree.propTypes = {
+  folders: PropTypes.array.isRequired,
+  folderCounts: PropTypes.object,
+  selectedFolder: PropTypes.object,
+  onSelectFolder: PropTypes.func.isRequired,
+  onFolderUpdate: PropTypes.func,
+  readOnly: PropTypes.bool,
+  isAdmin: PropTypes.bool
 }
 
 export default FolderTree

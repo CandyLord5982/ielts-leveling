@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../supabase/client'
 import { useAuth } from '../../hooks/useAuth'
@@ -40,9 +40,9 @@ const CourseList = () => {
     if (user && profile) {
       fetchCoursesAndProgress()
     }
-  }, [user, profile])
+  }, [user, profile, fetchCoursesAndProgress])
 
-  const fetchCoursesAndProgress = async () => {
+  const fetchCoursesAndProgress = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -95,7 +95,7 @@ const CourseList = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, profile])
 
   const getThemeColors = (colorTheme) => {
     const themes = {
@@ -127,7 +127,7 @@ const CourseList = () => {
     return themes[colorTheme] || themes.blue
   }
 
-  const renderCourseCard = (course, index) => {
+  const renderCourseCard = (course) => {
     const theme = getThemeColors(course.color_theme)
 
     return (
@@ -218,7 +218,7 @@ const CourseList = () => {
     return (
       <div className="text-center py-12">
         <div className="text-red-600 mb-4">{error}</div>
-        <Button onClick={fetchLevelsAndProgress} variant="outline">
+        <Button onClick={fetchCoursesAndProgress} variant="outline">
           Thử lại
         </Button>
       </div>

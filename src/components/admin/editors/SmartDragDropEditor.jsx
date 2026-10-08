@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import PropTypes from 'prop-types'
 import { Plus, Trash2, Eye, EyeOff, HelpCircle, Upload, Copy, Image as ImageIcon, Link as LinkIcon, Music, AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
 import { handleRichTextShortcut } from '../../../hooks/useRichTextShortcuts'
 import { supabase } from '../../../supabase/client'
@@ -62,12 +63,36 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
   const introTextareaRef = useRef(null)
   const introFileInputRef = useRef(null)
   const savedCursorPos = useRef({ start: 0, end: 0 })
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaModalInputRef = useRef(null)
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
+    }
+  }
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('xpclass_last_bulk_text_drag_drop')
       if (saved) setLastBulkText(saved)
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
@@ -281,23 +306,6 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
 
   const addDistractor = (questionId) => addItem(questionId, 'distractor')
 
-  const removeItem = (questionId, itemId) => {
-    const question = localQuestions.find(q => q.id === questionId)
-    if (!question) return
-
-    const updatedItems = question.items.filter(item => item.id !== itemId)
-    const updatedCorrectOrder = question.correct_order.filter(id => id !== itemId)
-
-    updateQuestion(questionId, 'items', updatedItems)
-    updateQuestion(questionId, 'correct_order', updatedCorrectOrder)
-  }
-
-  const handleRemoveItem = (e, questionId, itemId) => {
-    e.preventDefault()
-    e.stopPropagation()
-    removeItem(questionId, itemId)
-  }
-
   const updateItemText = (questionId, itemId, newText) => {
     const question = localQuestions.find(q => q.id === questionId)
     if (!question) return
@@ -479,7 +487,7 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
           onIntroChange(intro ? intro + '\n' + newIntro : newIntro)
         }
         setLastBulkText(bulkText)
-        try { localStorage.setItem('xpclass_last_bulk_text_drag_drop', bulkText) } catch {}
+        try { localStorage.setItem('xpclass_last_bulk_text_drag_drop', bulkText) } catch { /* ignore */ }
         const updatedQuestions = [...localQuestions, ...newQuestions]
         setLocalQuestions(updatedQuestions)
         onQuestionsChange(updatedQuestions)
@@ -506,7 +514,7 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
 
       // Extract the original phrase with [brackets] from the question
       let phrase = q.question
-      q.drop_zones.forEach((zone, idx) => {
+      q.drop_zones.forEach((zone) => {
         const placeholder = `[DROP_ZONE_${zone.id}]`
         phrase = phrase.replace(placeholder, `[${zone.word}]`)
       })
@@ -552,7 +560,7 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
           try {
             const pos = start + snippet.length
             if (textarea) { textarea.focus(); textarea.setSelectionRange(pos, pos) }
-          } catch {}
+          } catch { /* ignore */ }
         }, 0)
       } else {
         onIntroChange && onIntroChange(current + (current ? '\n' : '') + snippet)
@@ -618,7 +626,7 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
           const pos = start + wrapped.length
           const ta = isIntro ? introTextareaRef.current : questionTextareasRef.current[index]
           if (ta) { ta.focus(); ta.setSelectionRange(pos, pos) }
-        } catch {}
+        } catch { /* ignore */ }
       }, 0)
     }
   }
@@ -772,12 +780,12 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
             const pos = start + snippet.length
             textarea.focus()
             textarea.setSelectionRange(pos, pos)
-          } catch {}
+          } catch { /* ignore */ }
         }, 0)
       }
 
       handleUrlCancel()
-    } catch (e) {
+    } catch {
       alert('Please enter a valid URL (http/https)')
     }
   }
@@ -943,9 +951,9 @@ const SmartDragDropEditor = ({ questions, onQuestionsChange, intro, onIntroChang
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h4 className="font-medium text-blue-900 mb-2">Bulk Import Drag & Drop Questions</h4>
           <p className="text-sm text-blue-700 mb-3">
-            Format: Start with "Q:" or "1." followed by question title, then phrase with [words] in brackets
+            Format: Start with &quot;Q:&quot; or &quot;1.&quot; followed by question title, then phrase with [words] in brackets
             <br />
-            Add "Distractors: word1, word2" line for incorrect options
+            Add &quot;Distractors: word1, word2&quot; line for incorrect options
           </p>
           <textarea
             value={bulkText}
@@ -1038,7 +1046,7 @@ She [has] [been] [studying] English for 3 years`}
                             question.question,
                             question.drop_zones,
                             (zoneId, index) => {
-                              const zone = question.drop_zones.find(z => z.id === zoneId)
+                              /* zone was unused */
                               return (
                                 <span
                                   key={index}
@@ -1184,6 +1192,26 @@ She [has] [been] [studying] English for 3 years`}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
                 <input type="url" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder={urlModal.type === 'image' ? 'https://example.com/image.jpg' : urlModal.type === 'audio' ? 'https://example.com/audio.mp3' : 'https://example.com/link'} />
+              {(urlModal.type === 'image' || urlModal.type === 'audio') && (
+                <div className="mt-2">
+                  <input
+                    ref={mediaModalInputRef}
+                    type="file"
+                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                    className="hidden"
+                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mediaModalInputRef.current?.click()}
+                    disabled={modalUploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
+              )}
               </div>
               {urlModal.type === 'link' && (
                 <div>
@@ -1217,39 +1245,46 @@ She [has] [been] [studying] English for 3 years`}
                 </div>
               )}
               {urlModal.type === 'audio' && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Audio Options</label>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} /> Show controls</label>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} /> Autoplay</label>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} /> Loop</label>
-                  <label className="flex items-center gap-2 text-sm">
-                    Giới hạn phát:
-                    <input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={audioMaxPlays}
-                      onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)}
-                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                    />
-                    <span className="text-gray-500">{audioMaxPlays === 0 ? '(không giới hạn)' : 'lần'}</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    Playback speed:
-                    <select
-                      value={audioPlaybackRate}
-                      onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                      className="px-2 py-1 border border-gray-300 rounded text-sm"
-                    >
-                      <option value={0.5}>0.5x</option>
-                      <option value={0.75}>0.75x</option>
-                      <option value={1}>1x</option>
-                      <option value={1.25}>1.25x</option>
-                      <option value={1.5}>1.5x</option>
-                      <option value={2}>2x</option>
-                    </select>
-                  </label>
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                  Hiển thị controls (play/pause/volume)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                  Tự động phát (autoplay)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                  Lặp lại (loop)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={audioMaxPlays} 
+                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                  <select
+                    value={audioPlaybackRate}
+                    onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
+                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={0.5}>0.5x (Rất chậm)</option>
+                    <option value={0.75}>0.75x (Chậm)</option>
+                    <option value={1}>1x (Bình thường)</option>
+                    <option value={1.25}>1.25x (Nhanh)</option>
+                    <option value={1.5}>1.5x (Rất nhanh)</option>
+                  </select>
+                </div>
+              </div>
               )}
               {urlInput && (
                 <div className="p-3 bg-gray-50 rounded">
@@ -1273,6 +1308,14 @@ She [has] [been] [studying] English for 3 years`}
       )}
     </div>
   )
+}
+
+SmartDragDropEditor.propTypes = {
+  questions: PropTypes.array,
+  onQuestionsChange: PropTypes.func,
+  intro: PropTypes.string,
+  onIntroChange: PropTypes.func,
+  folderPath: PropTypes.string
 }
 
 export default SmartDragDropEditor

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react'
+/* eslint-disable react/prop-types */
+import { useState, useRef, useEffect } from 'react'
 
 /**
  * IeltsInlineFillBlank - IELTS-style fill-in-the-blank
@@ -21,6 +22,7 @@ const IeltsInlineFillBlank = ({
 
   useEffect(() => {
     onAnswersChange?.(answers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers])
 
   const handleChange = (key, value) => {

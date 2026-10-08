@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase/client'
 import { ArrowLeft, CheckCircle, Clock, LayoutGrid, X } from 'lucide-react'
@@ -19,14 +19,10 @@ const IeltsReadingExercise = () => {
   const navigate = useNavigate()
 
   const handleBackNavigation = () => {
-    if (typeof session !== 'undefined' && session?.units) {
-      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
-    } else {
-      const path = window.location.pathname;
-      if (path.includes('/admin')) navigate('/admin/exercise-bank');
-      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
-      else navigate('/study');
-    }
+    const path = window.location.pathname;
+    if (path.includes('/admin')) navigate('/admin/exercise-bank');
+    else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+    else navigate('/study');
   };
 
   const { canCreateContent } = usePermissions()
@@ -53,10 +49,12 @@ const IeltsReadingExercise = () => {
 
   useEffect(() => {
     fetchExercise()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exerciseId])
 
   useEffect(() => {
     if (exerciseId && user && !isTeacher) startExercise(exerciseId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exerciseId, user])
 
   useEffect(() => {
@@ -98,6 +96,7 @@ const IeltsReadingExercise = () => {
       setExercise(data)
       setPassageHtml((data.content?.passage?.text_html || '').replace(/\n/g, '<br/>'))
     } catch (err) {
+      console.error(err)
       setError('Failed to load exercise')
     } finally {
       setLoading(false)
@@ -158,7 +157,9 @@ const IeltsReadingExercise = () => {
         if (currentColor === hexToRgb(value) || currentColor === value) {
           applyValue = 'transparent'
         }
-      } catch (e) {}
+      } catch (e) { 
+        console.debug('Ignore color parsing error:', e)
+      }
       document.execCommand('hiliteColor', false, applyValue) || document.execCommand('backColor', false, applyValue)
     } else {
       document.execCommand(command, false, value)
@@ -221,8 +222,9 @@ const IeltsReadingExercise = () => {
     fibQuestions.forEach((q, qIdx) => {
       q.blanks?.forEach((blank, bIdx) => {
         total++
-        const userAnswer = (fibAnswers[`${qIdx}-${bIdx}`] || '').trim()
-        const accepted = splitAnswers(blank.answer)
+        const rawUserAns = (fibAnswers[`${qIdx}-${bIdx}`] || '').trim()
+        const userAnswer = rawUserAns.replace(/\s+/g, ' ')
+        const accepted = splitAnswers(blank.answer).map(a => a.replace(/\s+/g, ' '))
         const isCorrect = blank.case_sensitive
           ? accepted.some(a => userAnswer === a)
           : accepted.some(a => userAnswer.toLowerCase() === a.toLowerCase())

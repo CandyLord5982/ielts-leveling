@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+/* eslint-disable react/prop-types */
+import { useState, useEffect } from 'react'
 import { supabase } from '../../../supabase/client'
 import { Save, AlertCircle, Tag } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
@@ -285,6 +286,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
           <ListeningDictationEditor
             content={content}
             onContentChange={(newContent) => handleContentChange(newContent)}
+            folderPath={getFolderPath(exercise.folder_id)}
           />
         )
       default:
@@ -300,7 +302,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
         {/* Header with actions */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">

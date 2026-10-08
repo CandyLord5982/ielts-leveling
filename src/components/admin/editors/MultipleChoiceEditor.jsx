@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import PropTypes from 'prop-types'
 import {
   Plus,
   Trash2,
   Copy,
   ChevronUp,
   ChevronDown,
-  Eye,
-  EyeOff,
   Upload,
   Check,
   HelpCircle,
@@ -60,7 +59,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
     try {
       const saved = localStorage.getItem('xpclass_last_bulk_text')
       if (saved) setLastBulkText(saved)
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
   const fileInputRefs = useRef({})
   const questionInputRefs = useRef({})
@@ -85,6 +84,31 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
   const [tableColumns, setTableColumns] = useState(2)
   const [tableWidth, setTableWidth] = useState('100%') // '100%' or 'auto'
   const [tableBorder, setTableBorder] = useState(true) // true or false
+
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaModalInputRef = useRef(null)
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
+    }
+  }
 
   // Settings state
   const [localSettings, setLocalSettings] = useState({
@@ -566,7 +590,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       setAudioLoop(false)
       setAudioMaxPlays(0)
       setAudioPlaybackRate(1)
-    } catch (error) {
+    } catch {
       alert('Vui lòng nhập URL hợp lệ (bắt đầu bằng http:// hoặc https://)')
     }
   }
@@ -815,7 +839,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
 
       if (newQuestions.length > 0) {
         setLastBulkText(bulkText)
-        try { localStorage.setItem('xpclass_last_bulk_text', bulkText) } catch {}
+        try { localStorage.setItem('xpclass_last_bulk_text', bulkText) } catch { /* ignore */ }
         // Set intro from lines before first question
         if (introLines.length > 0 && onIntroChange) {
           const newIntro = introLines.join('\n')
@@ -829,7 +853,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
         // Keep modal open and keep the text visible
         alert(`Successfully imported ${newQuestions.length} questions!`)
       }
-    } catch (error) {
+    } catch {
       alert('Error processing bulk import. Please check your format.')
     }
   }
@@ -924,7 +948,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
             optionExplanations.push('')
           }
             // Remove A., B., C., D. prefixes (or any letter followed by dot/parenthesis)
-            optionText = optionText.replace(/^[A-Za-z][\.)]\s*/, '')
+            optionText = optionText.replace(/^[A-Za-z][.)]\s*/, '')
             if (!optionText) return
             options.push(optionText)
             if (isCorrect) correctIndex = options.length - 1
@@ -955,7 +979,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
 
       if (newQuestions.length > 0) {
         setLastBulkText(bulkText)
-        try { localStorage.setItem('xpclass_last_bulk_text', bulkText) } catch {}
+        try { localStorage.setItem('xpclass_last_bulk_text', bulkText) } catch { /* ignore */ }
         // Attach original_text to every imported question
         const updatedQuestions = [...localQuestions, ...newQuestions.map(q => ({ ...q, original_text: bulkText }))]
         setLocalQuestions(updatedQuestions)
@@ -971,38 +995,6 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
     }
   }
 
-  const exportQuestions = () => {
-    if (localQuestions.length === 0) {
-      alert('No questions to export')
-      return
-    }
-
-    const exportText = localQuestions.map((q, index) => {
-      let text = `Q${index + 1}: ${q.question}\n`
-      q.options.forEach((option, optIndex) => {
-        const letter = String.fromCharCode(65 + optIndex)
-        const marker = q.correct_answer === optIndex ? ' *' : ''
-        text += `${letter}: ${option}${marker}\n`
-      })
-      if (q.explanation) {
-        text += `Explanation: ${q.explanation}\n`
-      }
-      return text
-    }).join('\n\n')
-
-    navigator.clipboard.writeText(exportText).then(() => {
-      alert('Questions exported to clipboard!')
-    }).catch(() => {
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea')
-      textArea.value = exportText
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
-      alert('Questions copied to clipboard!')
-    })
-  }
 
   return (
     <div className="space-y-4">
@@ -1449,7 +1441,7 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
         {localQuestions.length === 0 && !bulkImportMode && (
           <div className="text-center py-8 text-gray-500">
             <HelpCircle className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-            <p>No questions yet. Click "Add Question" or "Bulk Import" to start.</p>
+            <p>No questions yet. Click &quot;Add Question&quot; or &quot;Bulk Import&quot; to start.</p>
           </div>
         )}
       </div>
@@ -1631,6 +1623,26 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
                   }
                   autoFocus
                 />
+              {(urlModal.type === 'image' || urlModal.type === 'audio') && (
+                <div className="mt-2">
+                  <input
+                    ref={mediaModalInputRef}
+                    type="file"
+                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                    className="hidden"
+                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mediaModalInputRef.current?.click()}
+                    disabled={modalUploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
+              )}
               </div>
               
               {urlModal.type === 'link' && (
@@ -1725,80 +1737,46 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
               )}
 
               {urlModal.type === 'audio' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tùy chọn âm thanh
-                  </label>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="audioControls"
-                        checked={audioControls}
-                        onChange={(e) => setAudioControls(e.target.checked)}
-                        className="rounded"
-                      />
-                      <label htmlFor="audioControls" className="text-sm text-gray-700">
-                        Hiển thị controls (play/pause/volume)
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="audioAutoplay"
-                        checked={audioAutoplay}
-                        onChange={(e) => setAudioAutoplay(e.target.checked)}
-                        className="rounded"
-                      />
-                      <label htmlFor="audioAutoplay" className="text-sm text-gray-700">
-                        Tự động phát (autoplay)
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="audioLoop"
-                        checked={audioLoop}
-                        onChange={(e) => setAudioLoop(e.target.checked)}
-                        className="rounded"
-                      />
-                      <label htmlFor="audioLoop" className="text-sm text-gray-700">
-                        Lặp lại (loop)
-                      </label>
-                    </div>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      Giới hạn phát:
-                      <input
-                        type="number"
-                        min="0"
-                        max="99"
-                        value={audioMaxPlays}
-                        onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                      <span className="text-gray-500">{audioMaxPlays === 0 ? '(không giới hạn)' : 'lần'}</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      Tốc độ phát:
-                      <select
-                        value={audioPlaybackRate}
-                        onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value={0.5}>0.5x</option>
-                        <option value={0.75}>0.75x</option>
-                        <option value={1}>1x (bình thường)</option>
-                        <option value={1.25}>1.25x</option>
-                        <option value={1.5}>1.5x</option>
-                        <option value={2}>2x</option>
-                      </select>
-                    </label>
-                  </div>
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                  Hiển thị controls (play/pause/volume)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                  Tự động phát (autoplay)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                  Lặp lại (loop)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={audioMaxPlays} 
+                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                  <select
+                    value={audioPlaybackRate}
+                    onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
+                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={0.5}>0.5x (Rất chậm)</option>
+                    <option value={0.75}>0.75x (Chậm)</option>
+                    <option value={1}>1x (Bình thường)</option>
+                    <option value={1.25}>1.25x (Nhanh)</option>
+                    <option value={1.5}>1.5x (Rất nhanh)</option>
+                  </select>
+                </div>
+              </div>
               )}
               
               {urlInput && (
@@ -1892,6 +1870,17 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
       )}
     </div>
   )
+}
+
+
+MultipleChoiceEditor.propTypes = {
+  questions: PropTypes.array,
+  onQuestionsChange: PropTypes.func,
+  settings: PropTypes.object,
+  onSettingsChange: PropTypes.func,
+  intro: PropTypes.string,
+  onIntroChange: PropTypes.func,
+  folderPath: PropTypes.string
 }
 
 export default MultipleChoiceEditor

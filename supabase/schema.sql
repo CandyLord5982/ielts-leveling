@@ -10470,6 +10470,7 @@ CREATE TABLE public.dictation_comments (
 CREATE TABLE public.dictation_comment_likes (
     comment_id UUID REFERENCES public.dictation_comments(id) ON DELETE CASCADE,
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    reaction TEXT NOT NULL DEFAULT 'like' CHECK (reaction IN ('like', 'dislike')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (comment_id, user_id)
 );
@@ -10484,6 +10485,7 @@ CREATE POLICY "Users can delete their own comments" ON public.dictation_comments
 
 CREATE POLICY "Anyone can view likes" ON public.dictation_comment_likes FOR SELECT USING (true);
 CREATE POLICY "Authenticated users can like" ON public.dictation_comment_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their reaction" ON public.dictation_comment_likes FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can unlike" ON public.dictation_comment_likes FOR DELETE USING (auth.uid() = user_id);
 
 -- Add some indexes for fast lookups

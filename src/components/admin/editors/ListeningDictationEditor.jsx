@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+/* eslint-disable react/prop-types */
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Upload, Mic, Play, Pause, Trash2, Plus, ChevronDown, ChevronUp,
-  Wand2, Loader2, Clock, AlertCircle, Link, Copy, Scissors,
-  RotateCcw, ChevronLeft, ChevronRight, Volume2, BookOpen
+  Wand2, Loader2, Clock, AlertCircle, Copy, Scissors,
+  RotateCcw, Volume2, BookOpen
 } from 'lucide-react'
 import { supabase } from '../../../supabase/client'
 
@@ -44,9 +45,8 @@ const validateSegments = (segments, audioDuration) => {
 }
 
 // ─── Audio Player (custom) ────────────────────────────────────────────────
-const AdminAudioPlayer = ({ audioRef, audioUrl, speed, setSpeed, currentTime, duration }) => {
+const AdminAudioPlayer = ({ audioRef, speed, setSpeed, currentTime, duration }) => {
   const [localPlaying, setLocalPlaying] = useState(false)
-  const [dragging, setDragging] = useState(false)
   const trackRef = useRef(null)
 
   const togglePlay = () => {
@@ -73,7 +73,7 @@ const AdminAudioPlayer = ({ audioRef, audioUrl, speed, setSpeed, currentTime, du
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed
-  }, [speed])
+  }, [speed, audioRef])
 
   const handleTrackClick = (e) => {
     if (!audioRef.current || !trackRef.current) return
@@ -123,7 +123,7 @@ const AdminAudioPlayer = ({ audioRef, audioUrl, speed, setSpeed, currentTime, du
 }
 
 // ─── Segment Row ─────────────────────────────────────────────────────────────
-const SegmentRow = ({ seg, index, audioRef, audioDuration, errors, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, totalCount }) => {
+const SegmentRow = ({ seg, index, audioRef, errors, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, totalCount }) => {
   const [open, setOpen] = useState(true)
 
   const hasErrors = errors?.length > 0
@@ -414,24 +414,34 @@ function VocabularyEditor({ vocabulary, onChange }) {
 }
 
 // ─── Main Editor ─────────────────────────────────────────────────────────────
-const ListeningDictationEditor = ({ content, onContentChange }) => {
+const ListeningDictationEditor = ({ content, onContentChange, folderPath }) => {
   const audioRef = useRef(null)
   const fileInputRef = useRef(null)
 
   const audioUrl = content?.audio_url || ''
-  const segments = content?.segments || []
+  const segments = useMemo(() => content?.segments || [], [content?.segments])
   const fullTranscript = content?.full_transcript || ''
+  
+  const settings = content?.audio_settings || {}
+  const audioControls = settings.controls ?? true
+  const audioAutoplay = settings.autoplay ?? false
+  const audioLoop = settings.loop ?? false
+  const audioMaxPlays = settings.maxPlays ?? 0
+  const audioPlaybackRate = settings.playbackRate ?? 1
 
+  const updateSettings = (patch) => {
+    update({ audio_settings: { controls: audioControls, autoplay: audioAutoplay, loop: audioLoop, maxPlays: audioMaxPlays, playbackRate: audioPlaybackRate, ...patch } })
+  }
   const [uploading, setUploading] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [transcribeError, setTranscribeError] = useState('')
-  const [urlTab, setUrlTab] = useState('upload')
   const [directUrl, setDirectUrl] = useState('')
   const [speed, setSpeed] = useState(1.0)
   const [currentTime, setCurrentTime] = useState(0)
   const [audioDuration, setAudioDuration] = useState(0)
   const [validationErrors, setValidationErrors] = useState({})
   const [showValidation, setShowValidation] = useState(false)
+  const [showAudioOptions, setShowAudioOptions] = useState(false)
   const transcriptPanelRef = useRef(null)
   const activeSegRef = useRef(null)
 
@@ -466,7 +476,7 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
     if (showValidation) {
       setValidationErrors(validateSegments(segments, audioDuration))
     }
-  }, [segments, audioDuration, showValidation])
+      }, [segments, audioDuration, showValidation])
 
   // Segment helpers
   const updateSegment = (idx, field, value) => {
@@ -564,7 +574,8 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
     }
     setUploading(true)
     try {
-      const path = `exercise_bank/listening/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank/listening';
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
       const { error: uploadErr } = await supabase.storage
         .from('exercise-files')
         .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type || 'audio/mpeg' })
@@ -637,40 +648,34 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
           )}
 
           {!audioUrl ? (
-            <>
-              <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-0.5 w-fit">
-                <button type="button" onClick={() => setUrlTab('upload')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${urlTab === 'upload' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  <Upload className="w-3 h-3 inline mr-1" />Upload file
-                </button>
-                <button type="button" onClick={() => setUrlTab('url')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${urlTab === 'url' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  <Link className="w-3 h-3 inline mr-1" />Nhập URL
-                </button>
-              </div>
-              {urlTab === 'upload' ? (
-                <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-indigo-300 rounded-xl cursor-pointer hover:bg-indigo-50 transition-colors">
-                  <Upload className="w-6 h-6 text-indigo-400 mb-1.5" />
-                  <span className="text-sm font-medium text-indigo-600">
-                    {uploading ? 'Đang tải lên...' : 'Nhấp để chọn file MP3 / WAV'}
-                  </span>
-                  <span className="text-xs text-gray-400 mt-0.5">1 file audio duy nhất cho toàn bài</span>
-                  <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioUpload} disabled={uploading} />
-                </label>
-              ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
                 <div className="flex gap-2">
                   <input type="url" value={directUrl} onChange={e => setDirectUrl(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleDirectUrl()}
                     placeholder="https://example.com/audio.mp3"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                   />
                   <button type="button" onClick={handleDirectUrl} disabled={!directUrl.trim()}
-                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-all">
-                    Dùng URL
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 text-sm transition-colors">
+                    Insert
                   </button>
                 </div>
-              )}
-            </>
+                <div className="mt-2">
+                  <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioUpload} disabled={uploading} />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50 text-gray-700 font-medium"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {uploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="space-y-3">
               {/* File info + remove */}
@@ -687,7 +692,6 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
               {/* Custom Player */}
               <AdminAudioPlayer
                 audioRef={audioRef}
-                audioUrl={audioUrl}
                 speed={speed}
                 setSpeed={setSpeed}
                 currentTime={currentTime}
@@ -702,6 +706,59 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
               </button>
             </div>
           )}
+
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setShowAudioOptions(!showAudioOptions)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors w-fit"
+            >
+              Tùy chọn âm thanh
+              {showAudioOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            
+            {showAudioOptions && (
+              <div className="mt-4 space-y-3 pl-1">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioControls} onChange={(e) => updateSettings({controls: e.target.checked})} className="rounded" />
+                  Hiển thị controls (play/pause/volume)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => updateSettings({autoplay: e.target.checked})} className="rounded" />
+                  Tự động phát (autoplay)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioLoop} onChange={(e) => updateSettings({loop: e.target.checked})} className="rounded" />
+                  Lặp lại (loop)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={audioMaxPlays} 
+                    onChange={(e) => updateSettings({maxPlays: parseInt(e.target.value) || 0})} 
+                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                  <select
+                    value={audioPlaybackRate}
+                    onChange={(e) => updateSettings({playbackRate: parseFloat(e.target.value)})}
+                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value={0.5}>0.5x (Rất chậm)</option>
+                    <option value={0.75}>0.75x (Chậm)</option>
+                    <option value={1}>1x (Bình thường)</option>
+                    <option value={1.25}>1.25x (Nhanh)</option>
+                    <option value={1.5}>1.5x (Rất nhanh)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* AI Transcribe */}
@@ -837,7 +894,6 @@ const ListeningDictationEditor = ({ content, onContentChange }) => {
                   seg={seg}
                   index={idx}
                   audioRef={audioRef}
-                  audioDuration={audioDuration}
                   errors={validationErrors[idx]}
                   onUpdate={updateSegment}
                   onDelete={deleteSegment}

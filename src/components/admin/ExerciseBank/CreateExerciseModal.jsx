@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import PropTypes from 'prop-types'
 import { supabase } from '../../../supabase/client'
 import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus, Headphones } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
@@ -138,9 +139,49 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
       ])
   }
 
+  const isContentModified = Object.values(formData.content).some(v => {
+    if (Array.isArray(v)) {
+      if (v.length === 0) return false
+      if (v.length > 1) return true // Added more items
+      
+      const item = v[0]
+      if (typeof item !== 'object' || item === null) return true
+      
+      const ignoredStrings = ['open', 'closed', 'middle', 'small', 'medium', 'large', 'text', 'dropdown', 'checkbox']
+      
+      return Object.entries(item).some(([k, val]) => {
+        if (k === 'id') return false
+        if (typeof val === 'string' && val.trim() !== '' && !ignoredStrings.includes(val)) return true
+        if (Array.isArray(val) && val.length > 0) {
+          return val.some(nested => {
+            if (typeof nested === 'string' && nested.trim() !== '') return true
+            if (typeof nested === 'object' && nested !== null) {
+               return Object.values(nested).some(nv => typeof nv === 'string' && nv.trim() !== '')
+            }
+            return false
+          })
+        }
+        return false
+      })
+    }
+    
+    if (v && typeof v === 'object') {
+      return Object.values(v).some(val => {
+        if (typeof val === 'string' && val.trim() !== '') return true
+        if (Array.isArray(val) && val.length > 0) return true
+        return false
+      })
+    }
+    
+    if (typeof v === 'string') return v.trim() !== ''
+    if (typeof v === 'boolean') return false // ignore default booleans
+    if (typeof v === 'number') return v !== 0 // ignore default numbers
+    return v !== undefined && v !== null
+  })
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${formData.exercise_type === 'pdf_worksheet' || formData.exercise_type === 'image_hotspot' ? 'max-w-6xl' : 'max-w-4xl'}`}>
+      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           {/* Header with actions */}
@@ -190,8 +231,8 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
               <select
                 value={formData.exercise_type}
                 onChange={(e) => handleChange('exercise_type', e.target.value)}
-                disabled={Object.values(formData.content).some(v => Array.isArray(v) ? v.length > 0 : v !== '' && v !== undefined && v !== null)}
-                className={`w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${Object.values(formData.content).some(v => Array.isArray(v) ? v.length > 0 : v !== '' && v !== undefined && v !== null) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                disabled={isContentModified}
+                className={`w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isContentModified ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               >
                 {exerciseTypes.map(type => (
                   <option key={type.value} value={type.value}>
@@ -408,6 +449,7 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
               <ListeningDictationEditor
                 content={formData.content}
                 onContentChange={(content) => setFormData(prev => ({ ...prev, content }))}
+                folderPath={getFolderPath(formData.folder_id)}
               />
             )}
           </div>
@@ -417,6 +459,15 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
       </div>
     </div>
   )
+}
+
+
+CreateExerciseModal.propTypes = {
+  folders: PropTypes.array.isRequired,
+  selectedFolder: PropTypes.object,
+  onClose: PropTypes.func.isRequired,
+  onCreated: PropTypes.func.isRequired,
+  allowedTypes: PropTypes.array
 }
 
 export default CreateExerciseModal

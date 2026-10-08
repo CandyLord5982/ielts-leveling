@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import PropTypes from 'prop-types'
 import {
   Plus,
   Trash2,
@@ -6,7 +7,6 @@ import {
   ChevronUp,
   ChevronDown,
   Upload,
-  Check,
   HelpCircle,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -40,12 +40,36 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
   const questionTextareasRef = useRef({})
   const introTextareaRef = useRef(null)
   const introFileInputRef = useRef(null)
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaModalInputRef = useRef(null)
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
+    }
+  }
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('xpclass_last_bulk_text_fill_blank')
       if (saved) setLastBulkText(saved)
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
@@ -172,7 +196,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
               textarea.focus()
               textarea.setSelectionRange(pos, pos)
             }
-          } catch {}
+          } catch { /* ignore */ }
         }, 0)
       } else {
         onIntroChange && onIntroChange(current + (current ? '\n' : '') + snippet)
@@ -200,7 +224,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
             ta.focus()
             ta.setSelectionRange(pos, pos)
           }
-        } catch {}
+        } catch { /* ignore */ }
       }, 0)
     } else {
       // Fallback to append when we cannot detect caret
@@ -291,7 +315,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
         insertAtCursor(idx, 'question', `<audio src="${trimmedUrl}" ${audioAttrs}></audio>`)
       }
       handleUrlCancel()
-    } catch (e) {
+    } catch {
       alert('Vui lòng nhập URL hợp lệ (http/https)')
     }
   }
@@ -456,7 +480,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
           }
 
           setLastBulkText(bulkText)
-          try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch {}
+          try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch { /* ignore */ }
           const updatedQuestions = [...localQuestions, question]
           setLocalQuestions(updatedQuestions)
           onQuestionsChange(updatedQuestions)
@@ -522,7 +546,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
         }
 
         setLastBulkText(bulkText)
-        try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch {}
+        try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch { /* ignore */ }
         const updatedQuestions = [...localQuestions, ...separatedQuestions]
         setLocalQuestions(updatedQuestions)
         onQuestionsChange(updatedQuestions)
@@ -715,7 +739,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
           onIntroChange(intro ? intro + '\n' + newIntro : newIntro)
         }
         setLastBulkText(bulkText)
-        try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch {}
+        try { localStorage.setItem('xpclass_last_bulk_text_fill_blank', bulkText) } catch { /* ignore */ }
         const updatedQuestions = [...localQuestions, ...newQuestions]
         setLocalQuestions(updatedQuestions)
         onQuestionsChange(updatedQuestions)
@@ -725,7 +749,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
       } else {
         alert('No valid questions found. Please check your format.')
       }
-    } catch (error) {
+    } catch {
       alert('Error processing bulk import. Please check your format.')
     }
   }
@@ -881,7 +905,7 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
                   textarea.setSelectionRange(caret, caret)
                 }, 0)
                 alert('Image uploaded and inserted into intro!')
-              } catch (e) {
+              } catch {
                 console.error('Image upload failed:', e)
                 alert('Image upload failed. Please ensure the bucket "exercise-images" exists and RLS allows uploads.')
               }
@@ -1165,7 +1189,7 @@ B. Fill in the blanks with the correct form.
         {localQuestions.length === 0 && !bulkImportMode && (
           <div className="text-center py-8 text-gray-500">
             <HelpCircle className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-            <p>No questions yet. Click "Add Question" or "Bulk Import" to start.</p>
+            <p>No questions yet. Click &quot;Add Question&quot; or &quot;Bulk Import&quot; to start.</p>
           </div>
         )}
       </div>
@@ -1181,6 +1205,26 @@ B. Fill in the blanks with the correct form.
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
               <input type="url" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder={urlModal.type === 'image' ? 'https://example.com/image.jpg' : urlModal.type === 'audio' ? 'https://example.com/audio.mp3' : 'https://example.com/link'} />
+              {(urlModal.type === 'image' || urlModal.type === 'audio') && (
+                <div className="mt-2">
+                  <input
+                    ref={mediaModalInputRef}
+                    type="file"
+                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                    className="hidden"
+                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mediaModalInputRef.current?.click()}
+                    disabled={modalUploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
+              )}
             </div>
             {urlModal.type === 'link' && (
               <div>
@@ -1214,38 +1258,45 @@ B. Fill in the blanks with the correct form.
               </div>
             )}
             {urlModal.type === 'audio' && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tùy chọn âm thanh</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} /> Hiển thị controls</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} /> Autoplay</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} /> Loop</label>
-                <label className="flex items-center gap-2 text-sm">
-                  Giới hạn phát:
-                  <input
-                    type="number"
-                    min="0"
-                    max="99"
-                    value={audioMaxPlays}
-                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                  <span className="text-gray-500">{audioMaxPlays === 0 ? '(không giới hạn)' : 'lần'}</span>
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                  Hiển thị controls (play/pause/volume)
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  Tốc độ phát:
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                  Tự động phát (autoplay)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                  Lặp lại (loop)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={audioMaxPlays} 
+                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
                   <select
                     value={audioPlaybackRate}
                     onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={0.5}>0.5x</option>
-                    <option value={0.75}>0.75x</option>
-                    <option value={1}>1x</option>
-                    <option value={1.25}>1.25x</option>
-                    <option value={1.5}>1.5x</option>
-                    <option value={2}>2x</option>
+                    <option value={0.5}>0.5x (Rất chậm)</option>
+                    <option value={0.75}>0.75x (Chậm)</option>
+                    <option value={1}>1x (Bình thường)</option>
+                    <option value={1.25}>1.25x (Nhanh)</option>
+                    <option value={1.5}>1.5x (Rất nhanh)</option>
                   </select>
-                </label>
+                </div>
               </div>
             )}
             {urlInput && (
@@ -1270,6 +1321,17 @@ B. Fill in the blanks with the correct form.
     )}
     </>
   )
+}
+
+
+FillBlankEditor.propTypes = {
+  questions: PropTypes.array,
+  onQuestionsChange: PropTypes.func,
+  settings: PropTypes.object,
+  onSettingsChange: PropTypes.func,
+  intro: PropTypes.string,
+  onIntroChange: PropTypes.func,
+  folderPath: PropTypes.string
 }
 
 export default FillBlankEditor

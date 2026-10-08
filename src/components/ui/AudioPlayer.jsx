@@ -25,7 +25,9 @@ const AudioPlayer = ({
   seekable = true,
   externalPlayCount,
   onPlay,
-  playbackRate = 1
+  playbackRate = 1,
+  autoplay = false,
+  loop = false
 }) => {
   const [internalPlayCount, setInternalPlayCount] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -97,6 +99,7 @@ const AudioPlayer = ({
     const audio = new Audio(audioUrl)
     audio.playbackRate = playbackRate
     audio.defaultPlaybackRate = playbackRate
+    audio.loop = loop
     audioRef.current = audio
 
     const handleEnded = () => {
@@ -124,6 +127,10 @@ const AudioPlayer = ({
     setProgress(0)
     setInternalPlayCount(0)
     setHasReachedLimit(false)
+    
+    if (autoplay) {
+      audio.play().catch(err => console.log('Autoplay prevented:', err))
+    }
 
     return () => {
       audio.pause()

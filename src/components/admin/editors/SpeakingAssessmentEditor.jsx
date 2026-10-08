@@ -26,7 +26,11 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
   const [imgSize, setImgSize] = useState('medium')
   const [customW, setCustomW] = useState('')
   const [customH, setCustomH] = useState('')
-  const [audioCtrls, setAudioCtrls] = useState(true)
+  const [audioControls, setAudioControls] = useState(true)
+  const [audioAutoplay, setAudioAutoplay] = useState(false)
+  const [audioLoop, setAudioLoop] = useState(false)
+  const [audioMaxPlays, setAudioMaxPlays] = useState(0)
+  const [audioPlaybackRate, setAudioPlaybackRate] = useState(1)
   const promptRefs = useRef({})
   const imageInputRefs = useRef({})
   const audioInputRefs = useRef({})
@@ -156,7 +160,11 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
     setImgSize('medium')
     setCustomW('')
     setCustomH('')
-    setAudioCtrls(true)
+    setAudioControls(true)
+    setAudioAutoplay(false)
+    setAudioLoop(false)
+    setAudioMaxPlays(0)
+    setAudioPlaybackRate(1)
     setMediaModal({ idx, type })
   }
 
@@ -175,9 +183,19 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
     if (!mediaModal) return
     const url = mediaUrl.trim()
     if (!url) return
+    let audioAttrs = ''
+    if (mediaModal.type === 'audio') {
+      const attrs = []
+      if (audioControls) attrs.push('controls')
+      if (audioAutoplay) attrs.push('autoplay')
+      if (audioLoop) attrs.push('loop')
+      if (audioMaxPlays > 0) attrs.push(`data-max-plays="${audioMaxPlays}"`)
+      if (audioPlaybackRate && audioPlaybackRate !== 1) attrs.push(`data-playback-rate="${audioPlaybackRate}"`)
+      audioAttrs = attrs.join(' ')
+    }
     const snippet = mediaModal.type === 'image'
       ? `\n<img src="${url}" alt="" ${imgSizeAttr()} />\n`
-      : `\n<audio src="${url}" ${audioCtrls ? 'controls' : ''}></audio>\n`
+      : `\n<audio src="${url}" ${audioAttrs}></audio>\n`
     insertIntoPrompt(mediaModal.idx, snippet)
     closeMediaModal()
   }
@@ -524,10 +542,46 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
               )}
 
               {mediaModal.type === 'audio' && (
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={audioCtrls} onChange={(e) => setAudioCtrls(e.target.checked)} className="rounded" />
-                  Show player controls (play / pause / volume)
-                </label>
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                    Hiển thị controls (play/pause/volume)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                    Tự động phát (autoplay)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                    Lặp lại (loop)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={audioMaxPlays} 
+                      onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                      className="w-20 p-1 border border-gray-300 rounded text-sm"
+                    />
+                    <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                    <select
+                      value={audioPlaybackRate}
+                      onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
+                      className="w-32 p-1 border border-gray-300 rounded text-sm"
+                    >
+                      <option value={0.5}>0.5x (Rất chậm)</option>
+                      <option value={0.75}>0.75x (Chậm)</option>
+                      <option value={1}>1x (Bình thường)</option>
+                      <option value={1.25}>1.25x (Nhanh)</option>
+                      <option value={1.5}>1.5x (Rất nhanh)</option>
+                    </select>
+                  </div>
+                </div>
               )}
 
               {mediaUrl.trim() && (
@@ -545,7 +599,7 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
                       }}
                     />
                   ) : (
-                    <audio src={mediaUrl} controls={audioCtrls} className="w-full" />
+                    <audio src={mediaUrl} controls={audioControls} className="w-full" />
                   )}
                 </div>
               )}

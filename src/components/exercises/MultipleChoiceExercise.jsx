@@ -55,6 +55,18 @@ const getThemeSideImages = (theme) => {
 const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { startExercise, completeExerciseWithXP } = useProgress()
@@ -416,15 +428,15 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     }
 
     setShowAllResults(true)
-    
+
     // Process all answers
     const results = []
     const wrongQuestionsList = []
-    
+
     questions.forEach((question, index) => {
       const selectedAnswerIndex = allAnswers[index]
       const isCorrect = selectedAnswerIndex === question.correct_answer
-      
+
       const result = {
         questionId: question.id,
         questionIndex: index,
@@ -434,9 +446,9 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
         correctAnswer: question.correct_answer,
         explanation: question.explanation
       }
-      
+
       results.push(result)
-      
+
       if (!isCorrect) {
         wrongQuestionsList.push({
           ...question,
@@ -444,7 +456,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
         })
       }
     })
-    
+
     // Merge results if retry mode
     let finalResults = results
     if (isRetryMode && firstAttemptResults.length > 0) {
@@ -464,7 +476,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     setQuestionResults(finalResults)
     setWrongQuestions(isRetryMode ? [] : wrongQuestionsList)
     setIsQuizComplete(true)
-    
+
     // Save all question attempts to database
     if (user && exerciseId) {
       try {
@@ -479,7 +491,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           attempt_number: attemptNumber,
           response_time: Date.now() - startTime
         }))
-        
+
         await supabase.from('question_attempts').insert(attempts)
       } catch (err) {
         console.log('⚠️ Could not save question attempts (table may not exist):', err.message)
@@ -706,7 +718,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                 Do
               </button>
             </div>
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
           </div>
@@ -739,11 +751,10 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                   return (
                     <div
                       key={oIndex}
-                      className={`flex items-center gap-3 p-3 rounded-lg border ${
-                        isCorrect
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${isCorrect
                           ? 'bg-green-50 border-green-300'
                           : 'bg-gray-50 border-gray-200'
-                      }`}
+                        }`}
                     >
                       {isCorrect ? (
                         <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -814,11 +825,10 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                         style={{ padding: 0, borderRadius: '0.75em', backgroundColor: shadowColor }}
                       >
                         <div
-                          className={`w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium ${
-                            isSelected
+                          className={`w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium ${isSelected
                               ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-sm'
                               : 'bg-white border-gray-200 cursor-pointer hover:shadow-sm'
-                          }`}
+                            }`}
                           style={{
                             display: 'flex', alignItems: 'center', boxSizing: 'border-box', height: '100%',
                             transform: 'translateY(-0.2em)', transition: 'transform 0.1s ease',
@@ -869,327 +879,100 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
       <div className="relative px-2 md:pt-2 pb-12">
         <div className="max-w-4xl mx-auto space-y-6 relative z-20">
-      {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
+          {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
 
-      {/* Teacher Do mode banner */}
-      {isTeacherView && teacherMode === 'do' && (
-        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-          <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setTeacherMode('review')}
-              className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
-            >
-              Review
-            </button>
-            <button
-              className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
-            >
-              Do
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Header - hide on celebration screen */}
-      {!isQuizComplete && (
-        <ExerciseHeader
-          title={exercise?.title}
-          progressPercentage={
-            (questionResults.filter(r => r.isCorrect).length / totalQuestions) * 100
-          }
-          isBatmanMoving={isBatmanMoving}
-          isRetryMode={isRetryMode}
-          retryModeText="Ôn lại câu sai"
-          targetInfo="≥ 80% để hoàn thành"
-          showBatman={viewMode === 'one-by-one'}
-          showProgressLabel={false}
-          showQuestionCounter={false}
-          colorTheme={colorTheme}
-        />
-      )}
-
-      {/* Global Intro (exercise.content.settings/intros) - hide on celebration screen */}
-      {!isQuizComplete && exercise?.content?.intro && String(exercise.content.intro).trim() && (
-        <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
-          <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
-        </div>
-      )}
-
-
-      {/* Meme Overlay */}
-      {showMeme && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <img
-            src={currentMeme}
-            alt="Reaction meme"
-            className="rounded-lg shadow-2xl"
-            style={{ width: '200px', height: 'auto' }}
-          />
-        </div>
-      )}
-
-      {/* Questions Display */}
-      <>
-        {/* One-by-one mode */}
-          {viewMode === 'one-by-one' && (
-            <div className="w-full max-w-4xl min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg">
-              
-              {/* Colored circles on top right */}
-              <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
-                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                <div className="w-3 h-3 rounded-full bg-pink-500"></div>
-              </div>
-              <div className="relative z-10 p-4 md:p-8 pt-8 border-l-4 border-blue-400 rounded-l-lg">
-              <div className="space-y-4 md:space-y-6">
-
-                {/* Question - single unified version */}
-                <div className="mb-6">
-
-              {/* Intro above question (optional) */}
-              {currentQuestion.intro && String(currentQuestion.intro).trim() && (
-                <div className="mb-4">
-                  <RichTextWithAudio
-                    content={currentQuestion.intro}
-                    allowImages={true}
-                    allowLinks={false}
-                  />
-                </div>
-              )}
-
-                  <RichTextWithAudio
-                    content={
-                      currentQuestion.audio_url
-                        ? `${currentQuestion.question}<audio src="${currentQuestion.audio_url}" data-max-plays="${currentQuestion.max_audio_plays || 0}"></audio>`
-                        : currentQuestion.question
-                    }
-                    className="question-text"
-                    allowImages={true}
-                    allowLinks={false}
-                    style={{
-                      fontSize: '1.125rem',
-                      fontWeight: '400',
-                      color: '#1f2937',
-                      lineHeight: '1.75'
-                    }}
-                  />
-                </div>
-
-                {/* Options - responsive grid */}
-                <div className="space-y-3 md:space-y-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                      {currentQuestion.options.map((option, index) => {
-                        let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
-
-                        if (selectedAnswer === null) {
-                          buttonClass += `bg-white border-gray-200 cursor-pointer hover:shadow-sm`
-                        } else {
-                          if (index === selectedAnswer) {
-                            // Show only the selected answer - green if correct, red if wrong
-                            const isCorrect = index === currentQuestion.correct_answer
-                            if (isCorrect) {
-                              buttonClass += "border-green-500 bg-green-50 text-green-900 shadow-sm"
-                            } else {
-                              buttonClass += "border-red-500 bg-red-50 text-red-900 shadow-sm"
-                            }
-                          } else {
-                            // Other options remain neutral
-                            buttonClass += "border-gray-200 bg-gray-50 text-gray-500 opacity-60"
-                          }
-                        }
-
-                        // Get border color for shadow - match the border colors from buttonClass
-                        let shadowColor = '#e5e7eb' // gray-200 default (matches border-gray-200)
-                        if (selectedAnswer !== null) {
-                          if (index === selectedAnswer) {
-                            const isCorrect = index === currentQuestion.correct_answer
-                            shadowColor = isCorrect ? '#22c55e' : '#ef4444' // green-500 or red-500
-                          } else {
-                            shadowColor = '#e5e7eb' // gray-200
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => handleAnswerSelect(index)}
-                            disabled={selectedAnswer !== null}
-                            className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium`}
-                            style={{
-                              padding: 0,
-                              borderRadius: '0.75em',
-                              backgroundColor: shadowColor
-                            }}
-                          >
-                            <div
-                              className={buttonClass}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                boxSizing: 'border-box',
-                                height: '100%',
-                                transform: selectedAnswer === null ? 'translateY(-0.2em)' : 'translateY(0)',
-                                transition: 'transform 0.1s ease',
-                                padding: '0.75em 1.5em',
-                                borderRadius: '0.75em'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(-0.33em)'
-                                  // Keep the same shadow color on hover
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(-0.2em)'
-                                }
-                              }}
-                              onMouseDown={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(0)'
-                                }
-                              }}
-                              onMouseUp={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(-0.33em)'
-                                }
-                              }}
-                              onTouchStart={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(0)'
-                                }
-                              }}
-                              onTouchEnd={(e) => {
-                                if (selectedAnswer === null) {
-                                  e.currentTarget.style.transform = 'translateY(-0.2em)'
-                                }
-                              }}
-                            >
-                            <div className="flex items-center justify-between gap-3 w-full">
-                              <div className="flex-1">
-                                <RichTextWithAudio
-                                  content={option}
-                                  allowImages={true}
-                                  allowLinks={false}
-                                />
-                              </div>
-                              <div className="flex-shrink-0">
-                                {selectedAnswer !== null && index === selectedAnswer && (
-                                  <>
-                                    {index === currentQuestion.correct_answer ? (
-                                      <CheckCircle className="w-6 h-6 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-6 h-6 text-red-600" />
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                </div>
-
-                {/* Explanation and Next Button */}
-                {showExplanation && selectedAnswer !== null && (
-                  <div className="space-y-4">
-                    {(currentQuestion.option_explanations?.[selectedAnswer] || currentQuestion.explanation) && (
-                    <div className="p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                      <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h3>
-                      <RichTextRenderer
-                        content={currentQuestion.option_explanations?.[selectedAnswer] || currentQuestion.explanation}
-                        className="text-blue-800 text-sm md:text-base leading-relaxed"
-                        allowImages={true}
-                        allowLinks={false}
-                      />
-                    </div>
-                    )}
-
-                    {/* Pet Tutor - Ask Pet button (only for wrong answers) */}
-                    {FEATURES.pets && selectedAnswer !== currentQuestion.correct_answer && activePet && (
-                      <div className="space-y-3">
-                        {!showPetTutor ? (
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={handleAskPet}
-                              disabled={(userEnergy ?? 100) < 10}
-                              className={`flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${
-                                (userEnergy ?? 100) < 10
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                  : 'bg-purple-500 hover:bg-purple-600 text-white hover:shadow-md'
-                              }`}
-                            >
-                              <MessageCircle className="w-5 h-5" />
-                              Hỏi {activePet.nickname || activePet.name} giải thích
-                            </button>
-                            <span className="text-xs text-gray-500">
-                              ⚡ {userEnergy ?? 100}/100
-                              {(userEnergy ?? 100) < 10 && ' (Mệt rồi!)'}
-                            </span>
-                          </div>
-                        ) : (
-                          <PetTutorBubble
-                            pet={activePet}
-                            message={petTutorMessage}
-                            isLoading={petTutorLoading}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Next Button - full width on mobile, centered on desktop */}
-                    <div className="flex justify-center md:justify-end">
-                      <Button3D
-                        onClick={handleNextQuestion}
-                        color="blue"
-                        size="md"
-                        fullWidth={false}
-                        className="flex items-center justify-center gap-2 md:w-auto"
-                      >
-                        {currentQuestionIndex < questions.length - 1 ? (
-                          <>
-                            Câu tiếp theo
-                            <ArrowRight className="w-5 h-5" />
-                          </>
-                        ) : (
-                          'Hoàn thành'
-                        )}
-                      </Button3D>
-                    </div>
-                  </div>
-                )}
-              </div>
+          {/* Teacher Do mode banner */}
+          {isTeacherView && teacherMode === 'do' && (
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+              <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setTeacherMode('review')}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
+                >
+                  Review
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
+                >
+                  Do
+                </button>
               </div>
             </div>
           )}
 
-          {/* All-at-once mode */}
-          {viewMode === 'all-at-once' && (
-            <div className="space-y-6">
-              {questions.map((question, questionIndex) => (
-                <div key={questionIndex} className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200">
+          {/* Header - hide on celebration screen */}
+          {!isQuizComplete && (
+            <ExerciseHeader
+              title={exercise?.title}
+              progressPercentage={
+                (questionResults.filter(r => r.isCorrect).length / totalQuestions) * 100
+              }
+              isBatmanMoving={isBatmanMoving}
+              isRetryMode={isRetryMode}
+              retryModeText="Ôn lại câu sai"
+              targetInfo="≥ 80% để hoàn thành"
+              showBatman={viewMode === 'one-by-one'}
+              showProgressLabel={false}
+              showQuestionCounter={false}
+              colorTheme={colorTheme}
+            />
+          )}
+
+          {/* Global Intro (exercise.content.settings/intros) - hide on celebration screen */}
+          {!isQuizComplete && exercise?.content?.intro && String(exercise.content.intro).trim() && (
+            <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
+              <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
+            </div>
+          )}
+
+
+          {/* Meme Overlay */}
+          {showMeme && (
+            <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+              <img
+                src={currentMeme}
+                alt="Reaction meme"
+                className="rounded-lg shadow-2xl"
+                style={{ width: '200px', height: 'auto' }}
+              />
+            </div>
+          )}
+
+          {/* Questions Display */}
+          <>
+            {/* One-by-one mode */}
+            {viewMode === 'one-by-one' && (
+              <div className="w-full max-w-4xl min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg">
+
+                {/* Colored circles on top right */}
+                <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-pink-500"></div>
+                </div>
+                <div className="relative z-10 p-4 md:p-8 pt-8 border-l-4 border-blue-400 rounded-l-lg">
                   <div className="space-y-4 md:space-y-6">
 
-                    {/* Question */}
+                    {/* Question - single unified version */}
                     <div className="mb-6">
+
                       {/* Intro above question (optional) */}
-                      {question.intro && String(question.intro).trim() && (
+                      {currentQuestion.intro && String(currentQuestion.intro).trim() && (
                         <div className="mb-4">
                           <RichTextWithAudio
-                            content={question.intro}
+                            content={currentQuestion.intro}
                             allowImages={true}
                             allowLinks={false}
                           />
                         </div>
                       )}
+
                       <RichTextWithAudio
                         content={
-                          question.audio_url
-                            ? `${question.question}<audio src="${question.audio_url}" data-max-plays="${question.max_audio_plays || 0}"></audio>`
-                            : question.question
+                          currentQuestion.audio_url
+                            ? `${currentQuestion.question}<audio src="${currentQuestion.audio_url}" data-max-plays="${currentQuestion.max_audio_plays || 0}"></audio>`
+                            : currentQuestion.question
                         }
                         className="question-text"
                         allowImages={true}
@@ -1203,58 +986,45 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                       />
                     </div>
 
-                    {/* Options */}
+                    {/* Options - responsive grid */}
                     <div className="space-y-3 md:space-y-0">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                        {question.options.map((option, optionIndex) => {
-                          const isSelected = allAnswers[questionIndex] === optionIndex
-                          const isCorrect = optionIndex === question.correct_answer
-
+                        {currentQuestion.options.map((option, index) => {
                           let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
 
-                          if (showAllResults) {
-                            if (isSelected && isCorrect) {
-                              // Selected and correct - bright green
-                              buttonClass += "border-green-500 bg-green-100 text-green-900 shadow-md"
-                            } else if (isSelected && !isCorrect) {
-                              // Selected but wrong - bright red
-                              buttonClass += "border-red-500 bg-red-100 text-red-900 shadow-md"
-                            } else if (!isSelected && isCorrect) {
-                              // Not selected but this is the correct answer - show it clearly
-                              buttonClass += "border-green-400 bg-green-50 text-green-800 shadow-sm"
-                            } else {
-                              // Not selected and not correct - fade out
-                              buttonClass += "border-gray-200 bg-gray-50 text-gray-500 opacity-50"
-                            }
+                          if (selectedAnswer === null) {
+                            buttonClass += `bg-white border-gray-200 cursor-pointer hover:shadow-sm`
                           } else {
-                            if (isSelected) {
-                              buttonClass += "border-blue-500 bg-blue-50 text-blue-900 shadow-sm"
+                            if (index === selectedAnswer) {
+                              // Show only the selected answer - green if correct, red if wrong
+                              const isCorrect = index === currentQuestion.correct_answer
+                              if (isCorrect) {
+                                buttonClass += "border-green-500 bg-green-50 text-green-900 shadow-sm"
+                              } else {
+                                buttonClass += "border-red-500 bg-red-50 text-red-900 shadow-sm"
+                              }
                             } else {
-                              buttonClass += `bg-white border-gray-200 cursor-pointer hover:shadow-sm`
+                              // Other options remain neutral
+                              buttonClass += "border-gray-200 bg-gray-50 text-gray-500 opacity-60"
                             }
                           }
 
-                          // Get shadow color based on state - match border colors
+                          // Get border color for shadow - match the border colors from buttonClass
                           let shadowColor = '#e5e7eb' // gray-200 default (matches border-gray-200)
-                          if (showAllResults) {
-                            if (isSelected && isCorrect) {
-                              shadowColor = '#22c55e' // green-500
-                            } else if (isSelected && !isCorrect) {
-                              shadowColor = '#ef4444' // red-500
-                            } else if (!isSelected && isCorrect) {
-                              shadowColor = '#4ade80' // green-400
+                          if (selectedAnswer !== null) {
+                            if (index === selectedAnswer) {
+                              const isCorrect = index === currentQuestion.correct_answer
+                              shadowColor = isCorrect ? '#22c55e' : '#ef4444' // green-500 or red-500
                             } else {
                               shadowColor = '#e5e7eb' // gray-200
                             }
-                          } else if (isSelected) {
-                            shadowColor = '#3b82f6' // blue-500 (matches border-blue-500)
                           }
 
                           return (
                             <button
-                              key={optionIndex}
-                              onClick={() => handleAllAtOnceAnswerSelect(questionIndex, optionIndex)}
-                              disabled={showAllResults}
+                              key={index}
+                              onClick={() => handleAnswerSelect(index)}
+                              disabled={selectedAnswer !== null}
                               className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium`}
                               style={{
                                 padding: 0,
@@ -1269,67 +1039,63 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                                   alignItems: 'center',
                                   boxSizing: 'border-box',
                                   height: '100%',
-                                  transform: !showAllResults ? 'translateY(-0.2em)' : 'translateY(0)',
+                                  transform: selectedAnswer === null ? 'translateY(-0.2em)' : 'translateY(0)',
                                   transition: 'transform 0.1s ease',
                                   padding: '0.75em 1.5em',
                                   borderRadius: '0.75em'
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(-0.33em)'
                                     // Keep the same shadow color on hover
                                   }
                                 }}
                                 onMouseLeave={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(-0.2em)'
                                   }
                                 }}
                                 onMouseDown={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(0)'
                                   }
                                 }}
                                 onMouseUp={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(-0.33em)'
                                   }
                                 }}
                                 onTouchStart={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(0)'
                                   }
                                 }}
                                 onTouchEnd={(e) => {
-                                  if (!showAllResults) {
+                                  if (selectedAnswer === null) {
                                     e.currentTarget.style.transform = 'translateY(-0.2em)'
                                   }
                                 }}
                               >
-                              <div className="flex items-center justify-between gap-3 w-full">
-                                <div className="flex-1">
-                                  <RichTextWithAudio
-                                    content={option}
-                                    allowImages={true}
-                                    allowLinks={false}
-                                  />
+                                <div className="flex items-center justify-between gap-3 w-full">
+                                  <div className="flex-1">
+                                    <RichTextWithAudio
+                                      content={option}
+                                      allowImages={true}
+                                      allowLinks={false}
+                                    />
+                                  </div>
+                                  <div className="flex-shrink-0">
+                                    {selectedAnswer !== null && index === selectedAnswer && (
+                                      <>
+                                        {index === currentQuestion.correct_answer ? (
+                                          <CheckCircle className="w-6 h-6 text-green-600" />
+                                        ) : (
+                                          <XCircle className="w-6 h-6 text-red-600" />
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="flex-shrink-0">
-                                  {showAllResults && (
-                                    <>
-                                      {isSelected && isCorrect && (
-                                        <CheckCircle className="w-6 h-6 text-green-600" />
-                                      )}
-                                      {isSelected && !isCorrect && (
-                                        <XCircle className="w-6 h-6 text-red-600" />
-                                      )}
-                                      {!isSelected && isCorrect && (
-                                        <CheckCircle className="w-6 h-6 text-green-500" />
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
                               </div>
                             </button>
                           )
@@ -1337,40 +1103,283 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                       </div>
                     </div>
 
-                    {/* Explanation for this question */}
-                    {showAllResults && allAnswers[questionIndex] !== undefined && (question.option_explanations?.[allAnswers[questionIndex]] || question.explanation) && (
-                      <div className="mt-4 p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h4>
-                        <RichTextRenderer
-                          content={question.option_explanations?.[allAnswers[questionIndex]] || question.explanation}
-                          className="text-blue-800 text-sm md:text-base leading-relaxed"
-                          allowImages={true}
-                          allowLinks={false}
-                        />
+                    {/* Explanation and Next Button */}
+                    {showExplanation && selectedAnswer !== null && (
+                      <div className="space-y-4">
+                        {(currentQuestion.option_explanations?.[selectedAnswer] || currentQuestion.explanation) && (
+                          <div className="p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h3>
+                            <RichTextRenderer
+                              content={currentQuestion.option_explanations?.[selectedAnswer] || currentQuestion.explanation}
+                              className="text-blue-800 text-sm md:text-base leading-relaxed"
+                              allowImages={true}
+                              allowLinks={false}
+                            />
+                          </div>
+                        )}
+
+                        {/* Pet Tutor - Ask Pet button (only for wrong answers) */}
+                        {FEATURES.pets && selectedAnswer !== currentQuestion.correct_answer && activePet && (
+                          <div className="space-y-3">
+                            {!showPetTutor ? (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={handleAskPet}
+                                  disabled={(userEnergy ?? 100) < 10}
+                                  className={`flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${(userEnergy ?? 100) < 10
+                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                      : 'bg-purple-500 hover:bg-purple-600 text-white hover:shadow-md'
+                                    }`}
+                                >
+                                  <MessageCircle className="w-5 h-5" />
+                                  Hỏi {activePet.nickname || activePet.name} giải thích
+                                </button>
+                                <span className="text-xs text-gray-500">
+                                  ⚡ {userEnergy ?? 100}/100
+                                  {(userEnergy ?? 100) < 10 && ' (Mệt rồi!)'}
+                                </span>
+                              </div>
+                            ) : (
+                              <PetTutorBubble
+                                pet={activePet}
+                                message={petTutorMessage}
+                                isLoading={petTutorLoading}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Next Button - full width on mobile, centered on desktop */}
+                        <div className="flex justify-center md:justify-end">
+                          <Button3D
+                            onClick={handleNextQuestion}
+                            color="blue"
+                            size="md"
+                            fullWidth={false}
+                            className="flex items-center justify-center gap-2 md:w-auto"
+                          >
+                            {currentQuestionIndex < questions.length - 1 ? (
+                              <>
+                                Câu tiếp theo
+                                <ArrowRight className="w-5 h-5" />
+                              </>
+                            ) : (
+                              'Hoàn thành'
+                            )}
+                          </Button3D>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
+              </div>
+            )}
 
-              {/* Submit Button */}
-              {!showAllResults && (
-                <div className="flex justify-center mt-8">
-                  <Button3D
-                    onClick={handleSubmitAllAnswers}
-                    color="green"
-                    size="lg"
-                    fullWidth={false}
-                    disabled={Object.keys(allAnswers).length < questions.length}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    Nộp bài ({Object.keys(allAnswers).length}/{questions.length})
-                  </Button3D>
-                </div>
-              )}
-            </div>
-          )}
-        </>
+            {/* All-at-once mode */}
+            {viewMode === 'all-at-once' && (
+              <div className="space-y-6">
+                {questions.map((question, questionIndex) => (
+                  <div key={questionIndex} className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200">
+                    <div className="space-y-4 md:space-y-6">
+
+                      {/* Question */}
+                      <div className="mb-6">
+                        {/* Intro above question (optional) */}
+                        {question.intro && String(question.intro).trim() && (
+                          <div className="mb-4">
+                            <RichTextWithAudio
+                              content={question.intro}
+                              allowImages={true}
+                              allowLinks={false}
+                            />
+                          </div>
+                        )}
+                        <RichTextWithAudio
+                          content={
+                            question.audio_url
+                              ? `${question.question}<audio src="${question.audio_url}" data-max-plays="${question.max_audio_plays || 0}"></audio>`
+                              : question.question
+                          }
+                          className="question-text"
+                          allowImages={true}
+                          allowLinks={false}
+                          style={{
+                            fontSize: '1.125rem',
+                            fontWeight: '400',
+                            color: '#1f2937',
+                            lineHeight: '1.75'
+                          }}
+                        />
+                      </div>
+
+                      {/* Options */}
+                      <div className="space-y-3 md:space-y-0">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                          {question.options.map((option, optionIndex) => {
+                            const isSelected = allAnswers[questionIndex] === optionIndex
+                            const isCorrect = optionIndex === question.correct_answer
+
+                            let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
+
+                            if (showAllResults) {
+                              if (isSelected && isCorrect) {
+                                // Selected and correct - bright green
+                                buttonClass += "border-green-500 bg-green-100 text-green-900 shadow-md"
+                              } else if (isSelected && !isCorrect) {
+                                // Selected but wrong - bright red
+                                buttonClass += "border-red-500 bg-red-100 text-red-900 shadow-md"
+                              } else if (!isSelected && isCorrect) {
+                                // Not selected but this is the correct answer - show it clearly
+                                buttonClass += "border-green-400 bg-green-50 text-green-800 shadow-sm"
+                              } else {
+                                // Not selected and not correct - fade out
+                                buttonClass += "border-gray-200 bg-gray-50 text-gray-500 opacity-50"
+                              }
+                            } else {
+                              if (isSelected) {
+                                buttonClass += "border-blue-500 bg-blue-50 text-blue-900 shadow-sm"
+                              } else {
+                                buttonClass += `bg-white border-gray-200 cursor-pointer hover:shadow-sm`
+                              }
+                            }
+
+                            // Get shadow color based on state - match border colors
+                            let shadowColor = '#e5e7eb' // gray-200 default (matches border-gray-200)
+                            if (showAllResults) {
+                              if (isSelected && isCorrect) {
+                                shadowColor = '#22c55e' // green-500
+                              } else if (isSelected && !isCorrect) {
+                                shadowColor = '#ef4444' // red-500
+                              } else if (!isSelected && isCorrect) {
+                                shadowColor = '#4ade80' // green-400
+                              } else {
+                                shadowColor = '#e5e7eb' // gray-200
+                              }
+                            } else if (isSelected) {
+                              shadowColor = '#3b82f6' // blue-500 (matches border-blue-500)
+                            }
+
+                            return (
+                              <button
+                                key={optionIndex}
+                                onClick={() => handleAllAtOnceAnswerSelect(questionIndex, optionIndex)}
+                                disabled={showAllResults}
+                                className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium`}
+                                style={{
+                                  padding: 0,
+                                  borderRadius: '0.75em',
+                                  backgroundColor: shadowColor
+                                }}
+                              >
+                                <div
+                                  className={buttonClass}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    boxSizing: 'border-box',
+                                    height: '100%',
+                                    transform: !showAllResults ? 'translateY(-0.2em)' : 'translateY(0)',
+                                    transition: 'transform 0.1s ease',
+                                    padding: '0.75em 1.5em',
+                                    borderRadius: '0.75em'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(-0.33em)'
+                                      // Keep the same shadow color on hover
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(-0.2em)'
+                                    }
+                                  }}
+                                  onMouseDown={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(0)'
+                                    }
+                                  }}
+                                  onMouseUp={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(-0.33em)'
+                                    }
+                                  }}
+                                  onTouchStart={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(0)'
+                                    }
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    if (!showAllResults) {
+                                      e.currentTarget.style.transform = 'translateY(-0.2em)'
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between gap-3 w-full">
+                                    <div className="flex-1">
+                                      <RichTextWithAudio
+                                        content={option}
+                                        allowImages={true}
+                                        allowLinks={false}
+                                      />
+                                    </div>
+                                    <div className="flex-shrink-0">
+                                      {showAllResults && (
+                                        <>
+                                          {isSelected && isCorrect && (
+                                            <CheckCircle className="w-6 h-6 text-green-600" />
+                                          )}
+                                          {isSelected && !isCorrect && (
+                                            <XCircle className="w-6 h-6 text-red-600" />
+                                          )}
+                                          {!isSelected && isCorrect && (
+                                            <CheckCircle className="w-6 h-6 text-green-500" />
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Explanation for this question */}
+                      {showAllResults && allAnswers[questionIndex] !== undefined && (question.option_explanations?.[allAnswers[questionIndex]] || question.explanation) && (
+                        <div className="mt-4 p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                          <h4 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h4>
+                          <RichTextRenderer
+                            content={question.option_explanations?.[allAnswers[questionIndex]] || question.explanation}
+                            className="text-blue-800 text-sm md:text-base leading-relaxed"
+                            allowImages={true}
+                            allowLinks={false}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Submit Button */}
+                {!showAllResults && (
+                  <div className="flex justify-center mt-8">
+                    <Button3D
+                      onClick={handleSubmitAllAnswers}
+                      color="green"
+                      size="lg"
+                      fullWidth={false}
+                      disabled={Object.keys(allAnswers).length < questions.length}
+                      className="flex items-center justify-center gap-2"
+                    >
+                      Nộp bài ({Object.keys(allAnswers).length}/{questions.length})
+                    </Button3D>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         </div>
       </div>
 

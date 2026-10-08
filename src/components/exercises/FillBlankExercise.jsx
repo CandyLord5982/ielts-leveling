@@ -56,6 +56,18 @@ const getThemeSideImages = (theme) => {
 const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null, embedded = false }) => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { startExercise, completeExerciseWithXP } = useProgress()
@@ -432,6 +444,11 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
 
   const handleKeyDown = (e, questionIndex, blankIndex) => {
     if (e.key === 'Enter') {
+      // Ignore Enter if it's part of an IME composition (e.g. typing Vietnamese)
+      if (e.nativeEvent.isComposing || e.keyCode === 229) {
+        return
+      }
+
       e.preventDefault()
       e.stopPropagation() // Stop event from bubbling to global listener
 
@@ -788,11 +805,11 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     const sessionId = urlParams.get('sessionId')
     const courseId = urlParams.get('courseId')
     const unitId = urlParams.get('unitId')
-    
+
     if (sessionId && unitId && courseId) {
       navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
     } else {
-      navigate(-1)
+      handleBackNavigation()
     }
   }
 
@@ -815,7 +832,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
             <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Exercise</h3>
             <p className="text-red-600 mb-4">{error}</p>
             <button
-              onClick={() => navigate(-1)}
+              onClick={handleBackNavigation}
               className="flex items-center gap-2 mx-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -833,7 +850,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
         <div className="text-center py-8">
           <p className="text-gray-500">No questions available</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -882,8 +899,8 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     let blankIndex = 0
 
     // Replace blanks with input fields - handle multiple blanks per question
-    return text.split(/(_____|\[blank\])/gi).map((part, index) => {
-      if (part.match(/^(_____|\[blank\])$/gi)) {
+    return text.split(/(_{5,}|\[blank\])/gi).map((part, index) => {
+      if (part.match(/^(_{5,}|\[blank\])$/gi)) {
         const currentBlankIndex = blankIndex++
         const status = showResults ? (checkAnswerForQuestion(questionIndex, currentBlankIndex) ? 'correct' : 'incorrect') : 'neutral'
         const blank = question.blanks[currentBlankIndex]
@@ -933,13 +950,12 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
                 onKeyDown={(e) => handleKeyDown(e, questionIndex, currentBlankIndex)}
                 disabled={showResults}
                 style={{ width: `${calculateBlankWidthForQuestion(questionIndex, currentBlankIndex)}px` }}
-                className={`px-1 py-1 border-0 border-b-2 bg-transparent text-center focus:outline-none ${
-                  status === 'correct'
+                className={`px-1 py-1 border-0 border-b-2 bg-transparent text-center focus:outline-none ${status === 'correct'
                     ? 'border-b-green-500 text-green-700'
                     : status === 'incorrect'
-                    ? 'border-b-red-500 text-red-700'
-                    : 'border-b-gray-400 focus:border-b-blue-500'
-                } ${showResults ? 'cursor-not-allowed opacity-75' : ''}`}
+                      ? 'border-b-red-500 text-red-700'
+                      : 'border-b-gray-400 focus:border-b-blue-500'
+                  } ${showResults ? 'cursor-not-allowed opacity-75' : ''}`}
                 placeholder=" "
               />
             </div>
@@ -1022,7 +1038,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
             </button>
           </div>
           {!embedded && (
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
           )}
@@ -1222,7 +1238,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
             <div className="flex items-center justify-between gap-4">
               <h1 className="text-lg md:text-2xl font-bold text-gray-900">{exercise.title}</h1>
               <button
-                onClick={() => navigate(-1)}
+                onClick={handleBackNavigation}
                 className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -1268,10 +1284,9 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
                   <div className="flex items-center gap-2 mb-4">
                     <span className="text-sm font-semibold text-blue-600">Question {qIndex + 1}</span>
                     {showResults && questionScores[qIndex] !== undefined && (
-                      <span className={`text-sm font-medium ${
-                        questionScores[qIndex] >= 80 ? 'text-green-600' :
-                        questionScores[qIndex] >= 60 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
+                      <span className={`text-sm font-medium ${questionScores[qIndex] >= 80 ? 'text-green-600' :
+                          questionScores[qIndex] >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
                         ({Math.round(questionScores[qIndex])}%)
                       </span>
                     )}
@@ -1359,10 +1374,9 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
           {showResults && (
             <div className="mt-8 bg-white rounded-lg shadow-md p-6 border border-gray-200">
               <div className="text-center mb-6">
-                <div className={`text-5xl font-bold mb-2 ${
-                  totalScore >= 80 ? 'text-green-600' :
-                  totalScore >= 60 ? 'text-yellow-600' : 'text-red-600'
-                }`}>
+                <div className={`text-5xl font-bold mb-2 ${totalScore >= 80 ? 'text-green-600' :
+                    totalScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
                   {Math.round(totalScore)}%
                 </div>
                 <p className="text-gray-600 text-lg">Overall Score</p>
@@ -1455,282 +1469,280 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
       </div>
 
       <div className="relative px-4 pt-6 pb-12">
-      {/* Celebration Screen Overlay */}
-      {exerciseCompleted && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <CelebrationScreen
-            score={Math.round(totalScore)}
-            correctAnswers={correctAnswersCount}
-            totalQuestions={questions.length}
-            passThreshold={80}
-            xpAwarded={xpAwarded}
-            passGif={passGif}
-            isRetryMode={retryMode}
-            wrongQuestionsCount={retryMode ? 0 : wrongQuestionsForRetry.length}
-            onRetryWrongQuestions={handleRetryWrongQuestions}
-            onBackToList={handleBackToSession}
-          />
-        </div>
-      )}
-      {/* Meme Overlay */}
-      {showMeme && currentMeme && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <img
-            src={currentMeme}
-            alt="Feedback meme"
-            className="max-w-xs max-h-64 rounded-lg shadow-2xl"
-          />
-        </div>
-      )}
-      <div className="max-w-4xl mx-auto space-y-6">
-      {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
-      {/* Teacher Do Mode Banner */}
-      {isTeacherView && teacherMode === 'do' && (
-        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-          <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setTeacherMode('review')}
-              className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
-            >
-              Review
-            </button>
-            <button
-              className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
-            >
-              Do
-            </button>
-          </div>
-        </div>
-      )}
-      {/* Header */}
-      <ExerciseHeader
-        title={exercise?.title}
-        totalQuestions={questions.length}
-        progressPercentage={
-          retryMode
-            ? (questionScores.filter(score => score >= 80).length / retryQuestions.length) * 100
-            : (questionScores.filter(score => score >= 80).length / questions.length) * 100
-        }
-        isBatmanMoving={isBatmanMoving}
-        isRetryMode={retryMode}
-        showProgressLabel={false}
-        colorTheme={colorTheme}
-      />
-
-      {/* Global Intro (exercise.content.intro) */}
-      {exercise?.content?.intro && String(exercise.content.intro).trim() && (
-        <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
-          <RichTextRenderer
-            content={exercise.content.intro}
-            allowImages={true}
-            allowLinks={false}
-            style={{ whiteSpace: 'pre-wrap' }}
-          />
-          {/* Audio players for global intro */}
-          {exerciseIntroAudio.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {exerciseIntroAudio.map((audioUrl, index) => (
-                <AudioPlayer
-                  key={index}
-                  audioUrl={audioUrl.url}
-                  seekable={audioUrl.seekable}
-                  maxPlays={audioUrl.maxPlays}
-                  variant="outline"
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Question */}
-      <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200">
-        <div className="flex justify-end -mt-1 -mr-1 mb-2">
-          <QuestionReportButton
-            exercise={exercise}
-            question={currentQuestion}
-            questionIndex={currentQuestionIndex}
-            userAnswer={userAnswers?.[currentQuestionIndex]}
-          />
-        </div>
-        {/* Intro above question (optional) */}
-        {currentQuestion.intro && String(currentQuestion.intro).trim() && (
-          <div className="mb-4">
-            <RichTextRenderer
-              content={stripAudioTags(currentQuestion.intro)}
-              allowImages={true}
-              allowLinks={false}
+        {/* Celebration Screen Overlay */}
+        {exerciseCompleted && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <CelebrationScreen
+              score={Math.round(totalScore)}
+              correctAnswers={correctAnswersCount}
+              totalQuestions={questions.length}
+              passThreshold={80}
+              xpAwarded={xpAwarded}
+              passGif={passGif}
+              isRetryMode={retryMode}
+              wrongQuestionsCount={retryMode ? 0 : wrongQuestionsForRetry.length}
+              onRetryWrongQuestions={handleRetryWrongQuestions}
+              onBackToList={handleBackToSession}
             />
           </div>
         )}
-
-        {/* Audio players for intro */}
-        {currentQuestionIntroAudio.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {currentQuestionIntroAudio.map((audioUrl, index) => (
-              <AudioPlayer
-                key={index}
-                audioUrl={audioUrl.url}
-                seekable={audioUrl.seekable}
-                maxPlays={audioUrl.maxPlays}
-                variant="outline"
-              />
-            ))}
+        {/* Meme Overlay */}
+        {showMeme && currentMeme && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <img
+              src={currentMeme}
+              alt="Feedback meme"
+              className="max-w-xs max-h-64 rounded-lg shadow-2xl"
+            />
           </div>
         )}
-
-        <div className="text-lg leading-relaxed mb-4">
-          {renderQuestionText()}
-        </div>
-
-        {/* Audio players for question */}
-        {currentQuestionAudio.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {currentQuestionAudio.map((audioUrl, index) => (
-              <AudioPlayer
-                key={index}
-                audioUrl={audioUrl.url}
-                seekable={audioUrl.seekable}
-                maxPlays={audioUrl.maxPlays}
-                variant="outline"
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Results */}
-        {showResults && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center">
-                <span className="text-lg font-medium text-gray-700">Score: </span>
-                <span className={`text-xl font-bold ml-2 ${
-                  score >= 80 ? 'text-green-600' :
-                  score >= 60 ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {Math.round(score)}%
-                </span>
-              </div>
-              <div className="flex gap-2">
-                {hasEdited && !showCorrectAnswers && (
-                  <button
-                    onClick={handleRecheck}
-                    className="flex items-center gap-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
-                  >
-                    <Check className="w-4 h-4" />
-                    Check Answer
-                  </button>
-                )}
-                {showResults && !showCorrectAnswers && (
-                  <button
-                    onClick={handleShowAnswers}
-                    className="flex items-center gap-1 px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
-                  >
-
-                    Show Key
-                  </button>
-                )}
+        <div className="max-w-4xl mx-auto space-y-6">
+          {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
+          {/* Teacher Do Mode Banner */}
+          {isTeacherView && teacherMode === 'do' && (
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+              <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
+              <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
-                  onClick={handleNext}
-                  className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  onClick={() => setTeacherMode('review')}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
                 >
-                  {currentQuestionIndex < questions.length - 1 ? 'Next' : 'Finish Exercise'}
+                  Review
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
+                >
+                  Do
                 </button>
               </div>
             </div>
+          )}
+          {/* Header */}
+          <ExerciseHeader
+            title={exercise?.title}
+            totalQuestions={questions.length}
+            progressPercentage={
+              retryMode
+                ? (questionScores.filter(score => score >= 80).length / retryQuestions.length) * 100
+                : (questionScores.filter(score => score >= 80).length / questions.length) * 100
+            }
+            isBatmanMoving={isBatmanMoving}
+            isRetryMode={retryMode}
+            showProgressLabel={false}
+            colorTheme={colorTheme}
+          />
 
-            {/* Pet Tutor - Ask Pet button (only for wrong answers) */}
-            {FEATURES.pets && score < 100 && activePet && (
-              <div className="mb-3">
-                {!showPetTutor ? (
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleAskPet}
-                      disabled={(userEnergy ?? 100) < 10}
-                      className={`flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${
-                        (userEnergy ?? 100) < 10
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-purple-500 hover:bg-purple-600 text-white hover:shadow-md'
-                      }`}
-                    >
-                      <MessageCircle className="w-5 h-5" />
-                      Hỏi {activePet.nickname || activePet.name} giải thích
-                    </button>
-                    <span className="text-xs text-gray-500">
-                      ⚡ {userEnergy ?? 100}/100
-                      {(userEnergy ?? 100) < 10 && ' (Mệt rồi!)'}
+          {/* Global Intro (exercise.content.intro) */}
+          {exercise?.content?.intro && String(exercise.content.intro).trim() && (
+            <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
+              <RichTextRenderer
+                content={exercise.content.intro}
+                allowImages={true}
+                allowLinks={false}
+                style={{ whiteSpace: 'pre-wrap' }}
+              />
+              {/* Audio players for global intro */}
+              {exerciseIntroAudio.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {exerciseIntroAudio.map((audioUrl, index) => (
+                    <AudioPlayer
+                      key={index}
+                      audioUrl={audioUrl.url}
+                      seekable={audioUrl.seekable}
+                      maxPlays={audioUrl.maxPlays}
+                      variant="outline"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Question */}
+          <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200">
+            <div className="flex justify-end -mt-1 -mr-1 mb-2">
+              <QuestionReportButton
+                exercise={exercise}
+                question={currentQuestion}
+                questionIndex={currentQuestionIndex}
+                userAnswer={userAnswers?.[currentQuestionIndex]}
+              />
+            </div>
+            {/* Intro above question (optional) */}
+            {currentQuestion.intro && String(currentQuestion.intro).trim() && (
+              <div className="mb-4">
+                <RichTextRenderer
+                  content={stripAudioTags(currentQuestion.intro)}
+                  allowImages={true}
+                  allowLinks={false}
+                />
+              </div>
+            )}
+
+            {/* Audio players for intro */}
+            {currentQuestionIntroAudio.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {currentQuestionIntroAudio.map((audioUrl, index) => (
+                  <AudioPlayer
+                    key={index}
+                    audioUrl={audioUrl.url}
+                    seekable={audioUrl.seekable}
+                    maxPlays={audioUrl.maxPlays}
+                    variant="outline"
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="text-lg leading-relaxed mb-4">
+              {renderQuestionText()}
+            </div>
+
+            {/* Audio players for question */}
+            {currentQuestionAudio.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {currentQuestionAudio.map((audioUrl, index) => (
+                  <AudioPlayer
+                    key={index}
+                    audioUrl={audioUrl.url}
+                    seekable={audioUrl.seekable}
+                    maxPlays={audioUrl.maxPlays}
+                    variant="outline"
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Results */}
+            {showResults && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center">
+                    <span className="text-lg font-medium text-gray-700">Score: </span>
+                    <span className={`text-xl font-bold ml-2 ${score >= 80 ? 'text-green-600' :
+                        score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                      {Math.round(score)}%
                     </span>
                   </div>
-                ) : (
-                  <PetTutorBubble
-                    pet={activePet}
-                    message={petTutorMessage}
-                    isLoading={petTutorLoading}
-                  />
+                  <div className="flex gap-2">
+                    {hasEdited && !showCorrectAnswers && (
+                      <button
+                        onClick={handleRecheck}
+                        className="flex items-center gap-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4" />
+                        Check Answer
+                      </button>
+                    )}
+                    {showResults && !showCorrectAnswers && (
+                      <button
+                        onClick={handleShowAnswers}
+                        className="flex items-center gap-1 px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                      >
+
+                        Show Key
+                      </button>
+                    )}
+                    <button
+                      onClick={handleNext}
+                      className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      {currentQuestionIndex < questions.length - 1 ? 'Next' : 'Finish Exercise'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pet Tutor - Ask Pet button (only for wrong answers) */}
+                {FEATURES.pets && score < 100 && activePet && (
+                  <div className="mb-3">
+                    {!showPetTutor ? (
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={handleAskPet}
+                          disabled={(userEnergy ?? 100) < 10}
+                          className={`flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${(userEnergy ?? 100) < 10
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-purple-500 hover:bg-purple-600 text-white hover:shadow-md'
+                            }`}
+                        >
+                          <MessageCircle className="w-5 h-5" />
+                          Hỏi {activePet.nickname || activePet.name} giải thích
+                        </button>
+                        <span className="text-xs text-gray-500">
+                          ⚡ {userEnergy ?? 100}/100
+                          {(userEnergy ?? 100) < 10 && ' (Mệt rồi!)'}
+                        </span>
+                      </div>
+                    ) : (
+                      <PetTutorBubble
+                        pet={activePet}
+                        message={petTutorMessage}
+                        isLoading={petTutorLoading}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Correct Answers - only show when answers are revealed */}
+                {showCorrectAnswers && (
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-700">Correct Answers:</h4>
+                    {currentQuestion.blanks.map((blank, blankIndex) => {
+                      const correctAnswers = splitAnswers(blank.answer)
+
+                      return (
+                        <div key={blankIndex} className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm text-gray-600">Blank {blankIndex + 1}:</span>
+                          <div className="flex gap-1 flex-wrap">
+                            {correctAnswers.map((answer, answerIndex) => (
+                              <span key={answerIndex} className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">
+                                {answer}
+                              </span>
+                            ))}
+                          </div>
+                          {blank.text && (
+                            <span className="text-xs text-gray-500">(Hint: {blank.text})</span>
+                          )}
+                          {blank.case_sensitive && (
+                            <span className="text-xs text-gray-500">(case sensitive)</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )}
 
-             {/* Correct Answers - only show when answers are revealed */}
-             {showCorrectAnswers && (
-               <div className="space-y-2">
-                 <h4 className="font-medium text-gray-700">Correct Answers:</h4>
-                 {currentQuestion.blanks.map((blank, blankIndex) => {
-                 const correctAnswers = splitAnswers(blank.answer)
-                 
-                 return (
-                   <div key={blankIndex} className="flex items-center gap-2 flex-wrap">
-                     <span className="text-sm text-gray-600">Blank {blankIndex + 1}:</span>
-                     <div className="flex gap-1 flex-wrap">
-                       {correctAnswers.map((answer, answerIndex) => (
-                         <span key={answerIndex} className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">
-                           {answer}
-                         </span>
-                       ))}
-                     </div>
-                     {blank.text && (
-                       <span className="text-xs text-gray-500">(Hint: {blank.text})</span>
-                     )}
-                     {blank.case_sensitive && (
-                       <span className="text-xs text-gray-500">(case sensitive)</span>
-                     )}
-                   </div>
-                 )
-               })}
-               </div>
-             )}
-          </div>
-        )}
-
-        {/* Explanation */}
-        {showExplanation && currentQuestion.explanation && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <HelpCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-medium text-blue-900 mb-1">Explanation</h4>
-                <p className="text-blue-800 text-sm">{currentQuestion.explanation}</p>
+            {/* Explanation */}
+            {showExplanation && currentQuestion.explanation && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <HelpCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-medium text-blue-900 mb-1">Explanation</h4>
+                    <p className="text-blue-800 text-sm">{currentQuestion.explanation}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Submit Button */}
-      {!showResults && (
-        <div className="text-center">
-          <button
-            onClick={handleSubmit}
-            disabled={!userAnswers[currentQuestionIndex] || 
-              Object.values(userAnswers[currentQuestionIndex] || {}).some(answer => !answer.trim())}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-          >
-            Check Answer
-          </button>
+          {/* Submit Button */}
+          {!showResults && (
+            <div className="text-center">
+              <button
+                onClick={handleSubmit}
+                disabled={!userAnswers[currentQuestionIndex] ||
+                  Object.values(userAnswers[currentQuestionIndex] || {}).some(answer => !answer.trim())}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+              >
+                Check Answer
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      </div>
       </div>
     </>
   )

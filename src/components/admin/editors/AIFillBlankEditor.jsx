@@ -22,6 +22,9 @@ const AIFillBlankEditor = ({ questions, onQuestionsChange, intro, onIntroChange,
   const [audioAutoplay, setAudioAutoplay] = useState(false)
   const [audioLoop, setAudioLoop] = useState(false)
   const [audioPlaybackRate, setAudioPlaybackRate] = useState(1)
+  const [audioMaxPlays, setAudioMaxPlays] = useState(0)
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaModalInputRef = useRef(null)
 
   useEffect(() => {
     setLocalQuestions(questions || [])
@@ -95,6 +98,29 @@ const AIFillBlankEditor = ({ questions, onQuestionsChange, intro, onIntroChange,
     updateQuestion(index, field, (current + (current ? '\n' : '') + snippet).trim())
   }
 
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
+    }
+  }
+
   const openUrlModal = (index, type) => {
     setUrlModal({ isOpen: true, type, questionIndex: index })
     setUrlInput('')
@@ -106,6 +132,7 @@ const AIFillBlankEditor = ({ questions, onQuestionsChange, intro, onIntroChange,
     setAudioAutoplay(false)
     setAudioLoop(false)
     setAudioPlaybackRate(1)
+    setAudioMaxPlays(0)
   }
 
   const applyAlignment = (index, field, alignment) => {
@@ -150,6 +177,7 @@ const AIFillBlankEditor = ({ questions, onQuestionsChange, intro, onIntroChange,
     if (audioAutoplay) attrs.push('autoplay')
     if (audioLoop) attrs.push('loop')
     if (audioPlaybackRate && audioPlaybackRate !== 1) attrs.push(`data-playback-rate="${audioPlaybackRate}"`)
+    if (audioMaxPlays > 0) attrs.push(`data-max-plays="${audioMaxPlays}"`)
     return attrs.join(' ')
   }
 
@@ -223,6 +251,7 @@ const AIFillBlankEditor = ({ questions, onQuestionsChange, intro, onIntroChange,
     setAudioAutoplay(false)
     setAudioLoop(false)
     setAudioPlaybackRate(1)
+    setAudioMaxPlays(0)
   }
 
   const addExpectedAnswer = (questionIndex) => {
@@ -391,6 +420,45 @@ Trả lời bằng tiếng Việt với giải thích chi tiết, khuyến khíc
 
       const processAccumulatedQuestion = () => {
         if (accumulatedText.length === 0) return
+
+        // --- NEW PRE-PROCESSING ---
+        // Look for lines that provide answers for underscores, e.g. "= [answer]" or "Answer: [answer]"
+        const underscoreRegex = /_{3,}/;
+        let answerLines = [];
+        let remainingText = [];
+        
+        accumulatedText.forEach(line => {
+           if (line.trim().match(/^(?:=|(?:Answer|Đáp án)\s*:)/i)) {
+              answerLines.push(line);
+           } else {
+              remainingText.push(line);
+           }
+        });
+
+        if (answerLines.length > 0) {
+           answerLines.forEach(ansLine => {
+              let ans = ansLine.replace(/^(?:=|(?:Answer|Đáp án)\s*:)\s*/i, '').trim();
+              if (!ans.startsWith('[')) {
+                 ans = `[${ans}]`;
+              }
+              let replaced = false;
+              for (let i = 0; i < remainingText.length; i++) {
+                 if (underscoreRegex.test(remainingText[i])) {
+                    remainingText[i] = remainingText[i].replace(underscoreRegex, ans);
+                    replaced = true;
+                    break;
+                 }
+              }
+              if (!replaced) {
+                 remainingText.push(ansLine);
+              }
+           });
+           accumulatedText = remainingText;
+        }
+        
+        // If there are still underscores left without an explicit answer line, convert them to empty brackets so they are processed as blanks
+        accumulatedText = accumulatedText.map(line => line.replace(/_{3,}/g, '[]'));
+        // --- END PRE-PROCESSING ---
 
         const fullText = accumulatedText.join('\n')
 
@@ -915,6 +983,26 @@ B. Combine these sentences using a relative clause.
                   }
                   autoFocus
                 />
+                {(urlModal.type === 'image' || urlModal.type === 'audio') && (
+                  <div className="mt-2">
+                    <input
+                      ref={mediaModalInputRef}
+                      type="file"
+                      accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                      className="hidden"
+                      onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => mediaModalInputRef.current?.click()}
+                      disabled={modalUploading}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {urlModal.type === 'link' && (
@@ -982,36 +1070,44 @@ B. Combine these sentences using a relative clause.
               )}
 
               {urlModal.type === 'audio' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tùy chọn âm thanh</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
-                      <span className="text-sm text-gray-700">Hiển thị controls (play/pause/volume)</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
-                      <span className="text-sm text-gray-700">Tự động phát (autoplay)</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
-                      <span className="text-sm text-gray-700">Lặp lại (loop)</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <span className="text-gray-700">Tốc độ phát:</span>
-                      <select
-                        value={audioPlaybackRate}
-                        onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value={0.5}>0.5x</option>
-                        <option value={0.75}>0.75x</option>
-                        <option value={1}>1x</option>
-                        <option value={1.25}>1.25x</option>
-                        <option value={1.5}>1.5x</option>
-                        <option value={2}>2x</option>
-                      </select>
-                    </label>
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                    Hiển thị controls (play/pause/volume)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                    Tự động phát (autoplay)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                    Lặp lại (loop)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={audioMaxPlays} 
+                      onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                      className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-purple-500"
+                    />
+                    <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                    <select
+                      value={audioPlaybackRate}
+                      onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
+                      className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value={0.5}>0.5x (Rất chậm)</option>
+                      <option value={0.75}>0.75x (Chậm)</option>
+                      <option value={1}>1x (Bình thường)</option>
+                      <option value={1.25}>1.25x (Nhanh)</option>
+                      <option value={1.5}>1.5x (Rất nhanh)</option>
+                    </select>
                   </div>
                 </div>
               )}

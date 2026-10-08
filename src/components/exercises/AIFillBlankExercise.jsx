@@ -51,6 +51,18 @@ const getThemeSideImages = (theme) => {
 const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { completeExerciseWithXP } = useProgress()
@@ -411,7 +423,7 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
           <h2 className="text-xl font-bold text-gray-800 mb-2">Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Go Back
@@ -429,7 +441,7 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
           <h2 className="text-xl font-bold text-gray-800 mb-2">No Questions</h2>
           <p className="text-gray-600 mb-4">This exercise has no questions available.</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Go Back
@@ -503,7 +515,7 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'AI Fill Blank'}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <div className="flex bg-gray-100 rounded-lg p-1">

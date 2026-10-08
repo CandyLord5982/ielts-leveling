@@ -59,6 +59,18 @@ const getThemeSideImages = (theme) => {
 const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { startExercise, completeExerciseWithXP } = useProgress()
@@ -448,7 +460,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     if (sessionId && unitId && courseId) {
       navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
     } else {
-      navigate(-1)
+      handleBackNavigation()
     }
   }
 
@@ -471,7 +483,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
             <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Exercise</h3>
             <p className="text-red-600 mb-4">{error}</p>
             <button
-              onClick={() => navigate(-1)}
+              onClick={handleBackNavigation}
               className="flex items-center gap-2 mx-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -489,7 +501,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         <div className="text-center py-8">
           <p className="text-gray-500">No questions available</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -525,7 +537,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'Dropdown'}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <div className="flex bg-gray-100 rounded-lg p-1">
@@ -852,7 +864,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
 
       {/* Back Button */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBackNavigation}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4"
       >
         <ArrowLeft className="w-5 h-5" />

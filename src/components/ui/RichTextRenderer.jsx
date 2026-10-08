@@ -43,13 +43,18 @@ const parseContentWithAudio = (content) => {
       const rateMatch = audioTag.match(/data-playback-rate\s*=\s*["']([\d.]+)["']/)
       const parsedRate = rateMatch ? parseFloat(rateMatch[1]) : NaN
       const playbackRate = Number.isFinite(parsedRate) && parsedRate > 0 ? parsedRate : 1
+      
+      const autoplay = audioTag.includes('autoplay')
+      const loop = audioTag.includes('loop')
 
       segments.push({
         type: 'audio',
         url: srcMatch[1],
         maxPlays: maxPlays,
         seekable: seekable,
-        playbackRate: playbackRate
+        playbackRate: playbackRate,
+        autoplay: autoplay,
+        loop: loop
       })
     }
 
@@ -89,6 +94,8 @@ export const RichTextWithAudio = ({
                 maxPlays={segment.maxPlays}
                 seekable={segment.seekable !== null ? segment.seekable : seekable}
                 playbackRate={segment.playbackRate}
+                autoplay={segment.autoplay}
+                loop={segment.loop}
                 variant="outline"
               />
             </div>

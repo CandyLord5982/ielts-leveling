@@ -57,6 +57,18 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
   const location = useLocation()
   const navigate = useNavigate()
 
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const searchParams = new URLSearchParams(location.search)
   const exerciseId = searchParams.get('exerciseId')
   const sessionId = searchParams.get('sessionId')
@@ -583,7 +595,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
           <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-800 mb-2">Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Button3D onClick={() => navigate(-1)} color="blue">Go Back</Button3D>
+          <Button3D onClick={handleBackNavigation} color="blue">Go Back</Button3D>
         </div>
       </div>
     )
@@ -596,7 +608,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
           <XCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-800 mb-2">No Content</h2>
           <p className="text-gray-600 mb-4">This exercise has no content available.</p>
-          <Button3D onClick={() => navigate(-1)} color="blue">Go Back</Button3D>
+          <Button3D onClick={handleBackNavigation} color="blue">Go Back</Button3D>
         </div>
       </div>
     )
@@ -726,7 +738,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
                 Do
               </button>
             </div>
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
           </div>
@@ -878,7 +890,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
                 if (sessionId && unitId && courseId) {
                   navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
                 } else {
-                  navigate(-1)
+                  handleBackNavigation()
                 }
               }}
               exerciseId={exerciseId}
@@ -986,7 +998,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
               if (sessionId && unitId && courseId) {
                 navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
               } else {
-                navigate(-1)
+                handleBackNavigation()
               }
             }}
             exerciseId={exerciseId}

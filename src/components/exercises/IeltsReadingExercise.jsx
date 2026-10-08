@@ -17,6 +17,18 @@ const IeltsReadingExercise = () => {
   const courseId = searchParams.get('courseId')
   const unitId = searchParams.get('unitId')
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { canCreateContent } = usePermissions()
   const isTeacher = canCreateContent()
   const { user } = useAuth()
@@ -191,7 +203,7 @@ const IeltsReadingExercise = () => {
     if (sessionId && unitId && courseId) {
       navigate(`/study/course/${courseId}/unit/${unitId}/session/${sessionId}`)
     } else {
-      navigate(-1)
+      handleBackNavigation()
     }
   }
 

@@ -31,7 +31,7 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
   const [urlInput, setUrlInput] = useState('')
   const [imageSize, setImageSize] = useState('medium')
   const [customSize, setCustomSize] = useState('400')
-  const [audioControls, setAudioControls] = useState({ controls: true, autoplay: false, loop: false, playbackRate: 1 })
+  const [audioControls, setAudioControls] = useState({ controls: true, autoplay: false, loop: false, playbackRate: 1, maxPlays: 0 })
 
   const [uploading, setUploading] = useState(false)
   const canvasRef = useRef(null)
@@ -40,6 +40,8 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
   const questionTextareaRef = useRef(null)
   const explanationTextareaRef = useRef(null)
   const fileInputRef = useRef(null)
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaInputRef = useRef(null)
   const onContentChangeRef = useRef(onContentChange)
   onContentChangeRef.current = onContentChange
 
@@ -62,6 +64,29 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
       alert('Image upload failed.')
     } finally {
       setUploading(false)
+    }
+  }
+
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
     }
   }
 
@@ -414,6 +439,7 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
       if (audioControls.autoplay) attrs.push('autoplay')
       if (audioControls.loop) attrs.push('loop')
       if (audioControls.playbackRate && audioControls.playbackRate !== 1) attrs.push(`data-playback-rate="${audioControls.playbackRate}"`)
+      if (audioControls.maxPlays > 0) attrs.push(`data-max-plays="${audioControls.maxPlays}"`)
       const audioAttrs = attrs.join(' ')
 
       insertAtCursor(`<audio src="${trimmedUrl}" ${audioAttrs}></audio>`)
@@ -880,6 +906,24 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
                   }
                   autoFocus
                 />
+                <div className="mt-2">
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                    className="hidden"
+                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mediaInputRef.current?.click()}
+                    disabled={modalUploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
               </div>
 
               {/* Image Size Options */}
@@ -959,53 +1003,44 @@ const ImageHotspotEditor = ({ content, onContentChange, folderPath }) => {
 
               {/* Audio Control Options */}
               {urlModal.type === 'audio' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Audio Controls
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioControls.controls} onChange={(e) => setAudioControls({ ...audioControls, controls: e.target.checked })} className="rounded" />
+                    Hiển thị controls (play/pause/volume)
                   </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={audioControls.controls}
-                        onChange={(e) => setAudioControls({ ...audioControls, controls: e.target.checked })}
-                        className="rounded text-blue-600"
-                      />
-                      <span className="text-sm">Show controls</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={audioControls.autoplay}
-                        onChange={(e) => setAudioControls({ ...audioControls, autoplay: e.target.checked })}
-                        className="rounded text-blue-600"
-                      />
-                      <span className="text-sm">Autoplay</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={audioControls.loop}
-                        onChange={(e) => setAudioControls({ ...audioControls, loop: e.target.checked })}
-                        className="rounded text-blue-600"
-                      />
-                      <span className="text-sm">Loop</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <span className="text-sm">Playback speed:</span>
-                      <select
-                        value={audioControls.playbackRate}
-                        onChange={(e) => setAudioControls({ ...audioControls, playbackRate: parseFloat(e.target.value) })}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value={0.5}>0.5x</option>
-                        <option value={0.75}>0.75x</option>
-                        <option value={1}>1x</option>
-                        <option value={1.25}>1.25x</option>
-                        <option value={1.5}>1.5x</option>
-                        <option value={2}>2x</option>
-                      </select>
-                    </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioControls.autoplay} onChange={(e) => setAudioControls({ ...audioControls, autoplay: e.target.checked })} className="rounded" />
+                    Tự động phát (autoplay)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={audioControls.loop} onChange={(e) => setAudioControls({ ...audioControls, loop: e.target.checked })} className="rounded" />
+                    Lặp lại (loop)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={audioControls.maxPlays || 0} 
+                      onChange={(e) => setAudioControls({ ...audioControls, maxPlays: parseInt(e.target.value) || 0 })} 
+                      className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
+                    <select
+                      value={audioControls.playbackRate}
+                      onChange={(e) => setAudioControls({ ...audioControls, playbackRate: parseFloat(e.target.value) })}
+                      className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={0.5}>0.5x (Rất chậm)</option>
+                      <option value={0.75}>0.75x (Chậm)</option>
+                      <option value={1}>1x (Bình thường)</option>
+                      <option value={1.25}>1.25x (Nhanh)</option>
+                      <option value={1.5}>1.5x (Rất nhanh)</option>
+                    </select>
                   </div>
                 </div>
               )}

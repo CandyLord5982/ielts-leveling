@@ -37,6 +37,14 @@ const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
     fetchFolderCounts()
     fetchAssignedExercises()
     if (courseId) fetchCourseAssignedExercises()
+
+    const handleMessage = (e) => {
+      if (e.data?.type === 'CLOSE_PREVIEW') {
+        setPreviewUrl(null)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
   }, [sessionId, courseId])
 
   useEffect(() => {

@@ -35,6 +35,9 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
   const [audioAutoplay, setAudioAutoplay] = useState(false)
   const [audioLoop, setAudioLoop] = useState(false)
   const [audioPlaybackRate, setAudioPlaybackRate] = useState(1)
+  const [audioMaxPlays, setAudioMaxPlays] = useState(0)
+  const [modalUploading, setModalUploading] = useState(false)
+  const mediaModalInputRef = useRef(null)
 
   useEffect(() => {
     setLocalQuestions(questions || [])
@@ -86,6 +89,29 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
     }
 
     return dropdowns
+  }
+
+
+  const uploadMediaFile = async (file) => {
+    if (!file) return
+    setModalUploading(true)
+    try {
+      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
+      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('exercise-files')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+      if (uploadError) throw uploadError
+      const { data: publicData } = supabase.storage
+        .from('exercise-files')
+        .getPublicUrl(path)
+      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
+    } catch (e) {
+      console.error('Media upload failed:', e)
+      alert('Media upload failed.')
+    } finally {
+      setModalUploading(false)
+    }
   }
 
   const insertAtCursor = (index, field, snippet) => {
@@ -162,6 +188,7 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
     setAudioAutoplay(false)
     setAudioLoop(false)
     setAudioPlaybackRate(1)
+    setAudioMaxPlays(0)
   }
 
   const handleInsertLink = (index) => {
@@ -186,6 +213,7 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
     if (audioAutoplay) attributes.push('autoplay')
     if (audioLoop) attributes.push('loop')
     if (audioPlaybackRate && audioPlaybackRate !== 1) attributes.push(`data-playback-rate="${audioPlaybackRate}"`)
+    if (audioMaxPlays > 0) attributes.push(`data-max-plays="${audioMaxPlays}"`)
     return attributes.join(' ')
   }
 
@@ -260,6 +288,7 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
     setAudioAutoplay(false)
     setAudioLoop(false)
     setAudioPlaybackRate(1)
+    setAudioMaxPlays(0)
   }
 
   const applyAlignment = (index, field, alignment) => {
@@ -436,7 +465,8 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
           <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'image', questionIndex: -1 }); setUrlInput(''); setLinkText(''); setImageSize('medium'); setCustomWidth(''); setCustomHeight('') }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
             <ImageIcon className="w-3 h-3" /> Image
           </button>
-          <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'audio', questionIndex: -1 }); setUrlInput(''); setLinkText(''); setImageSize('medium'); setCustomWidth(''); setCustomHeight(''); setAudioControls(true); setAudioAutoplay(false); setAudioLoop(false); setAudioPlaybackRate(1) }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
+          <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'audio', questionIndex: -1 }); setUrlInput(''); setLinkText(''); setImageSize('medium'); setCustomWidth(''); setCustomHeight(''); setAudioControls(true); setAudioAutoplay(false); setAudioLoop(false); setAudioPlaybackRate(1)
+    setAudioMaxPlays(0) }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
             <Music className="w-3 h-3" /> Audio
           </button>
           <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'link', questionIndex: -1 }); setUrlInput(''); setLinkText('Reference') }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
@@ -583,6 +613,26 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
               <input type="url" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder={urlModal.type === 'image' ? 'https://example.com/image.jpg' : urlModal.type === 'audio' ? 'https://example.com/audio.mp3' : 'https://example.com/link'} />
+              {(urlModal.type === 'image' || urlModal.type === 'audio') && (
+                <div className="mt-2">
+                  <input
+                    ref={mediaModalInputRef}
+                    type="file"
+                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
+                    className="hidden"
+                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mediaModalInputRef.current?.click()}
+                    disabled={modalUploading}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
+                  </button>
+                </div>
+              )}
             </div>
             {urlModal.type === 'link' && (
               <div>
@@ -616,26 +666,45 @@ const SimpleDropdownEditor = ({ questions, onQuestionsChange, intro, onIntroChan
               </div>
             )}
             {urlModal.type === 'audio' && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Audio options</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} /> Show controls</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} /> Autoplay</label>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} /> Loop</label>
-                <label className="flex items-center gap-2 text-sm">
-                  Playback speed:
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
+                  Hiển thị controls (play/pause/volume)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
+                  Tự động phát (autoplay)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
+                  Lặp lại (loop)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={audioMaxPlays} 
+                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
+                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
                   <select
                     value={audioPlaybackRate}
                     onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={0.5}>0.5x</option>
-                    <option value={0.75}>0.75x</option>
-                    <option value={1}>1x</option>
-                    <option value={1.25}>1.25x</option>
-                    <option value={1.5}>1.5x</option>
-                    <option value={2}>2x</option>
+                    <option value={0.5}>0.5x (Rất chậm)</option>
+                    <option value={0.75}>0.75x (Chậm)</option>
+                    <option value={1}>1x (Bình thường)</option>
+                    <option value={1.25}>1.25x (Nhanh)</option>
+                    <option value={1.5}>1.5x (Rất nhanh)</option>
                   </select>
-                </label>
+                </div>
               </div>
             )}
             {urlInput && (

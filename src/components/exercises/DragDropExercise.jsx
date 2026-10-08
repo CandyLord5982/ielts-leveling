@@ -139,6 +139,18 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const location = useLocation()
   const navigate = useNavigate()
 
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   // Get exerciseId and sessionId from URL search params
   const searchParams = new URLSearchParams(location.search)
   const exerciseId = searchParams.get('exerciseId')
@@ -317,7 +329,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       }
 
       setExercise(data)
-      
+
       // Initialize user answers
       const initialAnswers = {}
       if (data.content.questions) {
@@ -346,21 +358,21 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
 
   const handleDrop = (e, zoneId, questionIndex) => {
     e.preventDefault()
-    
+
     if (!draggedItem || draggedItem.questionIndex !== questionIndex) return
 
     const newAnswers = { ...userAnswers }
     if (!newAnswers[questionIndex]) {
       newAnswers[questionIndex] = {}
     }
-    
+
     // Remove item from previous zone if exists
     Object.keys(newAnswers[questionIndex]).forEach(zone => {
       if (newAnswers[questionIndex][zone] === draggedItem.itemId) {
         delete newAnswers[questionIndex][zone]
       }
     })
-    
+
     // Add item to new zone
     newAnswers[questionIndex][zoneId] = draggedItem.itemId
     setUserAnswers(newAnswers)
@@ -383,33 +395,33 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
 
   const handleTouchEnd = (e) => {
     if (!isDragging || !draggedItem) return
-    
+
     const touch = e.changedTouches[0]
     const element = document.elementFromPoint(touch.clientX, touch.clientY)
-    
+
     if (element && element.dataset.zoneId) {
       const zoneId = element.dataset.zoneId
       const questionIndex = parseInt(element.dataset.questionIndex)
-      
+
       if (draggedItem.questionIndex === questionIndex) {
         const newAnswers = { ...userAnswers }
         if (!newAnswers[questionIndex]) {
           newAnswers[questionIndex] = {}
         }
-        
+
         // Remove item from previous zone if exists
         Object.keys(newAnswers[questionIndex]).forEach(zone => {
           if (newAnswers[questionIndex][zone] === draggedItem.itemId) {
             delete newAnswers[questionIndex][zone]
           }
         })
-        
+
         // Add item to new zone
         newAnswers[questionIndex][zoneId] = draggedItem.itemId
         setUserAnswers(newAnswers)
       }
     }
-    
+
     setDraggedItem(null)
     setIsDragging(false)
     setTouchStartPos(null)
@@ -558,14 +570,14 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const handleDropZoneClick = (zoneId, questionIndex) => {
     const userAnswer = userAnswers[questionIndex] || {}
     const itemId = userAnswer[zoneId]
-    
+
     if (itemId) {
       // Return item to list
       const newAnswers = { ...userAnswers }
       if (!newAnswers[questionIndex]) {
         newAnswers[questionIndex] = {}
       }
-      
+
       // Remove item from zone
       delete newAnswers[questionIndex][zoneId]
       setUserAnswers(newAnswers)
@@ -784,7 +796,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     if (session && session.units) {
       navigate(`/study/course/${session.units.course_id}/unit/${session.unit_id}/session/${sessionId}`)
     } else {
-      navigate(-1)
+      handleBackNavigation()
     }
   }
 
@@ -855,7 +867,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
           <h2 className="text-xl font-bold text-gray-800 mb-2">Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Go Back
@@ -873,7 +885,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
           <h2 className="text-xl font-bold text-gray-800 mb-2">No Questions</h2>
           <p className="text-gray-600 mb-4">This exercise has no questions available.</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBackNavigation}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Go Back
@@ -975,41 +987,40 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
                     placedItemIds.forEach(id => { if (id) placedCountsTest[id] = (placedCountsTest[id] || 0) + 1 })
                     const seenCountsTest = {}
                     return qItems.map((item, itemIdx) => {
-                    seenCountsTest[item.id] = (seenCountsTest[item.id] || 0) + 1
-                    const isUsed = seenCountsTest[item.id] <= (placedCountsTest[item.id] || 0)
-                    return (
-                      <div
-                        key={`${item.id}_${itemIdx}`}
-                        draggable={!isUsed}
-                        onDragStart={(e) => {
-                          setDraggedItem({ itemId: item.id, questionIndex: qIndex })
-                          e.dataTransfer.effectAllowed = 'move'
-                        }}
-                        data-item-id={`${item.id}_${itemIdx}`}
-                        onClick={() => !isUsed && handleItemClick(item.id, qIndex, `${item.id}_${itemIdx}`)}
-                        style={{
-                          borderRadius: '0.75em', padding: 0, transition: 'all 0.1s',
-                          cursor: isUsed ? 'default' : 'grab',
-                          boxShadow: isUsed ? 'none' : '0 4px 0 0 #bfdbfe',
-                          transform: isUsed ? 'none' : 'translateY(-0.2em)',
-                        }}
-                      >
+                      seenCountsTest[item.id] = (seenCountsTest[item.id] || 0) + 1
+                      const isUsed = seenCountsTest[item.id] <= (placedCountsTest[item.id] || 0)
+                      return (
                         <div
-                          className={`select-none text-m rounded-lg ${
-                            isUsed ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                          }`}
-                          style={{ padding: '0.5em 1em', borderRadius: '0.75em' }}
+                          key={`${item.id}_${itemIdx}`}
+                          draggable={!isUsed}
+                          onDragStart={(e) => {
+                            setDraggedItem({ itemId: item.id, questionIndex: qIndex })
+                            e.dataTransfer.effectAllowed = 'move'
+                          }}
+                          data-item-id={`${item.id}_${itemIdx}`}
+                          onClick={() => !isUsed && handleItemClick(item.id, qIndex, `${item.id}_${itemIdx}`)}
+                          style={{
+                            borderRadius: '0.75em', padding: 0, transition: 'all 0.1s',
+                            cursor: isUsed ? 'default' : 'grab',
+                            boxShadow: isUsed ? 'none' : '0 4px 0 0 #bfdbfe',
+                            transform: isUsed ? 'none' : 'translateY(-0.2em)',
+                          }}
                         >
-                          {parseContentWithAudio(item.text).map((segment, segIndex) => {
-                            if (segment.type === 'audio') {
-                              return <span key={segIndex} className="inline-block align-middle mx-1"><AudioPlayer audioUrl={segment.url} maxPlays={segment.maxPlays} variant="outline" /></span>
-                            }
-                            return <span key={segIndex}>{segment.content}</span>
-                          })}
+                          <div
+                            className={`select-none text-m rounded-lg ${isUsed ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                              }`}
+                            style={{ padding: '0.5em 1em', borderRadius: '0.75em' }}
+                          >
+                            {parseContentWithAudio(item.text).map((segment, segIndex) => {
+                              if (segment.type === 'audio') {
+                                return <span key={segIndex} className="inline-block align-middle mx-1"><AudioPlayer audioUrl={segment.url} maxPlays={segment.maxPlays} variant="outline" /></span>
+                              }
+                              return <span key={segIndex}>{segment.content}</span>
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })
+                      )
+                    })
                   })()}
                 </div>
               </div>
@@ -1029,7 +1040,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'Drag & Drop'}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <div className="flex bg-gray-100 rounded-lg p-1">
@@ -1056,11 +1067,11 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         <div className="space-y-6">
           {allQuestions.map((question, qIndex) => {
             const correctMapping = {}
-            ;(question.drop_zones || []).forEach((zone, zIdx) => {
-              if (question.correct_order && question.correct_order[zIdx]) {
-                correctMapping[zone.id] = question.correct_order[zIdx]
-              }
-            })
+              ; (question.drop_zones || []).forEach((zone, zIdx) => {
+                if (question.correct_order && question.correct_order[zIdx]) {
+                  correctMapping[zone.id] = question.correct_order[zIdx]
+                }
+              })
             return (
               <div key={qIndex} className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
                 <div className="flex items-start gap-3 mb-4">
@@ -1124,334 +1135,327 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
 
       <div className="relative px-2 md:pt-2 pb-12">
         <div className="max-w-4xl mx-auto space-y-6 relative z-20">
-        {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
-        {isTeacherView && teacherMode === 'do' && (
-          <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-            <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setTeacherMode('review')}
-                className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
-              >
-                Review
-              </button>
-              <button
-                className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
-              >
-                Do
-              </button>
-            </div>
-          </div>
-        )}
-        {/* Header - hidden when celebration screen is shown */}
-        {!showResultScreen && (
-          <ExerciseHeader
-            title={exercise?.title}
-            progressPercentage={(questionResults.filter(r => r.isCorrect).length / (exercise?.content?.questions?.length || 1)) * 100}
-            isBatmanMoving={isBatmanMoving}
-            showProgressLabel={false}
-            showQuestionCounter={false}
-            colorTheme={colorTheme}
-          />
-        )}
-
-        {/* Meme Overlay */}
-        {showMeme && (
-          <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-            <img
-              src={currentMeme}
-              alt="Reaction meme"
-              className="rounded-lg shadow-2xl"
-              style={{ width: '200px', height: 'auto' }}
-            />
-          </div>
-        )}
-
-
-        {/* Global Intro */}
-        {exercise?.content?.intro && String(exercise.content.intro).trim() && (
-          <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200 mb-4">
-            <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200 border-l-4 border-l-blue-400 relative" style={{ userSelect: 'none' }}>
-          {/* Colored circles on top right */}
-          <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
-                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                <div className="w-3 h-3 rounded-full bg-pink-500"></div>
-          </div>
-          {/* Question with inline drop zones */}
-          <div className="mb-8 p-4">
-            <h2 className="text-lg font-normal text-gray-900 mb-4 leading-relaxed">
-              {renderQuestionWithDropZones(
-                currentQuestion.question,
-                currentQuestion.drop_zones,
-                (zoneId, index) => {
-                  const zone = currentQuestion.drop_zones.find(z => z.id === zoneId)
-                  const itemId = userAnswer[zoneId]
-                  const item = currentQuestion.items.find(i => i.id === itemId)
-                  const feedback = itemFeedback[currentQuestionIndex]?.[zoneId]
-
-                  return (
-                    <span
-                      key={index}
-                      onDragOver={!questionsChecked[currentQuestionIndex] ? handleDragOver : undefined}
-                      onDrop={(e) => !questionsChecked[currentQuestionIndex] && handleDrop(e, zoneId, currentQuestionIndex)}
-                      onTouchEnd={!questionsChecked[currentQuestionIndex] ? handleTouchEnd : undefined}
-                      onClick={() => !questionsChecked[currentQuestionIndex] && handleDropZoneClick(zoneId, currentQuestionIndex)}
-                      data-zone-id={zoneId}
-                      data-question-index={currentQuestionIndex}
-                      className={`inline-block relative mx-1 transition-all ${
-                        questionsChecked[currentQuestionIndex]
-                          ? 'cursor-default'
-                          : 'cursor-pointer'
-                      } ${
-                        !questionsChecked[currentQuestionIndex] && itemId ? 'hover:bg-blue-50' :
-                        !questionsChecked[currentQuestionIndex] && !itemId ? 'hover:bg-gray-50' : ''
-                      }`}
-                    >
-                      {item ? (
-                        <span className={`px-2 py-1 rounded text-m font-medium ${
-                          feedback === 'correct'
-                            ? 'bg-green-100 text-green-800 border-2 border-green-500'
-                            : feedback === 'incorrect'
-                              ? 'bg-red-100 text-red-800 border-2 border-red-500'
-                              : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {item.text}
-                        </span>
-                      ) : (
-                        <span className="inline-block px-3 py-1 mx-1 min-w-[80px] text-center border-2 border-solid border-blue-200 bg-blue-50 rounded text-blue-400 font-medium">
-                          _____
-                        </span>
-                      )}
-                    </span>
-                  )
-                }
-              )}
-            </h2>
-          </div>
-
-          {/* Drag Items */}
-          <div className="mb-8 p-4">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium text-gray-700">Items to drag:</h3>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                // Count how many times each item ID is placed in zones
-                const placedCounts = {}
-                Object.values(userAnswer).forEach(id => {
-                  if (id) placedCounts[id] = (placedCounts[id] || 0) + 1
-                })
-                // Track how many instances of each ID we've rendered so far
-                const seenCounts = {}
-                return randomizedItems.map((item, itemIdx) => {
-                seenCounts[item.id] = (seenCounts[item.id] || 0) + 1
-                const isUsed = seenCounts[item.id] <= (placedCounts[item.id] || 0)
-                const isDisabled = isUsed || questionsChecked[currentQuestionIndex]
-
-                // Determine shadow color based on state
-                let shadowColor = '#93c5fd' // blue-300 default
-                if (isUsed) {
-                  shadowColor = '#e5e7eb' // gray-200
-                }
-
-                return (
-                  <div
-                    key={`${item.id}_${itemIdx}`}
-                    data-item-id={`${item.id}_${itemIdx}`}
-                    draggable={!isUsed && !questionsChecked[currentQuestionIndex]}
-                    onDragStart={(e) => !questionsChecked[currentQuestionIndex] && handleDragStart(e, item.id, currentQuestionIndex)}
-                    onTouchStart={(e) => !questionsChecked[currentQuestionIndex] && handleTouchStart(e, item.id, currentQuestionIndex)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onClick={() => !questionsChecked[currentQuestionIndex] && handleItemClick(item.id, currentQuestionIndex, `${item.id}_${itemIdx}`)}
-                    className="border-none rounded-lg transition-all duration-100"
-                    style={{
-                      padding: 0,
-                      borderRadius: '0.75em',
-                      backgroundColor: shadowColor,
-                      cursor: isUsed ? 'not-allowed' : questionsChecked[currentQuestionIndex] ? 'default' : 'pointer'
-                    }}
-                  >
-                    <div
-                      className={`select-none text-m rounded-lg ${
-                        isUsed
-                          ? 'bg-gray-100 text-gray-400'
-                          : questionsChecked[currentQuestionIndex]
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                      }`}
-                      style={{
-                        display: 'block',
-                        boxSizing: 'border-box',
-                        transform: isDisabled ? 'translateY(0)' : 'translateY(-0.2em)',
-                        transition: 'transform 0.1s ease',
-                        padding: '0.5em 1em',
-                        borderRadius: '0.75em'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(-0.33em)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(-0.2em)'
-                        }
-                      }}
-                      onMouseDown={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(0)'
-                        }
-                      }}
-                      onMouseUp={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(-0.33em)'
-                        }
-                      }}
-                      onTouchStart={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(0)'
-                        }
-                      }}
-                      onTouchEnd={(e) => {
-                        if (!isDisabled) {
-                          e.currentTarget.style.transform = 'translateY(-0.2em)'
-                        }
-                      }}
-                    >
-                      <div
-                        className="flex items-center gap-2"
-                        onClick={(e) => {
-                          // Stop propagation if clicking on audio player
-                          if (e.target.closest('button')) {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onMouseDown={(e) => {
-                          if (e.target.closest('button')) {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onTouchStart={(e) => {
-                          if (e.target.closest('button')) {
-                            e.stopPropagation()
-                          }
-                        }}
-                      >
-                        {parseContentWithAudio(item.text).map((segment, segIndex) => {
-                          if (segment.type === 'audio') {
-                            return (
-                              <span key={segIndex} className="inline-block align-middle mx-1">
-                                <AudioPlayer
-                                  audioUrl={segment.url}
-                                  maxPlays={segment.maxPlays}
-                                  variant="outline"
-                                />
-                              </span>
-                            )
-                          } else {
-                            return <span key={segIndex}>{segment.content}</span>
-                          }
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-              })()}
-            </div>
-          </div>
-
-
-          {/* Result */}
-          {showResult && (
-            <div className={`mb-6 p-4 rounded-lg ${
-              isCorrect ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-            }`}>
-              <div className="flex items-center gap-2 mb-2">
-                {isCorrect ? (
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-600" />
-                )}
-                <span className={`font-medium ${
-                  isCorrect ? 'text-green-800' : 'text-red-800'
-                }`}>
-                  {isCorrect ? 'Correct!' : 'Incorrect. Try again.'}
-                </span>
+          {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
+          {isTeacherView && teacherMode === 'do' && (
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+              <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setTeacherMode('review')}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
+                >
+                  Review
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
+                >
+                  Do
+                </button>
               </div>
-              {currentQuestion.explanation && (
-                <p className={`text-sm ${
-                  isCorrect ? 'text-green-700' : 'text-red-700'
-                }`}>
-                  {currentQuestion.explanation}
-                </p>
-              )}
+            </div>
+          )}
+          {/* Header - hidden when celebration screen is shown */}
+          {!showResultScreen && (
+            <ExerciseHeader
+              title={exercise?.title}
+              progressPercentage={(questionResults.filter(r => r.isCorrect).length / (exercise?.content?.questions?.length || 1)) * 100}
+              isBatmanMoving={isBatmanMoving}
+              showProgressLabel={false}
+              showQuestionCounter={false}
+              colorTheme={colorTheme}
+            />
+          )}
+
+          {/* Meme Overlay */}
+          {showMeme && (
+            <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+              <img
+                src={currentMeme}
+                alt="Reaction meme"
+                className="rounded-lg shadow-2xl"
+                style={{ width: '200px', height: 'auto' }}
+              />
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3 p-4">
-            <Button3D
-              onClick={() => checkAnswer(currentQuestionIndex)}
-              color={questionsChecked[currentQuestionIndex] ? 'gray' : 'blue'}
-              size="sm"
-              className="flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              {questionsChecked[currentQuestionIndex] ? 'Checked' : 'Check'}
-            </Button3D>
 
-            <Button3D
-              onClick={() => resetQuestion(currentQuestionIndex)}
-              color={showResult && !isCorrect ? 'green' : 'gray'}
-              size="sm"
-              className="flex items-center justify-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </Button3D>
+          {/* Global Intro */}
+          {exercise?.content?.intro && String(exercise.content.intro).trim() && (
+            <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200 mb-4">
+              <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
+            </div>
+          )}
 
-            {currentQuestionIndex > 0 && (
-              <Button3D
-                onClick={prevQuestion}
-                color="gray"
-                size="sm"
-                className="flex items-center justify-center gap-2"
-              >
-                Previous
-              </Button3D>
+          {/* Main Content */}
+          <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200 border-l-4 border-l-blue-400 relative" style={{ userSelect: 'none' }}>
+            {/* Colored circles on top right */}
+            <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
+              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+              <div className="w-3 h-3 rounded-full bg-pink-500"></div>
+            </div>
+            {/* Question with inline drop zones */}
+            <div className="mb-8 p-4">
+              <h2 className="text-lg font-normal text-gray-900 mb-4 leading-relaxed">
+                {renderQuestionWithDropZones(
+                  currentQuestion.question,
+                  currentQuestion.drop_zones,
+                  (zoneId, index) => {
+                    const zone = currentQuestion.drop_zones.find(z => z.id === zoneId)
+                    const itemId = userAnswer[zoneId]
+                    const item = currentQuestion.items.find(i => i.id === itemId)
+                    const feedback = itemFeedback[currentQuestionIndex]?.[zoneId]
+
+                    return (
+                      <span
+                        key={index}
+                        onDragOver={!questionsChecked[currentQuestionIndex] ? handleDragOver : undefined}
+                        onDrop={(e) => !questionsChecked[currentQuestionIndex] && handleDrop(e, zoneId, currentQuestionIndex)}
+                        onTouchEnd={!questionsChecked[currentQuestionIndex] ? handleTouchEnd : undefined}
+                        onClick={() => !questionsChecked[currentQuestionIndex] && handleDropZoneClick(zoneId, currentQuestionIndex)}
+                        data-zone-id={zoneId}
+                        data-question-index={currentQuestionIndex}
+                        className={`inline-block relative mx-1 transition-all ${questionsChecked[currentQuestionIndex]
+                            ? 'cursor-default'
+                            : 'cursor-pointer'
+                          } ${!questionsChecked[currentQuestionIndex] && itemId ? 'hover:bg-blue-50' :
+                            !questionsChecked[currentQuestionIndex] && !itemId ? 'hover:bg-gray-50' : ''
+                          }`}
+                      >
+                        {item ? (
+                          <span className={`px-2 py-1 rounded text-m font-medium ${feedback === 'correct'
+                              ? 'bg-green-100 text-green-800 border-2 border-green-500'
+                              : feedback === 'incorrect'
+                                ? 'bg-red-100 text-red-800 border-2 border-red-500'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                            {item.text}
+                          </span>
+                        ) : (
+                          <span className="inline-block px-3 py-1 mx-1 min-w-[80px] text-center border-2 border-solid border-blue-200 bg-blue-50 rounded text-blue-400 font-medium">
+                            _____
+                          </span>
+                        )}
+                      </span>
+                    )
+                  }
+                )}
+              </h2>
+            </div>
+
+            {/* Drag Items */}
+            <div className="mb-8 p-4">
+              <div className="mb-4">
+                <h3 className="text-lg font-medium text-gray-700">Items to drag:</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  // Count how many times each item ID is placed in zones
+                  const placedCounts = {}
+                  Object.values(userAnswer).forEach(id => {
+                    if (id) placedCounts[id] = (placedCounts[id] || 0) + 1
+                  })
+                  // Track how many instances of each ID we've rendered so far
+                  const seenCounts = {}
+                  return randomizedItems.map((item, itemIdx) => {
+                    seenCounts[item.id] = (seenCounts[item.id] || 0) + 1
+                    const isUsed = seenCounts[item.id] <= (placedCounts[item.id] || 0)
+                    const isDisabled = isUsed || questionsChecked[currentQuestionIndex]
+
+                    // Determine shadow color based on state
+                    let shadowColor = '#93c5fd' // blue-300 default
+                    if (isUsed) {
+                      shadowColor = '#e5e7eb' // gray-200
+                    }
+
+                    return (
+                      <div
+                        key={`${item.id}_${itemIdx}`}
+                        data-item-id={`${item.id}_${itemIdx}`}
+                        draggable={!isUsed && !questionsChecked[currentQuestionIndex]}
+                        onDragStart={(e) => !questionsChecked[currentQuestionIndex] && handleDragStart(e, item.id, currentQuestionIndex)}
+                        onTouchStart={(e) => !questionsChecked[currentQuestionIndex] && handleTouchStart(e, item.id, currentQuestionIndex)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        onClick={() => !questionsChecked[currentQuestionIndex] && handleItemClick(item.id, currentQuestionIndex, `${item.id}_${itemIdx}`)}
+                        className="border-none rounded-lg transition-all duration-100"
+                        style={{
+                          padding: 0,
+                          borderRadius: '0.75em',
+                          backgroundColor: shadowColor,
+                          cursor: isUsed ? 'not-allowed' : questionsChecked[currentQuestionIndex] ? 'default' : 'pointer'
+                        }}
+                      >
+                        <div
+                          className={`select-none text-m rounded-lg ${isUsed
+                              ? 'bg-gray-100 text-gray-400'
+                              : questionsChecked[currentQuestionIndex]
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          style={{
+                            display: 'block',
+                            boxSizing: 'border-box',
+                            transform: isDisabled ? 'translateY(0)' : 'translateY(-0.2em)',
+                            transition: 'transform 0.1s ease',
+                            padding: '0.5em 1em',
+                            borderRadius: '0.75em'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(-0.33em)'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(-0.2em)'
+                            }
+                          }}
+                          onMouseDown={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(0)'
+                            }
+                          }}
+                          onMouseUp={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(-0.33em)'
+                            }
+                          }}
+                          onTouchStart={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(0)'
+                            }
+                          }}
+                          onTouchEnd={(e) => {
+                            if (!isDisabled) {
+                              e.currentTarget.style.transform = 'translateY(-0.2em)'
+                            }
+                          }}
+                        >
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => {
+                              // Stop propagation if clicking on audio player
+                              if (e.target.closest('button')) {
+                                e.stopPropagation()
+                              }
+                            }}
+                            onMouseDown={(e) => {
+                              if (e.target.closest('button')) {
+                                e.stopPropagation()
+                              }
+                            }}
+                            onTouchStart={(e) => {
+                              if (e.target.closest('button')) {
+                                e.stopPropagation()
+                              }
+                            }}
+                          >
+                            {parseContentWithAudio(item.text).map((segment, segIndex) => {
+                              if (segment.type === 'audio') {
+                                return (
+                                  <span key={segIndex} className="inline-block align-middle mx-1">
+                                    <AudioPlayer
+                                      audioUrl={segment.url}
+                                      maxPlays={segment.maxPlays}
+                                      variant="outline"
+                                    />
+                                  </span>
+                                )
+                              } else {
+                                return <span key={segIndex}>{segment.content}</span>
+                              }
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            </div>
+
+
+            {/* Result */}
+            {showResult && (
+              <div className={`mb-6 p-4 rounded-lg ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {isCorrect ? (
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-600" />
+                  )}
+                  <span className={`font-medium ${isCorrect ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                    {isCorrect ? 'Correct!' : 'Incorrect. Try again.'}
+                  </span>
+                </div>
+                {currentQuestion.explanation && (
+                  <p className={`text-sm ${isCorrect ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                    {currentQuestion.explanation}
+                  </p>
+                )}
+              </div>
             )}
 
-            {currentQuestionIndex < exercise.content.questions.length - 1 ? (
+            {/* Actions */}
+            <div className="flex flex-wrap gap-3 p-4">
               <Button3D
-                onClick={nextQuestion}
-                disabled={!questionsChecked[currentQuestionIndex]}
-                color="green"
+                onClick={() => checkAnswer(currentQuestionIndex)}
+                color={questionsChecked[currentQuestionIndex] ? 'gray' : 'blue'}
                 size="sm"
                 className="flex items-center justify-center gap-2"
               >
-                Next
+                <CheckCircle className="w-4 h-4" />
+                {questionsChecked[currentQuestionIndex] ? 'Checked' : 'Check'}
               </Button3D>
-            ) : (
+
               <Button3D
-                onClick={handleFinishExercise}
-                disabled={!questionsChecked[currentQuestionIndex]}
-                color="blue"
+                onClick={() => resetQuestion(currentQuestionIndex)}
+                color={showResult && !isCorrect ? 'green' : 'gray'}
                 size="sm"
                 className="flex items-center justify-center gap-2"
               >
-                Finish
+                <RotateCcw className="w-4 h-4" />
+                Reset
               </Button3D>
-            )}
+
+              {currentQuestionIndex > 0 && (
+                <Button3D
+                  onClick={prevQuestion}
+                  color="gray"
+                  size="sm"
+                  className="flex items-center justify-center gap-2"
+                >
+                  Previous
+                </Button3D>
+              )}
+
+              {currentQuestionIndex < exercise.content.questions.length - 1 ? (
+                <Button3D
+                  onClick={nextQuestion}
+                  disabled={!questionsChecked[currentQuestionIndex]}
+                  color="green"
+                  size="sm"
+                  className="flex items-center justify-center gap-2"
+                >
+                  Next
+                </Button3D>
+              ) : (
+                <Button3D
+                  onClick={handleFinishExercise}
+                  disabled={!questionsChecked[currentQuestionIndex]}
+                  color="blue"
+                  size="sm"
+                  className="flex items-center justify-center gap-2"
+                >
+                  Finish
+                </Button3D>
+              )}
+            </div>
           </div>
-        </div>
         </div>
       </div>
 

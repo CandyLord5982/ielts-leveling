@@ -211,6 +211,18 @@ const fallbackResult = (msg = '') => ({
 const SpeakingAssessmentExercise = () => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  const handleBackNavigation = () => {
+    if (typeof session !== 'undefined' && session?.units) {
+      navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${typeof sessionId !== 'undefined' ? sessionId : session.id}`);
+    } else {
+      const path = window.location.pathname;
+      if (path.includes('/admin')) navigate('/admin/exercise-bank');
+      else if (path.includes('/teacher')) navigate('/teacher/exercise-bank');
+      else navigate('/study');
+    }
+  };
+
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { startExercise, completeExerciseWithXP } = useProgress()
@@ -637,7 +649,7 @@ const SpeakingAssessmentExercise = () => {
             >
               <Mic className="w-4 h-4" /> Attempt Exercise
             </button>
-            <button onClick={() => session?.units ? navigate(`/study/course/${session.units.course_id}/unit/${session.units.id}/session/${sessionId}`) : navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
+            <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
           </div>

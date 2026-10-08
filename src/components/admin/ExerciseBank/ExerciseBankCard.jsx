@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../supabase/client'
 import {
   BookOpen,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 
 const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = false, allowedTypes = null }) => {
+  const navigate = useNavigate()
   const canEdit = allowedTypes ? allowedTypes.includes(exercise.exercise_type) : !readOnly
   const [showMenu, setShowMenu] = useState(false)
   const [showAssignments, setShowAssignments] = useState(false)
@@ -218,8 +220,10 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
       }
     }
 
-    const url = getExerciseUrl()
-    if (url) {
+    const baseUrl = getExerciseUrl()
+    if (baseUrl) {
+      const source = window.location.pathname.includes('/teacher') ? 'teacher' : 'admin'
+      const url = `${baseUrl}&source=${source}`
       // Open in new tab
       window.open(url, '_blank')
     }

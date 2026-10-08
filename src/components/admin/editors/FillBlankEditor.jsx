@@ -545,6 +545,45 @@ const FillBlankEditor = ({ questions, onQuestionsChange, settings, onSettingsCha
       const processAccumulatedQuestion = () => {
         if (accumulatedText.length === 0) { currentExplanation = ''; return }
 
+        // --- NEW PRE-PROCESSING ---
+        // Look for lines that provide answers for underscores, e.g. "= [answer]" or "Answer: [answer]"
+        const underscoreRegex = /_{3,}/;
+        let answerLines = [];
+        let remainingText = [];
+        
+        accumulatedText.forEach(line => {
+           if (line.trim().match(/^(?:=|(?:Answer|Đáp án)\s*:)/i)) {
+              answerLines.push(line);
+           } else {
+              remainingText.push(line);
+           }
+        });
+
+        if (answerLines.length > 0) {
+           answerLines.forEach(ansLine => {
+              let ans = ansLine.replace(/^(?:=|(?:Answer|Đáp án)\s*:)\s*/i, '').trim();
+              if (!ans.startsWith('[')) {
+                 ans = `[${ans}]`;
+              }
+              let replaced = false;
+              for (let i = 0; i < remainingText.length; i++) {
+                 if (underscoreRegex.test(remainingText[i])) {
+                    remainingText[i] = remainingText[i].replace(underscoreRegex, ans);
+                    replaced = true;
+                    break;
+                 }
+              }
+              if (!replaced) {
+                 remainingText.push(ansLine);
+              }
+           });
+           accumulatedText = remainingText;
+        }
+        // --- END PRE-PROCESSING ---
+
+        // If there are still underscores left without an explicit answer line, convert them to empty brackets so they are processed as blanks
+        accumulatedText = accumulatedText.map(line => line.replace(/_{3,}/g, '[]'));
+
         // Find which lines contain brackets
         const linesWithBrackets = []
         const linesWithoutBrackets = []

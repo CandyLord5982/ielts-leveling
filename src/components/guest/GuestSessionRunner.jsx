@@ -11,7 +11,7 @@ import ColorFillExercise from '../exercises/ColorFillExercise'
 import { gradeColorFill, getQuestionFields } from '../../utils/colorFill'
 import AIFillBlankExercise from '../exercises/AIFillBlankExercise'
 import PDFWorksheetExercise from '../exercises/PDFWorksheetExercise'
-import { Clock, AlertTriangle, Send, CheckCircle, XCircle, ChevronRight, ChevronDown, FileText, Play, ArrowLeft, UserPlus } from 'lucide-react'
+import { Clock, AlertTriangle, Send, CheckCircle, XCircle, ChevronRight, ChevronLeft, ChevronDown, FileText, Play, ArrowLeft, UserPlus, RotateCcw } from 'lucide-react'
 import RichTextRenderer from '../ui/RichTextRenderer'
 import { callAIScoring } from '../../utils/aiScoringService'
 import { REGISTER_PATH } from '../../config/registration'
@@ -31,6 +31,7 @@ const GuestSessionRunner = () => {
   const [searchParams] = useSearchParams()
   const sessionId = searchParams.get('sessionId')
   const guestId = searchParams.get('guestId')
+  const courseId = searchParams.get('courseId')
   const guestName = decodeURIComponent(searchParams.get('guestName') || '')
   const navigate = useNavigate()
 
@@ -114,6 +115,17 @@ const GuestSessionRunner = () => {
 
     return () => clearInterval(interval)
   }, [timeRemaining, results])
+
+  // Warn before leaving a lesson in progress so an accidental refresh does not lose answers
+  useEffect(() => {
+    if (showInfo || results) return
+    const warn = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [showInfo, results])
 
   // Auto-submit when timer hits 0
   useEffect(() => {
@@ -337,8 +349,9 @@ const GuestSessionRunner = () => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
+  // Keep the course when the guest came from a course link
   const goBack = () => {
-    navigate('/guest')
+    navigate(courseId ? `/guest?course=${courseId}` : '/guest')
   }
 
   // Stable callbacks per exercise
@@ -373,7 +386,7 @@ const GuestSessionRunner = () => {
       case 'pdf_worksheet':
         return <PDFWorksheetExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} />
       default:
-        return <p className="text-gray-500">Unsupported exercise type: {ex.exercise_type}</p>
+        return <p className="text-gray-500">Loại bài tập chưa được hỗ trợ: {ex.exercise_type}</p>
     }
   }
 
@@ -382,7 +395,7 @@ const GuestSessionRunner = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">Đang tải bài học...</p>
         </div>
       </div>
     )
@@ -390,12 +403,12 @@ const GuestSessionRunner = () => {
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600">Khong tim thay bai hoc</p>
+          <p className="text-gray-600">Không tìm thấy bài học</p>
           <button onClick={goBack} className="mt-4 text-blue-600 hover:underline">
-            Quay lai
+            Quay lại
           </button>
         </div>
       </div>
@@ -404,48 +417,67 @@ const GuestSessionRunner = () => {
 
   // Info screen before starting
   if (showInfo) {
+    const hasTimeLimit = session.is_test && session.time_limit_minutes
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-md mx-auto mt-12">
-          <div className="rounded-2xl p-8 bg-white border-2 border-gray-200 shadow-sm">
-            <FileText className="w-14 h-14 text-blue-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">{session.title}</h2>
-            {guestName && (
-              <p className="text-center text-gray-500 text-sm mb-6">Xin chao, {guestName}!</p>
+        <div className="max-w-md mx-auto mt-6 sm:mt-12 rounded-3xl bg-white shadow-xl overflow-hidden">
+          <div className={`px-8 pt-8 pb-10 text-center text-white bg-gradient-to-br ${
+            session.is_test ? 'from-orange-500 to-red-500' : 'from-blue-600 to-indigo-600'
+          }`}>
+            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-4 text-3xl">
+              {session.icon || <FileText className="w-8 h-8" />}
+            </div>
+            {session.is_test && (
+              <span className="inline-block rounded-full bg-white/20 px-3 py-0.5 text-xs font-bold uppercase mb-2">
+                Bài kiểm tra
+              </span>
+            )}
+            <h2 className="text-2xl font-bold">{session.title}</h2>
+            {guestName && <p className="mt-1 text-sm text-white/85">Xin chào, {guestName}!</p>}
+          </div>
+
+          <div className="p-6 -mt-4 bg-white rounded-t-3xl space-y-4">
+            {session.description && (
+              <p className="text-sm text-gray-600 leading-relaxed">{session.description}</p>
             )}
 
-            <div className="space-y-3 mb-8">
-              <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600">So bai tap</span>
-                <span className="text-sm font-bold text-gray-900">{exercises.length}</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-gray-50 p-3 text-center">
+                <p className="text-2xl font-bold text-gray-900">{exercises.length}</p>
+                <p className="text-xs text-gray-500">bài tập</p>
               </div>
-              {session.is_test && session.time_limit_minutes && (
-                <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-gray-600">Thoi gian</span>
-                  <span className="text-sm font-bold text-gray-900">{session.time_limit_minutes} phut</span>
-                </div>
-              )}
-              {session.description && (
-                <div className="py-3 px-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">{session.description}</p>
-                </div>
-              )}
+              <div className="rounded-xl bg-gray-50 p-3 text-center">
+                <p className="text-2xl font-bold text-gray-900">{hasTimeLimit ? session.time_limit_minutes : '∞'}</p>
+                <p className="text-xs text-gray-500">{hasTimeLimit ? 'phút' : 'không giới hạn thời gian'}</p>
+              </div>
             </div>
+
+            {hasTimeLimit && (
+              <p className="rounded-xl bg-orange-50 px-4 py-3 text-xs text-orange-700">
+                Bài sẽ tự động nộp khi hết giờ. Hãy kiểm tra kỹ các câu trả lời trước khi nộp.
+              </p>
+            )}
+
+            {exercises.length === 0 && (
+              <p className="text-center text-sm text-gray-500">Bài học này chưa có bài tập.</p>
+            )}
 
             <button
               onClick={beginSession}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+              disabled={exercises.length === 0}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="w-5 h-5" />
-              Bat dau
+              Bắt đầu
             </button>
 
             <button
               onClick={goBack}
-              className="w-full mt-3 px-6 py-3 text-gray-500 text-sm hover:text-gray-700 transition-colors flex items-center justify-center gap-1"
+              className="w-full px-6 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors flex items-center justify-center gap-1"
             >
               <ArrowLeft className="w-4 h-4" />
-              Quay lai
+              Quay lại
             </button>
           </div>
         </div>
@@ -476,7 +508,7 @@ const GuestSessionRunner = () => {
             incorrect.push({
               exercise: ex.title || 'Image Hotspot',
               question: `Hotspot ${hi + 1}`,
-              yourAnswer: selectedLabel?.text || '(khong tra loi)',
+              yourAnswer: selectedLabel?.text || '(chưa trả lời)',
               correctAnswer: correctLabel?.text || '?'
             })
           }
@@ -495,7 +527,7 @@ const GuestSessionRunner = () => {
           incorrect.push({
             exercise: ex.title || 'Color Fill',
             question: region.label || `Area ${ri + 1}`,
-            yourAnswer: colorName((exerciseAnswers || {})[region.id]) || '(khong tra loi)',
+            yourAnswer: colorName((exerciseAnswers || {})[region.id]) || '(chưa trả lời)',
             correctAnswer: colorName(region.correct_color_id) || '?'
           })
         })
@@ -505,7 +537,7 @@ const GuestSessionRunner = () => {
           incorrect.push({
             exercise: ex.title || 'Color Fill',
             question: field.question || field.label,
-            yourAnswer: (exerciseAnswers || {})[field.id] || '(khong tra loi)',
+            yourAnswer: (exerciseAnswers || {})[field.id] || '(chưa trả lời)',
             correctAnswer: firstAnswer(field.answer) || '?'
           })
         })
@@ -549,7 +581,7 @@ const GuestSessionRunner = () => {
               incorrect.push({
                 exercise: ex.title || 'PDF Worksheet',
                 question: field.label || field.id,
-                yourAnswer: fieldAnswer != null ? String(fieldAnswer) : '(khong tra loi)',
+                yourAnswer: fieldAnswer != null ? String(fieldAnswer) : '(chưa trả lời)',
                 correctAnswer: correctText
               })
             }
@@ -567,8 +599,8 @@ const GuestSessionRunner = () => {
               const options = q.options || []
               incorrect.push({
                 exercise: ex.title || 'Multiple Choice',
-                question: q.question || `Cau ${qi + 1}`,
-                yourAnswer: userAnswer != null ? (options[userAnswer] || userAnswer) : '(khong tra loi)',
+                question: q.question || `Câu ${qi + 1}`,
+                yourAnswer: userAnswer != null ? (options[userAnswer] || userAnswer) : '(chưa trả lời)',
                 correctAnswer: options[q.correct_answer] || q.correct_answer
               })
             }
@@ -585,8 +617,8 @@ const GuestSessionRunner = () => {
               if (!isCorrect) {
                 incorrect.push({
                   exercise: ex.title || 'Fill Blank',
-                  question: q.text ? `${q.text.substring(0, 50)}...` : `Cau ${qi + 1}, o ${bi + 1}`,
-                  yourAnswer: typed || '(khong tra loi)',
+                  question: q.text ? `${q.text.substring(0, 50)}...` : `Câu ${qi + 1}, ô ${bi + 1}`,
+                  yourAnswer: typed || '(chưa trả lời)',
                   correctAnswer: correctAnswers[0] || '?'
                 })
               }
@@ -608,7 +640,7 @@ const GuestSessionRunner = () => {
                 incorrect.push({
                   exercise: ex.title || 'Drag & Drop',
                   question: zone.label || `Zone ${zi + 1}`,
-                  yourAnswer: studentItem?.text || '(khong tra loi)',
+                  yourAnswer: studentItem?.text || '(chưa trả lời)',
                   correctAnswer: correctItem?.text || '?'
                 })
               }
@@ -623,8 +655,8 @@ const GuestSessionRunner = () => {
               if (selected !== correct) {
                 incorrect.push({
                   exercise: ex.title || 'Dropdown',
-                  question: q.text ? `${q.text.substring(0, 50)}...` : `Cau ${qi + 1}, dropdown ${di + 1}`,
-                  yourAnswer: selected || '(khong tra loi)',
+                  question: q.text ? `${q.text.substring(0, 50)}...` : `Câu ${qi + 1}, dropdown ${di + 1}`,
+                  yourAnswer: selected || '(chưa trả lời)',
                   correctAnswer: correct
                 })
               }
@@ -638,8 +670,8 @@ const GuestSessionRunner = () => {
             if (!isCorrect) {
               incorrect.push({
                 exercise: ex.title || 'AI Fill Blank',
-                question: q.question || `Cau ${qi + 1}`,
-                yourAnswer: exerciseAnswers?.[qi] || '(khong tra loi)',
+                question: q.question || `Câu ${qi + 1}`,
+                yourAnswer: exerciseAnswers?.[qi] || '(chưa trả lời)',
                 correctAnswer: (q.expected_answers || []).join(' / ') || '?',
                 aiScore: aiResult || null
               })
@@ -655,41 +687,70 @@ const GuestSessionRunner = () => {
 
   // Results screen
   if (results) {
-    const scoreColor = results.score >= 80 ? 'text-green-600' : results.score >= 50 ? 'text-yellow-600' : 'text-red-600'
-    const scoreBg = results.score >= 80 ? 'bg-green-50 border-green-200' : results.score >= 50 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
+    const tone = results.score >= 80
+      ? { text: 'text-green-600', stroke: '#16a34a', message: 'Tuyệt vời! 🎉' }
+      : results.score >= 50
+        ? { text: 'text-yellow-600', stroke: '#ca8a04', message: 'Khá tốt! Cố gắng thêm nhé! 💪' }
+        : { text: 'text-red-600', stroke: '#dc2626', message: 'Hãy thử lại nhé! 📚' }
     const incorrectDetails = getIncorrectDetails()
+    const radius = 54
+    const circumference = 2 * Math.PI * radius
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-md mx-auto mt-8 space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 pb-8">
+        <div className="max-w-md mx-auto mt-6 space-y-4">
           {/* Score card */}
-          <div className={`rounded-2xl p-8 text-center border-2 ${scoreBg}`}>
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
-              results.score >= 80 ? 'bg-green-100' : results.score >= 50 ? 'bg-yellow-100' : 'bg-red-100'
-            }`}>
-              <CheckCircle className={`w-10 h-10 ${scoreColor}`} />
+          <div className="rounded-3xl bg-white p-8 text-center shadow-xl">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {results.timedOut ? 'Hết giờ!' : 'Hoàn thành!'}
+            </h2>
+            {guestName && <p className="mt-1 text-sm text-gray-500">{guestName}</p>}
+
+            <div className="relative mx-auto my-5 h-40 w-40">
+              <svg viewBox="0 0 128 128" className="h-full w-full -rotate-90">
+                <circle cx="64" cy="64" r={radius} fill="none" strokeWidth="10" stroke="#e5e7eb" />
+                <circle
+                  cx="64"
+                  cy="64"
+                  r={radius}
+                  fill="none"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  stroke={tone.stroke}
+                  strokeDasharray={circumference}
+                  strokeDashoffset={circumference * (1 - results.score / 100)}
+                  style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                />
+              </svg>
+              <div className={`absolute inset-0 flex items-center justify-center text-4xl font-bold ${tone.text}`}>
+                {results.score}%
+              </div>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-gray-900">Hoan thanh!</h2>
-            {results.timedOut && (
-              <p className="text-orange-600 text-sm mb-2 flex items-center justify-center gap-1">
-                <Clock size={14} /> Het thoi gian
+
+            <p className={`font-medium ${tone.text}`}>{tone.message}</p>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 text-left">
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">Số câu đúng</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {results.totalCorrect}/{results.totalQuestions}
+                </p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">Thời gian</p>
+                <p className="flex items-center gap-1.5 text-lg font-bold text-gray-900">
+                  <Clock size={16} className="text-gray-400" />
+                  {formatTime(results.timeUsed)}
+                </p>
+              </div>
+            </div>
+
+            {session.is_test && (
+              <p className={`mt-4 inline-block rounded-full px-4 py-1 text-sm font-semibold ${
+                results.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              }`}>
+                {results.passed ? 'Đạt' : 'Chưa đạt'} (cần {session.passing_score || 70}%)
               </p>
-            )}
-
-            <div className={`text-5xl font-bold my-4 ${scoreColor}`}>
-              {results.score}%
-            </div>
-
-            <p className="text-gray-600 text-sm">
-              Dung {results.totalCorrect}/{results.totalQuestions} cau
-            </p>
-
-            {results.score >= 80 ? (
-              <p className="text-green-600 font-medium mt-2">Tuyet voi! 🎉</p>
-            ) : results.score >= 50 ? (
-              <p className="text-yellow-600 font-medium mt-2">Kha tot! Co gang them nhe! 💪</p>
-            ) : (
-              <p className="text-red-600 font-medium mt-2">Hay thu lai nhe! 📚</p>
             )}
           </div>
 
@@ -703,7 +764,7 @@ const GuestSessionRunner = () => {
                 <div className="flex items-center gap-2">
                   <XCircle className="w-5 h-5 text-red-500" />
                   <span className="font-medium text-gray-900 text-sm">
-                    Cau tra loi sai ({incorrectDetails.length})
+                    Các câu trả lời sai ({incorrectDetails.length})
                   </span>
                 </div>
                 {showIncorrect
@@ -720,16 +781,16 @@ const GuestSessionRunner = () => {
                       <p className="text-xs text-gray-500">{item.exercise}</p>
                       <div className="mt-2 space-y-1">
                         <div className="text-red-600 text-xs flex items-start gap-1">
-                          <XCircle size={12} className="flex-shrink-0 mt-0.5" /><div>Ban chon: <RichTextRenderer content={item.yourAnswer} allowImages allowLinks /></div>
+                          <XCircle size={12} className="flex-shrink-0 mt-0.5" /><div>Bạn chọn: <RichTextRenderer content={item.yourAnswer} allowImages allowLinks /></div>
                         </div>
                         <div className="text-green-600 text-xs flex items-start gap-1">
-                          <CheckCircle size={12} className="flex-shrink-0 mt-0.5" /><div>Dap an dung: <RichTextRenderer content={item.correctAnswer} allowImages allowLinks /></div>
+                          <CheckCircle size={12} className="flex-shrink-0 mt-0.5" /><div>Đáp án đúng: <RichTextRenderer content={item.correctAnswer} allowImages allowLinks /></div>
                         </div>
                       </div>
                       {item.aiScore && (
                         <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-blue-700">AI Score: {Math.round(item.aiScore.score)}%</span>
+                            <span className="text-xs font-semibold text-blue-700">Điểm AI: {Math.round(item.aiScore.score)}%</span>
                           </div>
                           <p className="text-xs text-gray-600">{item.aiScore.explanation}</p>
                         </div>
@@ -744,15 +805,15 @@ const GuestSessionRunner = () => {
           {/* Register CTA */}
           <div className="bg-white rounded-2xl shadow-sm border-2 border-blue-200 p-6 text-center">
             <UserPlus className="w-10 h-10 text-blue-600 mx-auto mb-3" />
-            <h3 className="font-bold text-gray-900 mb-1">Dang ky tai khoan</h3>
+            <h3 className="font-bold text-gray-900 mb-1">Đăng ký tài khoản</h3>
             <p className="text-gray-500 text-sm mb-4">
-              Tao tai khoan de theo doi tien trinh hoc tap va nhan XP!
+              Tạo tài khoản để theo dõi tiến trình học tập và nhận XP!
             </p>
             <button
               onClick={() => navigate(REGISTER_PATH)}
               className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
             >
-              <UserPlus size={18} /> Dang ky ngay
+              <UserPlus size={18} /> Đăng ký ngay
             </button>
           </div>
 
@@ -768,15 +829,15 @@ const GuestSessionRunner = () => {
                 setTimeRemaining(null)
                 setSubmitting(false)
               }}
-              className="flex-1 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors"
             >
-              Lam lai
+              <RotateCcw size={16} /> Làm lại
             </button>
             <button
               onClick={goBack}
               className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
             >
-              Chon bai khac
+              Chọn bài khác
             </button>
           </div>
         </div>
@@ -786,28 +847,38 @@ const GuestSessionRunner = () => {
 
   const isLowTime = timeRemaining !== null && timeRemaining <= 60
   const hasTimer = session.is_test && timeRemaining !== null
+  const hasAnswers = (ex) => Object.keys(answers[ex.id] || {}).length > 0
+  const answeredCount = exercises.filter(hasAnswers).length
+  const unansweredCount = exercises.length - answeredCount
+  const isLastTab = activeTab >= exercises.length - 1
+
+  const goToTab = (index) => {
+    setActiveTab(index)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Sticky header */}
       <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={goBack}
               className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+              aria-label="Quay lại"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-gray-900 truncate">{session.title}</h1>
-              <p className="text-xs text-gray-500">
-                {guestName} &bull; {exercises.length} bai tap
+              <p className="text-xs text-gray-500 truncate">
+                {guestName} &bull; Đã làm {answeredCount}/{exercises.length} bài tập
               </p>
             </div>
           </div>
           {hasTimer && (
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-lg font-bold ${
+            <div className={`flex flex-shrink-0 items-center gap-2 px-3 py-1.5 rounded-xl font-mono text-lg font-bold ${
               isLowTime ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-blue-100 text-blue-700'
             }`}>
               <Clock size={18} />
@@ -816,23 +887,41 @@ const GuestSessionRunner = () => {
           )}
         </div>
 
+        {/* Progress through the exercises */}
+        <div className="h-1 bg-gray-100">
+          <div
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${((activeTab + 1) / exercises.length) * 100}%` }}
+          />
+        </div>
+
         {/* Exercise tabs */}
         {exercises.length > 1 && (
-          <div className="max-w-4xl mx-auto px-4 pb-0 flex gap-0 overflow-x-auto">
+          <div className="max-w-4xl mx-auto px-2 flex gap-1 overflow-x-auto">
             {exercises.map((ex, i) => {
               const isActive = i === activeTab
+              const isAnswered = hasAnswers(ex)
               const label = exerciseTypeLabels[ex.exercise_type] || ex.exercise_type
               return (
                 <button
                   key={ex.id}
-                  onClick={() => setActiveTab(i)}
-                  className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  onClick={() => goToTab(i)}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                     isActive
                       ? 'border-blue-600 text-blue-700 bg-blue-50'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  {i + 1}. {ex.title || label}
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+                    isAnswered
+                      ? 'bg-green-500 text-white'
+                      : isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {isAnswered ? <CheckCircle size={12} /> : i + 1}
+                  </span>
+                  {ex.title || label}
                 </button>
               )
             })}
@@ -850,22 +939,34 @@ const GuestSessionRunner = () => {
       </div>
 
       {/* Bottom bar */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-center">
-          {activeTab < exercises.length - 1 ? (
+      <div className="sticky bottom-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 shadow-sm pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <button
+            onClick={() => goToTab(activeTab - 1)}
+            disabled={activeTab === 0}
+            className="flex items-center gap-1 px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={18} /> Trước
+          </button>
+
+          <span className="text-xs text-gray-500">
+            Bài {activeTab + 1}/{exercises.length}
+          </span>
+
+          {!isLastTab ? (
             <button
-              onClick={() => setActiveTab(prev => prev + 1)}
-              className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+              onClick={() => goToTab(activeTab + 1)}
+              className="flex items-center gap-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
             >
-              Tiep theo <ChevronRight size={18} />
+              Tiếp theo <ChevronRight size={18} />
             </button>
           ) : (
             <button
               onClick={() => setShowConfirmSubmit(true)}
               disabled={submitting}
-              className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              <Send size={18} /> Nop bai
+              <Send size={18} /> Nộp bài
             </button>
           )}
         </div>
@@ -873,25 +974,30 @@ const GuestSessionRunner = () => {
 
       {/* Confirm submit modal */}
       {showConfirmSubmit && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Nop bai?</h3>
-            <p className="text-gray-600 text-sm mb-4">
-              Ban chac chan muon nop bai? Hay kiem tra lai cac cau tra loi.
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Nộp bài?</h3>
+            <p className="text-gray-600 text-sm">
+              Bạn chắc chắn muốn nộp bài? Sau khi nộp sẽ không sửa được câu trả lời.
             </p>
-            <div className="flex gap-3 mt-4">
+            {unansweredCount > 0 && (
+              <p className="mt-3 rounded-xl bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+                Bạn còn {unansweredCount} bài tập chưa làm.
+              </p>
+            )}
+            <div className="flex gap-3 mt-5">
               <button
                 onClick={() => setShowConfirmSubmit(false)}
                 className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
               >
-                Huy
+                Làm tiếp
               </button>
               <button
                 onClick={() => handleSubmit(false)}
                 disabled={submitting}
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
               >
-                {submitting ? (aiScoringInProgress ? 'AI dang cham diem...' : 'Dang nop...') : 'Nop bai'}
+                {submitting ? (aiScoringInProgress ? 'AI đang chấm điểm...' : 'Đang nộp...') : 'Nộp bài'}
               </button>
             </div>
           </div>

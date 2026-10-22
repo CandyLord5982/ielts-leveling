@@ -4951,7 +4951,8 @@ CREATE TABLE public.courses (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     teacher_id uuid,
-    chest_enabled boolean DEFAULT false
+    chest_enabled boolean DEFAULT false,
+    allow_guest_access boolean DEFAULT false NOT NULL
 );
 
 

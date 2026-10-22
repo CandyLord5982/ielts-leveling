@@ -11,6 +11,7 @@ import AIFillBlankEditor from '../editors/AIFillBlankEditor'
 import SimpleDropdownEditor from '../editors/SimpleDropdownEditor'
 import PronunciationEditor from '../editors/PronunciationEditor'
 import ImageHotspotEditor from '../editors/ImageHotspotEditor'
+import ColorFillEditor from '../editors/ColorFillEditor'
 import PDFWorksheetEditor from '../editors/PDFWorksheetEditor'
 import SpeakingAssessmentEditor from '../editors/SpeakingAssessmentEditor'
 import VideoUploadEditor from '../editors/VideoUploadEditor'
@@ -245,6 +246,14 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
             folderPath={getFolderPath(formData.folder_id)}
           />
         )
+      case 'color_fill':
+        return (
+          <ColorFillEditor
+            content={content}
+            onContentChange={(newContent) => handleContentChange(newContent)}
+            folderPath={getFolderPath(formData.folder_id)}
+          />
+        )
       case 'pdf_worksheet':
         return (
           <PDFWorksheetEditor
@@ -302,7 +311,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
+      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'color_fill', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
         {/* Header with actions */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
@@ -372,6 +381,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
                   <option value="ai_fill_blank">AI Fill Blank</option>
                   <option value="pronunciation">Pronunciation</option>
                   <option value="image_hotspot">Image Hotspot</option>
+                  <option value="color_fill">Color Fill</option>
                   <option value="pdf_worksheet">PDF Worksheet</option>
                   <option value="speaking_assessment">Speaking Assessment</option>
                   <option value="video_upload">Video Upload</option>

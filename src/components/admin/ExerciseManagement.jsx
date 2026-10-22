@@ -25,7 +25,8 @@ import {
   Upload,
   Download,
   Eye,
-  EyeOff
+  EyeOff,
+  Palette
 } from 'lucide-react'
 
 const ExerciseManagement = () => {
@@ -45,6 +46,7 @@ const ExerciseManagement = () => {
     'drag_drop': { icon: Copy, label: 'Drag & Drop', color: 'green' },
     'ai_fill_blank': { icon: Brain, label: 'Fill in AI Score', color: 'purple' },
     'image_hotspot': { icon: Image, label: 'Image Hotspot', color: 'cyan' },
+    'color_fill': { icon: Palette, label: 'Color Fill', color: 'rose' },
     'pdf_worksheet': { icon: Edit3, label: 'PDF Worksheet', color: 'rose' },
     'video_upload': { icon: Video, label: 'Video Upload', color: 'teal' },
     'listening_dictation': { icon: BookOpen, label: 'Listening Dictation', color: 'blue' },

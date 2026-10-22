@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import ExerciseReviewMode from './ExerciseReviewMode'
 import { splitAnswers } from '../../../utils/splitAnswers'
+import { isRegionCorrect, isTextCorrect, getQuestionFields } from '../../../utils/colorFill'
 
 const TestResultsView = ({ selectedCourse }) => {
   const [testSessions, setTestSessions] = useState([])
@@ -76,6 +77,23 @@ const TestResultsView = ({ selectedCourse }) => {
         return {
           is_correct: expected.some(ea => userAnswer.includes(ea.trim().toLowerCase())),
           correct_answer: expected.join(', ')
+        }
+      }
+      case 'color_fill': {
+        // Regions come first, text boxes continue after them
+        const regions = content?.regions || []
+        const region = regions[qi]
+        if (region) {
+          return {
+            is_correct: isRegionCorrect(region, qa.selected_answer),
+            correct_answer: region.correct_color_id
+          }
+        }
+        const field = getQuestionFields(content)[qi - regions.length]
+        if (!field) return null
+        return {
+          is_correct: isTextCorrect(field, qa.selected_answer),
+          correct_answer: field.answer
         }
       }
       case 'image_hotspot': {

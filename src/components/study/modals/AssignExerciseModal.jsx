@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../../supabase/client'
-import { X, Search, BookOpen, Mic, Edit3, HelpCircle, Plus, Check, Copy, Brain, Image, FileText, Eye } from 'lucide-react'
+import { X, Search, BookOpen, Mic, Edit3, HelpCircle, Plus, Check, Copy, Brain, Image, FileText, Eye, Palette } from 'lucide-react'
 import FolderTree from '../../admin/ExerciseBank/FolderTree'
 
 const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
@@ -28,6 +28,7 @@ const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
     { value: 'drag_drop', label: 'Drag & Drop', icon: Copy },
     { value: 'ai_fill_blank', label: 'Fill in AI Score', icon: Brain },
     { value: 'image_hotspot', label: 'Image Hotspot', icon: Image },
+    { value: 'color_fill', label: 'Color Fill', icon: Palette },
     { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText },
     { value: 'listening_dictation', label: 'Listening Dictation', icon: BookOpen }
   ]
@@ -294,6 +295,7 @@ const AssignExerciseModal = ({ sessionId, courseId, onClose, onAssigned }) => {
       drag_drop: 'drag-drop',
       ai_fill_blank: 'ai-fill-blank',
       image_hotspot: 'image-hotspot',
+      color_fill: 'color-fill',
       pdf_worksheet: 'pdf-worksheet',
       speaking_assessment: 'speaking-assessment',
       listening_dictation: 'listening-dictation'

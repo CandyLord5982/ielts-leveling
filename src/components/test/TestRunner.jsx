@@ -9,6 +9,8 @@ import { splitAnswers } from '../../utils/splitAnswers'
 import DragDropExercise from '../exercises/DragDropExercise'
 import DropdownExercise from '../exercises/DropdownExercise'
 import ImageHotspotExercise from '../exercises/ImageHotspotExercise'
+import ColorFillExercise from '../exercises/ColorFillExercise'
+import { gradeColorFill, getQuestionFields } from '../../utils/colorFill'
 import AIFillBlankExercise from '../exercises/AIFillBlankExercise'
 import PDFWorksheetExercise from '../exercises/PDFWorksheetExercise'
 import { Clock, AlertTriangle, Send, CheckCircle, ChevronRight, FileText, Play } from 'lucide-react'
@@ -19,6 +21,7 @@ const exerciseTypeLabels = {
   drag_drop: 'Drag & Drop',
   dropdown: 'Dropdown',
   image_hotspot: 'Image Hotspot',
+  color_fill: 'Color Fill',
   ai_fill_blank: 'AI Fill Blank',
   pdf_worksheet: 'PDF Worksheet'
 }
@@ -234,6 +237,41 @@ const TestRunner = () => {
             selected_answer: selectedLabelId || null,
             correct_answer: labels.find(l => l.hotspot_id === hotspot.id && l.type !== 'distractor')?.id || null,
             is_correct: isCorrect
+          })
+        })
+        return
+      }
+
+      if (ex.exercise_type === 'color_fill') {
+        const content = ex.content || {}
+        const userAnswer = exerciseAnswers || {}
+        const result = gradeColorFill(content, userAnswer)
+
+        ;(content.regions || []).forEach((region, ri) => {
+          totalQuestions++
+          if (result.byRegion[region.id]) totalCorrect++
+          questionAttempts.push({
+            exercise_id: ex.id,
+            question_index: ri,
+            exercise_type: ex.exercise_type,
+            selected_answer: userAnswer[region.id] || null,
+            correct_answer: region.correct_color_id || null,
+            is_correct: result.byRegion[region.id]
+          })
+        })
+
+        // Text boxes are graded like regions; their indexes continue after the regions
+        const regionCount = (content.regions || []).length
+        getQuestionFields(content).forEach((field, ti) => {
+          totalQuestions++
+          if (result.byText[field.id]) totalCorrect++
+          questionAttempts.push({
+            exercise_id: ex.id,
+            question_index: regionCount + ti,
+            exercise_type: ex.exercise_type,
+            selected_answer: userAnswer[field.id] || null,
+            correct_answer: field.answer || null,
+            is_correct: result.byText[field.id]
           })
         })
         return
@@ -474,6 +512,8 @@ const TestRunner = () => {
         return <DropdownExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} initialAnswers={saved} />
       case 'image_hotspot':
         return <ImageHotspotExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} initialAnswers={saved} />
+      case 'color_fill':
+        return <ColorFillExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} initialAnswers={saved} />
       case 'ai_fill_blank':
         return <AIFillBlankExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} initialAnswers={saved} />
       case 'pdf_worksheet':

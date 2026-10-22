@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { RichTextWithAudio } from '../../ui/RichTextRenderer'
 import { splitAnswers, firstAnswer } from '../../../utils/splitAnswers'
+import { getQuestionFields } from '../../../utils/colorFill'
 
 const decodeIndex = (type, idx) => {
   switch (type) {
@@ -602,6 +603,146 @@ const GenericExerciseReview = ({ qas }) => {
   )
 }
 
+const ColorFillExerciseReview = ({ exercise, qas }) => {
+  const [size, setSize] = useState(null)
+  const content = exercise?.content || {}
+  const regions = content.regions || []
+  const palette = content.palette || []
+  const textFields = getQuestionFields(content)
+  const byQI = groupQAs('color_fill', qas)
+
+  const colorById = (colorId) => palette.find(c => c.id === colorId)
+
+  const ColorChip = ({ color }) => (
+    color ? (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="w-4 h-4 rounded-full border border-gray-300" style={{ backgroundColor: color.hex }} />
+        {color.name}
+      </span>
+    ) : null
+  )
+
+  return (
+    <div className="space-y-3">
+      {content.image_url && (
+        <div className="relative w-full">
+          <img
+            src={content.image_url}
+            alt="Exercise"
+            className="w-full rounded-lg border border-gray-200 object-contain"
+            onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+          />
+          {size && (
+            <svg
+              viewBox={`0 0 ${size.w} ${size.h}`}
+              className="absolute top-0 left-0 w-full h-full"
+              style={{ pointerEvents: 'none' }}
+            >
+              {regions.map((region, ri) => {
+                const qa = byQI[ri]?.[0]
+                if (!qa) return null
+                const color = colorById(qa.selected_answer)
+                const cx = region.points.reduce((sum, p) => sum + p.x, 0) / region.points.length
+                const cy = region.points.reduce((sum, p) => sum + p.y, 0) / region.points.length
+                const radius = size.w * 0.015
+
+                return (
+                  <g key={region.id}>
+                    <polygon
+                      points={region.points.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill={color ? color.hex : 'transparent'}
+                      fillOpacity={0.6}
+                      stroke={qa.is_correct ? '#22c55e' : '#ef4444'}
+                      strokeWidth={3}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <circle cx={cx} cy={cy} r={radius} fill={qa.is_correct ? '#22c55e' : '#ef4444'} />
+                    <text
+                      x={cx}
+                      y={cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="white"
+                      fontSize={radius * 1.2}
+                      fontWeight="bold"
+                    >
+                      {ri + 1}
+                    </text>
+                  </g>
+                )
+              })}
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="space-y-1.5">
+        {regions.map((region, ri) => {
+          const qa = byQI[ri]?.[0]
+          if (!qa) return null
+          const studentColor = colorById(qa.selected_answer)
+          const correctColor = colorById(region.correct_color_id)
+
+          return (
+            <div key={region.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${
+              qa.is_correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+            }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
+                qa.is_correct ? 'bg-green-500' : 'bg-red-500'
+              }`}>
+                {ri + 1}
+              </div>
+              <span className={`font-medium ${qa.is_correct ? 'text-green-800' : 'text-red-800'}`}>
+                {studentColor ? <ColorChip color={studentColor} /> : '(no answer)'}
+              </span>
+              {!qa.is_correct && correctColor && (
+                <>
+                  <span className="text-gray-400">→</span>
+                  <span className="font-medium text-green-800"><ColorChip color={correctColor} /></span>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Text box questions: rows continue after the regions */}
+      {textFields.length > 0 && (
+        <div className="space-y-1.5">
+          {textFields.map((field, ti) => {
+            const qa = byQI[regions.length + ti]?.[0]
+            if (!qa) return null
+            const studentText = typeof qa.selected_answer === 'string' ? qa.selected_answer : ''
+
+            return (
+              <div key={field.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 rounded-lg border text-sm ${
+                qa.is_correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+              }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
+                  qa.is_correct ? 'bg-green-500' : 'bg-red-500'
+                }`}>
+                  {regions.length + ti + 1}
+                </div>
+                <span className="text-gray-600">{field.question || field.label}</span>
+                <span className={`font-medium ${qa.is_correct ? 'text-green-800' : 'text-red-800'}`}>
+                  {studentText || '(no answer)'}
+                </span>
+                {!qa.is_correct && field.answer && (
+                  <>
+                    <span className="text-gray-400">→</span>
+                    <span className="font-medium text-green-800">{splitAnswers(field.answer).join(' / ')}</span>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // --- Main component ---
 
 const ExerciseReviewMode = ({ attempt, passingScore = 70, onAttemptUpdate, onClose }) => {
@@ -740,6 +881,8 @@ const ExerciseReviewMode = ({ attempt, passingScore = 70, onAttemptUpdate, onClo
         return <AIFillBlankExerciseReview exercise={group.exercise} qas={group.qas} />
       case 'image_hotspot':
         return <ImageHotspotExerciseReview exercise={group.exercise} qas={group.qas} />
+      case 'color_fill':
+        return <ColorFillExerciseReview exercise={group.exercise} qas={group.qas} />
       case 'pdf_worksheet':
         return <PDFWorksheetExerciseReview exercise={group.exercise} qas={group.qas} />
       default:
@@ -897,6 +1040,13 @@ const ExerciseReviewMode = ({ attempt, passingScore = 70, onAttemptUpdate, onClo
                   const qa = byQI[hi]?.[0]
                   if (qa) overrideQAs.push({ qa, label: `Q${hi + 1}` })
                 })
+              } else if (exType === 'color_fill') {
+                const itemCount = (current.exercise?.content?.regions || []).length
+                  + getQuestionFields(current.exercise?.content).length
+                for (let ri = 0; ri < itemCount; ri++) {
+                  const qa = byQI[ri]?.[0]
+                  if (qa) overrideQAs.push({ qa, label: `Q${ri + 1}` })
+                }
               } else if (exType === 'multiple_choice' || exType === 'ai_fill_blank') {
                 questions.forEach((_, qi) => {
                   const qa = byQI[qi]?.[0]

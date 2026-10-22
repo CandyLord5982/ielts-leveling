@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { supabase } from '../../../supabase/client'
-import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus, Headphones } from 'lucide-react'
+import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus, Headphones, Palette } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
 import FlashcardEditor from '../editors/FlashcardEditor'
 import MultipleChoiceEditor from '../editors/MultipleChoiceEditor'
@@ -11,6 +11,7 @@ import AIFillBlankEditor from '../editors/AIFillBlankEditor'
 import SimpleDropdownEditor from '../editors/SimpleDropdownEditor'
 import PronunciationEditor from '../editors/PronunciationEditor'
 import ImageHotspotEditor from '../editors/ImageHotspotEditor'
+import ColorFillEditor from '../editors/ColorFillEditor'
 import PDFWorksheetEditor from '../editors/PDFWorksheetEditor'
 import SpeakingAssessmentEditor from '../editors/SpeakingAssessmentEditor'
 import VideoUploadEditor from '../editors/VideoUploadEditor'
@@ -42,6 +43,7 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
     { value: 'dropdown', label: 'Dropdown', icon: ChevronDown },
     { value: 'ai_fill_blank', label: 'Fill in AI Score', icon: Brain },
     { value: 'image_hotspot', label: 'Image Hotspot', icon: Image },
+    { value: 'color_fill', label: 'Color Fill', icon: Palette },
     { value: 'pdf_worksheet', label: 'PDF Worksheet', icon: FileText },
     { value: 'speaking_assessment', label: 'Speaking Assessment', icon: Mic },
     { value: 'video_upload', label: 'Video Upload', icon: Video },
@@ -181,7 +183,7 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
+      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col ${['pdf_worksheet', 'image_hotspot', 'color_fill', 'ielts_reading', 'listening_dictation', 'smart_drag_drop', 'ai_fill_blank'].includes(formData.exercise_type) ? 'max-w-6xl' : 'max-w-4xl'}`}>
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           {/* Header with actions */}
@@ -405,6 +407,14 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
               <ImageHotspotEditor
                 content={formData.content}
                 onContentChange={(content) => setFormData({ ...formData, content })}
+                folderPath={getFolderPath(formData.folder_id)}
+              />
+            )}
+
+            {formData.exercise_type === 'color_fill' && (
+              <ColorFillEditor
+                content={formData.content}
+                onContentChange={(content) => setFormData(prev => ({ ...prev, content }))}
                 folderPath={getFolderPath(formData.folder_id)}
               />
             )}

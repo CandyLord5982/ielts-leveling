@@ -17,7 +17,8 @@ import {
   FolderOpen,
   Image,
   FileText,
-  Video
+  Video,
+  Palette
 } from 'lucide-react'
 
 const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = false, allowedTypes = null }) => {
@@ -99,6 +100,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         return FileText
       case 'video_upload':
         return Video
+      case 'color_fill':
+        return Palette
       case 'ielts_reading':
         return BookOpen
       default:
@@ -130,6 +133,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         return 'Speaking Assessment'
       case 'video_upload':
         return 'Video Upload'
+      case 'color_fill':
+        return 'Color Fill'
       case 'ielts_reading':
         return 'IELTS Reading'
       default:
@@ -140,6 +145,14 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
   const getContentPreview = (exercise) => {
     const c = exercise.content
     if (!c) return 'No content yet'
+    if (exercise.exercise_type === 'color_fill') {
+      const regionCount = (c.regions || []).length
+      const questionCount = (c.text_fields || []).filter(field => field.kind !== 'label').length
+      if (regionCount === 0) return 'No regions yet'
+      return `${regionCount} region${regionCount !== 1 ? 's' : ''}`
+        + (questionCount > 0 ? ` · ${questionCount} question${questionCount !== 1 ? 's' : ''}` : '')
+        + ` · ${(c.palette || []).length} colors`
+    }
     const qs = c.questions || c.cards || c.flashcards || []
     const count = qs.length
     if (count === 0) return 'No questions yet'
@@ -205,6 +218,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
           return `/study/ai-fill-blank?exerciseId=${exercise.id}`
         case 'image_hotspot':
           return `/study/image-hotspot?exerciseId=${exercise.id}`
+        case 'color_fill':
+          return `/study/color-fill?exerciseId=${exercise.id}`
         case 'pdf_worksheet':
           return `/study/pdf-worksheet?exerciseId=${exercise.id}`
         case 'speaking_assessment':

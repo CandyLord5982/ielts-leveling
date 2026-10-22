@@ -10,6 +10,7 @@ import AIFillBlankExercise from '../exercises/AIFillBlankExercise'
 import DropdownExercise from '../exercises/DropdownExercise'
 import PronunciationExercise from '../exercises/PronunciationExercise'
 import ImageHotspotExercise from '../exercises/ImageHotspotExercise'
+import ColorFillExercise from '../exercises/ColorFillExercise'
 import PDFWorksheetExercise from '../exercises/PDFWorksheetExercise'
 import SpeakingAssessmentExercise from '../exercises/SpeakingAssessmentExercise'
 import VideoUploadExercise from '../exercises/VideoUploadExercise'
@@ -44,6 +45,7 @@ const StudyModule = () => {
       <Route path="dropdown" element={<DropdownExercise />} />
       <Route path="pronunciation" element={<PronunciationExercise />} />
       <Route path="image-hotspot" element={<ImageHotspotExercise />} />
+      <Route path="color-fill" element={<ColorFillExercise />} />
       <Route path="pdf-worksheet" element={<PDFWorksheetExercise />} />
       <Route path="speaking-assessment" element={<SpeakingAssessmentExercise />} />
       <Route path="video-upload" element={<VideoUploadExercise />} />

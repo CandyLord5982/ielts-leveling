@@ -77,6 +77,7 @@ const Layout = () => {
     '/study/pronunciation',
     '/study/drag-drop',
     '/study/image-hotspot',
+    '/study/color-fill',
     '/study/dropdown',
     '/study/ai-fill-blank',
     '/study/pdf-worksheet',

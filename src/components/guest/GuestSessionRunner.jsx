@@ -3,10 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase/client'
 import MultipleChoiceExercise from '../exercises/MultipleChoiceExercise'
 import FillBlankExercise from '../exercises/FillBlankExercise'
-import { splitAnswers } from '../../utils/splitAnswers'
+import { splitAnswers, firstAnswer } from '../../utils/splitAnswers'
 import DragDropExercise from '../exercises/DragDropExercise'
 import DropdownExercise from '../exercises/DropdownExercise'
 import ImageHotspotExercise from '../exercises/ImageHotspotExercise'
+import ColorFillExercise from '../exercises/ColorFillExercise'
+import { gradeColorFill, getQuestionFields } from '../../utils/colorFill'
 import AIFillBlankExercise from '../exercises/AIFillBlankExercise'
 import PDFWorksheetExercise from '../exercises/PDFWorksheetExercise'
 import { Clock, AlertTriangle, Send, CheckCircle, XCircle, ChevronRight, ChevronDown, FileText, Play, ArrowLeft, UserPlus } from 'lucide-react'
@@ -20,6 +22,7 @@ const exerciseTypeLabels = {
   drag_drop: 'Drag & Drop',
   dropdown: 'Dropdown',
   image_hotspot: 'Image Hotspot',
+  color_fill: 'Color Fill',
   ai_fill_blank: 'AI Fill Blank',
   pdf_worksheet: 'PDF Worksheet'
 }
@@ -141,6 +144,16 @@ const GuestSessionRunner = () => {
           const isCorrect = !isDistractor && selectedLabel?.hotspot_id === hotspot.id
           if (isCorrect) totalCorrect++
         })
+        return
+      }
+
+      if (ex.exercise_type === 'color_fill') {
+        const content = ex.content || {}
+        const result = gradeColorFill(content, exerciseAnswers || {})
+
+        // Regions and text boxes are graded items of equal weight
+        totalQuestions += result.total
+        totalCorrect += result.correct
         return
       }
 
@@ -353,6 +366,8 @@ const GuestSessionRunner = () => {
         return <DropdownExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} />
       case 'image_hotspot':
         return <ImageHotspotExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} />
+      case 'color_fill':
+        return <ColorFillExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} />
       case 'ai_fill_blank':
         return <AIFillBlankExercise key={ex.id} testMode={true} exerciseData={ex} onAnswersCollected={onCollect} />
       case 'pdf_worksheet':
@@ -465,6 +480,34 @@ const GuestSessionRunner = () => {
               correctAnswer: correctLabel?.text || '?'
             })
           }
+        })
+        return
+      }
+
+      if (ex.exercise_type === 'color_fill') {
+        const content = ex.content || {}
+        const palette = content.palette || []
+        const colorName = (colorId) => palette.find(c => c.id === colorId)?.name
+        const result = gradeColorFill(content, exerciseAnswers || {})
+
+        ;(content.regions || []).forEach((region, ri) => {
+          if (result.byRegion[region.id]) return
+          incorrect.push({
+            exercise: ex.title || 'Color Fill',
+            question: region.label || `Area ${ri + 1}`,
+            yourAnswer: colorName((exerciseAnswers || {})[region.id]) || '(khong tra loi)',
+            correctAnswer: colorName(region.correct_color_id) || '?'
+          })
+        })
+
+        getQuestionFields(content).forEach((field) => {
+          if (result.byText[field.id]) return
+          incorrect.push({
+            exercise: ex.title || 'Color Fill',
+            question: field.question || field.label,
+            yourAnswer: (exerciseAnswers || {})[field.id] || '(khong tra loi)',
+            correctAnswer: firstAnswer(field.answer) || '?'
+          })
         })
         return
       }

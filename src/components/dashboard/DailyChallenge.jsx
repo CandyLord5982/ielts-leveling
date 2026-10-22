@@ -207,6 +207,9 @@ const DailyChallenge = () => {
       case 'image_hotspot':
         exerciseUrl = `/study/image-hotspot`
         break
+      case 'color_fill':
+        exerciseUrl = `/study/color-fill`
+        break
       case 'pdf_worksheet':
         exerciseUrl = `/study/pdf-worksheet`
         break

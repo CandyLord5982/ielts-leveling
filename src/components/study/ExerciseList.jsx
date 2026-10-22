@@ -66,6 +66,7 @@ import {
   Video,
   Headphones,
   Users,
+  Palette,
 } from "lucide-react";
 
 import { getMapTheme } from "../../config/mapThemes";
@@ -758,6 +759,7 @@ const ExerciseList = () => {
         />
       ),
       video_upload: (props) => <Video {...props} />,
+      color_fill: (props) => <Palette {...props} />,
       ielts_reading: (props) => <BookOpen {...props} />,
       listening_dictation: (props) => <Headphones {...props} />,
     };
@@ -771,6 +773,7 @@ const ExerciseList = () => {
       multiple_choice: "text-orange-600 bg-orange-100",
       dropdown: "text-indigo-600 bg-indigo-100",
       image_hotspot: "text-cyan-600 bg-cyan-100",
+      color_fill: "text-pink-600 bg-pink-100",
       pdf_worksheet: "text-rose-600 bg-rose-100",
       speaking_assessment: "text-violet-600 bg-violet-100",
       video_upload: "text-teal-600 bg-teal-100",
@@ -873,6 +876,7 @@ const ExerciseList = () => {
       ai_fill_blank: "/study/ai-fill-blank",
       pronunciation: "/study/pronunciation",
       image_hotspot: "/study/image-hotspot",
+      color_fill: "/study/color-fill",
       pdf_worksheet: "/study/pdf-worksheet",
       speaking_assessment: "/study/speaking-assessment",
       video_upload: "/study/video-upload",

@@ -25,6 +25,8 @@ const CelebrationScreen = ({
   isRetryMode = false,
   wrongQuestionsCount = 0,
   onRetryWrongQuestions,
+  onReviewAnswers,
+  reviewButtonText = "Xem đáp án",
   onBackToList,
   backButtonText = "Quay lại danh sách bài tập",
   exerciseId,
@@ -323,6 +325,16 @@ const CelebrationScreen = ({
           >
             <RotateCcw className="w-5 h-5" />
             Ôn lại {wrongQuestionsCount} câu sai
+          </button>
+        )}
+
+        {/* Optional: look at the correct answers before leaving */}
+        {onReviewAnswers && (
+          <button
+            onClick={onReviewAnswers}
+            className="mb-3 block mx-auto py-3 px-16 bg-white text-cyan-600 rounded-full font-bold shadow border-2 border-cyan-500 hover:bg-cyan-50 transition-all"
+          >
+            {reviewButtonText}
           </button>
         )}
 

@@ -255,9 +255,10 @@ const StudentEnrollmentManagement = () => {
     return enrollments.map(enrollment => enrollment.student_id);
   };
 
+  // full_name can be null for users who never set a name
   const filteredStudents = students.filter(student =>
-    student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (student.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (student.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const availableStudents = filteredStudents.filter(

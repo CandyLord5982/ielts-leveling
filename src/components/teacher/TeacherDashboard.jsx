@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabase/client';
 import { useAuth } from '../../hooks/useAuth';
+import { useExerciseBankAccess } from '../../hooks/useExerciseBankAccess';
 import StudentExerciseMatrix from './reports/StudentExerciseMatrix';
 import UnitProgressView from './reports/UnitProgressView';
 import LessonReportView from './reports/LessonReportView';
@@ -22,6 +23,7 @@ import VideoSubmissionReview from './VideoSubmissionReview';
 
 const TeacherDashboard = () => {
   const { user, isAdmin, profile, loading: authLoading } = useAuth();
+  const { canAccess: canAccessExerciseBank } = useExerciseBankAccess();
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(() => localStorage.getItem('teacherSelectedCourse') || '');
@@ -463,13 +465,13 @@ const TeacherDashboard = () => {
           <Users className="w-4 h-4" />
           Điểm danh
         </button>
-        <button
+        {canAccessExerciseBank && <button
           onClick={() => navigate('/teacher/exercise-bank')}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
           <BookOpen className="w-4 h-4" />
           Exercise Bank
-        </button>
+        </button>}
         <button
           onClick={() => navigate('/teacher/weakness-analysis')}
           className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
@@ -656,8 +658,16 @@ const TeacherDashboard = () => {
                 const ids = personalExerciseIds[enrollment.student_id] || [];
                 return ids.length > 0;
               }).map((enrollment) => {
-                const _s = enrollment.student;
-                const student = { ..._s, full_name: _s.real_name || _s.full_name, avatar_url: _s.real_avatar_url || _s.avatar_url };
+                const studentProfile = enrollment.student;
+                const student = {
+                  ...studentProfile,
+                  id: studentProfile?.id || enrollment.student_id,
+                  full_name: studentProfile?.real_name?.trim()
+                    || studentProfile?.full_name?.trim()
+                    || studentProfile?.email?.trim()
+                    || 'Unknown Student',
+                  avatar_url: studentProfile?.real_avatar_url || studentProfile?.avatar_url,
+                };
                 const stats = getStudentStats(student.id);
                 const detailedProgress = getStudentDetailedProgress(student.id);
                 const isExpanded = expandedStudent === student.id;

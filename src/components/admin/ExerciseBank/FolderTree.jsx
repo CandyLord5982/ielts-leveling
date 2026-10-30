@@ -19,7 +19,7 @@ import {
 import CreateFolderModal from './CreateFolderModal'
 import EditFolderModal from './EditFolderModal'
 
-const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder, onFolderUpdate, readOnly = false, isAdmin = false }) => {
+const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder, onFolderUpdate, readOnly = false, isAdmin = false, selectableFolderIds = null }) => {
   const [expandedFolders, setExpandedFolders] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('exerciseBank_expandedFolders') || '[]')
@@ -106,6 +106,7 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
     const hasChildren = folder.children && folder.children.length > 0
     const isExpanded = expandedFolders.has(folder.id)
     const isSelected = selectedFolder?.id === folder.id
+    const canSelect = selectableFolderIds === null || selectableFolderIds.includes(folder.id)
 
     return (
       <div key={folder.id}>
@@ -117,7 +118,7 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
           style={{ paddingLeft: `${level * 20 + 8}px` }}
           onClick={() => {
             if (hasChildren) toggleFolder(folder.id)
-            onSelectFolder(folder)
+            if (canSelect) onSelectFolder(folder)
           }}
         >
           {/* Expand/Collapse Button */}
@@ -150,7 +151,7 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
           </div>
 
           {/* Context Menu Button */}
-          {!readOnly && (
+          {!readOnly && canSelect && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -164,7 +165,7 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
         </div>
 
         {/* Context Menu */}
-        {!readOnly && contextMenu?.id === folder.id && (
+        {!readOnly && canSelect && contextMenu?.id === folder.id && (
           <div className="absolute right-4 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
             <button
               onClick={() => {
@@ -321,7 +322,8 @@ FolderTree.propTypes = {
   onSelectFolder: PropTypes.func.isRequired,
   onFolderUpdate: PropTypes.func,
   readOnly: PropTypes.bool,
-  isAdmin: PropTypes.bool
+  isAdmin: PropTypes.bool,
+  selectableFolderIds: PropTypes.arrayOf(PropTypes.string)
 }
 
 export default FolderTree

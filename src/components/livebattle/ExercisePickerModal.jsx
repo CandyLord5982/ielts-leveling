@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../supabase/client'
+import { useAuth } from '../../hooks/useAuth'
+import { useExerciseBankAccess } from '../../hooks/useExerciseBankAccess'
+import { getExerciseBankFolderScope } from '../../utils/exerciseBankAccess'
 import { X, Search, BookOpen, HelpCircle, Edit3, Mic, Copy, Brain, Image, FileText, Eye } from 'lucide-react'
 import FolderTree from '../admin/ExerciseBank/FolderTree'
 
@@ -30,94 +33,106 @@ const getExerciseTypeLabel = (type) => {
 }
 
 const ExercisePickerModal = ({ onSelect, onClose }) => {
-  const [exercises, setExercises] = useState([])
-  const [filteredExercises, setFilteredExercises] = useState([])
+  const { user } = useAuth()
+  const { access, loading: accessLoading, error: accessError, canAccess } = useExerciseBankAccess()
+  const accessKey = JSON.stringify([user?.id, accessLoading, access])
+  const accessAllowed = !accessLoading && !accessError && canAccess
+  const accessKeyRef = useRef(accessKey)
+  accessKeyRef.current = accessKey
+  const [folderResult, setFolderResult] = useState({ key: null, rows: [] })
+  const scope = useMemo(() => getExerciseBankFolderScope(
+    folderResult.key === accessKey ? folderResult.rows : [], access
+  ), [folderResult, accessKey, access])
+  const foldersLoaded = accessAllowed && folderResult.key === accessKey
+  const folders = foldersLoaded ? scope.folders : []
+  const folderIdsKey = JSON.stringify(scope.folderIds)
+  const [exerciseResult, setExerciseResult] = useState({ key: null, rows: [] })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedType, setSelectedType] = useState('all')
   const [selectedFolder, setSelectedFolder] = useState(null)
-  const [folders, setFolders] = useState([])
   const [folderCounts, setFolderCounts] = useState({})
+  const exerciseKey = JSON.stringify([accessKey, folderIdsKey, selectedFolder?.id])
+  const exerciseKeyRef = useRef(exerciseKey)
+  exerciseKeyRef.current = exerciseKey
+  const exercises = useMemo(() => (
+    accessAllowed && exerciseResult.key === exerciseKey ? exerciseResult.rows : []
+  ), [accessAllowed, exerciseResult, exerciseKey])
 
   useEffect(() => {
-    fetchFolders()
-    fetchFolderCounts()
-  }, [])
+    let cancelled = false
+    setSelectedFolder(null)
+    setFolderCounts({})
+    setError('')
+    if (!accessAllowed) return
+
+    const loadFolders = async () => {
+      const { data, error: folderError } = await supabase
+        .from('exercise_folders').select('*').order('sort_order')
+      if (cancelled || accessKeyRef.current !== accessKey) return
+      if (folderError) throw folderError
+      setFolderResult({ key: accessKey, rows: data || [] })
+    }
+    loadFolders().catch(() => {
+      if (!cancelled && accessKeyRef.current === accessKey) setError('Failed to load Exercise Bank folders')
+    })
+    return () => { cancelled = true }
+  }, [accessKey, accessAllowed])
 
   useEffect(() => {
-    if (selectedFolder) {
-      fetchExercises()
-    } else {
-      setExercises([])
-    }
-  }, [selectedFolder])
+    let cancelled = false
+    const folderIds = JSON.parse(folderIdsKey)
+    setFolderCounts({})
+    if (!foldersLoaded || (folderIds && folderIds.length === 0)) return
 
-  useEffect(() => {
-    filterExercises()
-  }, [exercises, searchTerm, selectedType])
-
-  const fetchExercises = async () => {
-    try {
-      setLoading(true)
-      let query = supabase
-        .from('exercises')
-        .select(`*, folder:exercise_folders(id, name, color)`)
-        .eq('is_in_bank', true)
-        .eq('is_active', true)
-
-      if (selectedFolder) {
-        query = query.eq('folder_id', selectedFolder.id)
-      }
-
-      query = query.order('created_at', { ascending: false })
-      const { data, error } = await query
-      if (error) throw error
-      setExercises(data || [])
-    } catch (err) {
-      console.error('Error fetching exercises:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchFolders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('exercise_folders')
-        .select('*')
-        .order('sort_order')
-      if (error) throw error
-      setFolders(data || [])
-    } catch (err) {
-      console.error('Error fetching folders:', err)
-    }
-  }
-
-  const fetchFolderCounts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('exercises')
-        .select('folder_id')
-        .eq('is_in_bank', true)
-        .eq('is_active', true)
-      if (error) throw error
-
-      const counts = {}
-      let totalCount = 0
-      data?.forEach(ex => {
-        totalCount++
-        if (ex.folder_id) {
-          counts[ex.folder_id] = (counts[ex.folder_id] || 0) + 1
-        }
+    const loadCounts = async () => {
+      let query = supabase.from('exercises').select('folder_id')
+        .eq('is_in_bank', true).eq('is_active', true)
+      if (folderIds) query = query.in('folder_id', folderIds)
+      const { data, error: countError } = await query
+      if (cancelled || accessKeyRef.current !== accessKey) return
+      if (countError) throw countError
+      const counts = { all: data?.length || 0 }
+      data?.forEach(exercise => {
+        if (exercise.folder_id) counts[exercise.folder_id] = (counts[exercise.folder_id] || 0) + 1
       })
-      counts['all'] = totalCount
       setFolderCounts(counts)
-    } catch (err) {
-      console.error('Error fetching folder counts:', err)
     }
-  }
+    loadCounts().catch(() => {
+      if (!cancelled && accessKeyRef.current === accessKey) setError('Failed to load Exercise Bank counts')
+    })
+    return () => { cancelled = true }
+  }, [accessKey, foldersLoaded, folderIdsKey])
 
-  const filterExercises = () => {
+  useEffect(() => {
+    let cancelled = false
+    const folderIds = JSON.parse(folderIdsKey)
+    const folderId = selectedFolder?.id
+    if (!foldersLoaded || !folderId || (folderIds && !folderIds.includes(folderId))) {
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    const loadExercises = async () => {
+      let query = supabase.from('exercises').select('*, folder:exercise_folders(id, name, color)')
+        .eq('is_in_bank', true).eq('is_active', true).eq('folder_id', folderId)
+      if (folderIds) query = query.in('folder_id', folderIds)
+      const { data, error: exerciseError } = await query.order('created_at', { ascending: false })
+      if (cancelled || exerciseKeyRef.current !== exerciseKey) return
+      if (exerciseError) throw exerciseError
+      setExerciseResult({ key: exerciseKey, rows: data || [] })
+    }
+    loadExercises().catch(() => {
+      if (!cancelled && exerciseKeyRef.current === exerciseKey) setError('Failed to load exercises from bank')
+    }).finally(() => {
+      if (!cancelled && exerciseKeyRef.current === exerciseKey) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [accessKey, exerciseKey, foldersLoaded, folderIdsKey, selectedFolder?.id])
+
+  const filteredExercises = useMemo(() => {
     let filtered = exercises.filter(ex => {
       if (!supportedTypes.includes(ex.exercise_type)) return false
       const questions = ex.content?.questions
@@ -135,8 +150,8 @@ const ExercisePickerModal = ({ onSelect, onClose }) => {
       filtered = filtered.filter(ex => ex.exercise_type === selectedType)
     }
 
-    setFilteredExercises(filtered)
-  }
+    return filtered
+  }, [exercises, searchTerm, selectedType])
 
   const handlePreview = (e, exercise) => {
     e.stopPropagation()
@@ -183,10 +198,11 @@ const ExercisePickerModal = ({ onSelect, onClose }) => {
           <div className="w-64 border-r border-gray-200 overflow-y-auto flex-shrink-0 bg-white">
             <FolderTree
               folders={folders}
-              folderCounts={folderCounts}
-              selectedFolder={selectedFolder}
+              folderCounts={foldersLoaded ? folderCounts : {}}
+              selectedFolder={foldersLoaded ? selectedFolder : null}
               onSelectFolder={setSelectedFolder}
               readOnly
+              selectableFolderIds={scope.folderIds}
             />
           </div>
 
@@ -219,7 +235,16 @@ const ExercisePickerModal = ({ onSelect, onClose }) => {
 
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4">
-              {!selectedFolder ? (
+              {error && (
+                <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+              )}
+              {accessLoading ? (
+                <p className="text-center py-12 text-sm text-gray-500">Checking Exercise Bank access...</p>
+              ) : accessError || !canAccess ? (
+                <p className="text-center py-12 text-sm text-gray-600">{accessError ? 'Unable to check Exercise Bank access. Please try again.' : 'You do not have access to the Exercise Bank. Contact an administrator.'}</p>
+              ) : !foldersLoaded && !error ? (
+                <p className="text-center py-12 text-sm text-gray-500">Loading folders...</p>
+              ) : !selectedFolder ? (
                 <div className="text-center py-12">
                   <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <h3 className="text-base font-medium text-gray-900 mb-1">Select a folder</h3>

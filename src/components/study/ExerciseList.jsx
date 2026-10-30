@@ -443,7 +443,7 @@ const ExerciseList = () => {
 
       // Extract exercises from assignments
       const assignments = exercisesResult.data || [];
-      const exercises = assignments.map((assignment) => ({
+      const exercises = assignments.filter((assignment) => assignment.exercises?.id).map((assignment) => ({
         ...assignment.exercises,
         assignment_id: assignment.id,
         order_index: assignment.order_index,

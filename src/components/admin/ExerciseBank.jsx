@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import PropTypes from 'prop-types'
 import { supabase } from '../../supabase/client'
+import { useExerciseBankAccess } from '../../hooks/useExerciseBankAccess'
+import { getExerciseBankFolderScope } from '../../utils/exerciseBankAccess'
 import {
   FolderOpen,
   Plus,
@@ -12,27 +15,35 @@ import {
   HelpCircle,
   Copy,
   Brain,
-  Video
+  Video,
+  Shield,
+  Lock
 } from 'lucide-react'
 import FolderTree from './ExerciseBank/FolderTree'
 import ExerciseBankCard from './ExerciseBank/ExerciseBankCard'
 import CreateExerciseModal from './ExerciseBank/CreateExerciseModal'
 import CreateFolderModal from './ExerciseBank/CreateFolderModal'
 import EditExerciseModal from './ExerciseBank/EditExerciseModal'
+import ExerciseBankAccessModal from './ExerciseBank/ExerciseBankAccessModal'
 
-const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }) => {
+const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
+  const { access, loading: accessLoading, error: accessError, canAccess, isAdmin, userId, accessKey, refreshAccess } = useExerciseBankAccess()
   const [folders, setFolders] = useState([])
   const [exercises, setExercises] = useState([])
   const [folderCounts, setFolderCounts] = useState({})
   const [selectedFolder, _setSelectedFolder] = useState(null)
-  const savedFolderIdRef = React.useRef(localStorage.getItem('exerciseBank_selectedFolderId'))
+  const storageKey = `exerciseBank_selectedFolderId:${userId || ''}`
+  const scope = useMemo(() => getExerciseBankFolderScope(folders, access), [folders, access])
+  const [dataKey, setDataKey] = useState('')
+  const dataReady = dataKey === accessKey && !accessLoading
 
   const setSelectedFolder = (folder) => {
+    if (folder && scope.folderIds !== null && !scope.folderIds.includes(folder.id)) return
     _setSelectedFolder(folder)
     if (folder) {
-      localStorage.setItem('exerciseBank_selectedFolderId', folder.id)
+      localStorage.setItem(storageKey, folder.id)
     } else {
-      localStorage.removeItem('exerciseBank_selectedFolderId')
+      localStorage.removeItem(storageKey)
     }
   }
   const [loading, setLoading] = useState(true)
@@ -42,149 +53,121 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
   const [showCreateExercise, setShowCreateExercise] = useState(false)
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [showEditExercise, setShowEditExercise] = useState(false)
+  const [showAccess, setShowAccess] = useState(false)
   const [editingExercise, setEditingExercise] = useState(null)
-  const [selectedExercises, setSelectedExercises] = useState([])
   const [foldersLoaded, setFoldersLoaded] = useState(false)
+  const [folderRevision, setFolderRevision] = useState(0)
+  const [exerciseRevision, setExerciseRevision] = useState(0)
+  const [loadError, setLoadError] = useState('')
+  const [totalExercises, setTotalExercises] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
   const PAGE_SIZE = 20
+  const fetchFolders = useCallback(() => setFolderRevision(value => value + 1), [])
+  const fetchExercises = useCallback(() => setExerciseRevision(value => value + 1), [])
 
   useEffect(() => {
-    fetchFolders()
-    fetchFolderCounts()
-  }, [])
+    let cancelled = false
+    setFolders([])
+    setExercises([])
+    setFolderCounts({})
+    setFoldersLoaded(false)
+    setDataKey('')
+    _setSelectedFolder(null)
+    setShowCreateExercise(false)
+    setShowCreateFolder(false)
+    setShowEditExercise(false)
+    setEditingExercise(null)
+    setLoadError('')
+    if (accessLoading || !canAccess) return
+
+    const loadFolders = async () => {
+      try {
+        const { data, error } = await supabase.from('exercise_folders').select('*').order('sort_order')
+        if (error) throw error
+        if (cancelled) return
+        const nextScope = getExerciseBankFolderScope(data || [], access)
+        const savedId = localStorage.getItem(storageKey)
+        const selectable = nextScope.folders.filter(folder => nextScope.folderIds === null || nextScope.folderIds.includes(folder.id))
+        const nextFolder = selectable.find(folder => folder.id === savedId) || selectable[0] || null
+        setFolders(nextScope.folders)
+        _setSelectedFolder(nextFolder)
+        if (nextFolder) localStorage.setItem(storageKey, nextFolder.id)
+        else localStorage.removeItem(storageKey)
+        setDataKey(accessKey)
+        setFoldersLoaded(true)
+      } catch (error) {
+        if (!cancelled) setLoadError(error.message || 'Could not load folders.')
+      }
+    }
+    loadFolders()
+    return () => { cancelled = true }
+  }, [accessLoading, canAccess, accessKey, access, folderRevision, storageKey])
 
   useEffect(() => {
-    if (!foldersLoaded) return
     setCurrentPage(0)
-  }, [selectedFolder, searchTerm, filterType])
+  }, [selectedFolder, searchTerm, filterType, accessKey])
 
   useEffect(() => {
-    if (!foldersLoaded) return
-    fetchExercises()
-    fetchFolderCounts()
-  }, [selectedFolder, searchTerm, filterType, currentPage])
-
-  const fetchFolders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('exercise_folders')
-        .select('*')
-        .order('sort_order')
-
-      if (error) throw error
-      setFolders(data || [])
-      // Restore saved folder or default to the first root folder
-      if (data?.length > 0 && !selectedFolder) {
-        const savedId = savedFolderIdRef.current
-        const savedFolder = savedId ? data.find(f => f.id === savedId) : null
-        if (savedFolder) {
-          setSelectedFolder(savedFolder)
-        } else {
-          const rootFolders = data.filter(f => !f.parent_folder_id).sort((a, b) => a.sort_order - b.sort_order)
-          if (rootFolders.length > 0) {
-            setSelectedFolder(rootFolders[0])
-          }
-        }
-      }
-      setFoldersLoaded(true)
-    } catch (error) {
-      console.error('Error fetching folders:', error)
-    }
-  }
-
-  const fetchFolderCounts = async () => {
-    try {
-      // Get total count
-      const { count: totalCount, error: totalError } = await supabase
-        .from('exercises')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_in_bank', true)
-        .eq('is_active', true)
-
-      if (totalError) throw totalError
-
-      const counts = {}
-      if (totalCount) counts['all'] = totalCount
-
-      // Batch folder count queries (5 at a time to avoid 503)
-      for (let i = 0; i < folders.length; i += 5) {
-        const batch = folders.slice(i, i + 5)
-        const results = await Promise.all(
-          batch.map(folder =>
-            supabase
-              .from('exercises')
-              .select('*', { count: 'exact', head: true })
-              .eq('is_in_bank', true)
-              .eq('is_active', true)
-              .eq('folder_id', folder.id)
-              .then(({ count }) => ({ id: folder.id, count }))
-          )
-        )
-        results.forEach(({ id, count }) => {
-          if (count) counts[id] = count
-        })
-      }
-
-      setFolderCounts(counts)
-    } catch (error) {
-      console.error('Error fetching folder counts:', error)
-    }
-  }
-
-  const fetchExercises = async () => {
-    try {
-      setLoading(true)
-      let query = supabase
-        .from('exercises')
-        .select('*')
-        .eq('is_in_bank', true)
-
-      // Filter by folder
-      if (selectedFolder) {
-        query = query.eq('folder_id', selectedFolder.id)
-      }
-
-      // Filter by type
-      if (filterType !== 'all') {
-        query = query.eq('exercise_type', filterType)
-      }
-
-      // Search
-      if (searchTerm) {
-        query = query.ilike('title', `%${searchTerm}%`)
-      }
-
-      query = query.order('created_at', { ascending: false })
-
-      const from = currentPage * PAGE_SIZE
-      const to = from + PAGE_SIZE - 1
-      query = query.range(from, to)
-
-      const { data, error } = await query
-
-      if (error) throw error
-      setExercises(data || [])
-    } catch (error) {
-      console.error('Error fetching exercises:', error)
-    } finally {
+    if (!foldersLoaded || !dataReady || !canAccess) return
+    let cancelled = false
+    setExercises([])
+    if (!scope.canAccess) {
+      setTotalExercises(0)
       setLoading(false)
+      return
     }
-  }
+    const loadExercises = async () => {
+      setLoading(true)
+      setLoadError('')
+      try {
+        let query = supabase.from('exercises').select('*', { count: 'exact' }).eq('is_in_bank', true).eq('is_active', true)
+        if (scope.folderIds !== null) query = query.in('folder_id', scope.folderIds)
+        if (selectedFolder) query = query.eq('folder_id', selectedFolder.id)
+        if (filterType !== 'all') query = query.eq('exercise_type', filterType)
+        if (searchTerm) query = query.ilike('title', `%${searchTerm}%`)
+        const { data, count, error } = await query.order('created_at', { ascending: false }).range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
+        if (error) throw error
+        if (!cancelled) {
+          setExercises(data || [])
+          setTotalExercises(count || 0)
+        }
+      } catch (error) {
+        if (!cancelled) setLoadError(error.message || 'Could not load exercises.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadExercises()
+    return () => { cancelled = true }
+  }, [foldersLoaded, dataReady, canAccess, scope, selectedFolder, searchTerm, filterType, currentPage, exerciseRevision])
 
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'flashcard':
-        return BookOpen
-      case 'pronunciation':
-        return Mic
-      case 'fill_blank':
-        return Edit3
-      case 'multiple_choice':
-        return HelpCircle
-      default:
-        return BookOpen
+  useEffect(() => {
+    if (!foldersLoaded || !dataReady || !scope.canAccess) return
+    let cancelled = false
+    const loadCounts = async () => {
+      try {
+        let totalQuery = supabase.from('exercises').select('id', { count: 'exact', head: true }).eq('is_in_bank', true).eq('is_active', true)
+        if (scope.folderIds !== null) totalQuery = totalQuery.in('folder_id', scope.folderIds)
+        const { count, error } = await totalQuery
+        if (error) throw error
+        const counts = { all: count || 0 }
+        const countableFolders = scope.folders.filter(folder => scope.folderIds === null || scope.folderIds.includes(folder.id))
+        for (let i = 0; i < countableFolders.length && !cancelled; i += 5) {
+          const results = await Promise.all(countableFolders.slice(i, i + 5).map(async folder => {
+            const { count, error } = await supabase.from('exercises').select('id', { count: 'exact', head: true }).eq('is_in_bank', true).eq('is_active', true).eq('folder_id', folder.id)
+            if (error) throw error
+            return [folder.id, count || 0]
+          }))
+          Object.assign(counts, Object.fromEntries(results))
+        }
+        if (!cancelled) setFolderCounts(counts)
+      } catch (error) {
+        if (!cancelled) setLoadError(error.message || 'Could not load exercise counts.')
+      }
     }
-  }
+    loadCounts()
+    return () => { cancelled = true }
+  }, [foldersLoaded, dataReady, scope, exerciseRevision])
 
   const handleCreateExercise = () => {
     setShowCreateExercise(true)
@@ -233,13 +216,40 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
 
     const path = []
     let current = selectedFolder
+    const visited = new Set()
 
-    while (current) {
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id)
       path.unshift(current)
       current = folders.find(f => f.id === current.parent_folder_id)
     }
 
     return path
+  }
+
+  if (accessLoading || (canAccess && !dataReady && !loadError)) {
+    return <div className="p-12 text-center text-gray-500" role="status">Loading Exercise Bank...</div>
+  }
+
+  if (accessError || (!dataReady && loadError)) {
+    return (
+      <div className="p-12 text-center">
+        <Lock className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+        <h2 className="text-lg font-semibold text-gray-900">Could not load Exercise Bank</h2>
+        <p className="text-sm text-red-600 mt-2" role="alert">{accessError || loadError}</p>
+        <button onClick={() => { refreshAccess(); fetchFolders() }} className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white">Try again</button>
+      </div>
+    )
+  }
+
+  if (!canAccess || (dataReady && !scope.canAccess)) {
+    return (
+      <div className="p-12 text-center">
+        <Lock className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+        <h2 className="text-lg font-semibold text-gray-900">Exercise Bank access required</h2>
+        <p className="text-sm text-gray-500 mt-2">Ask an administrator to grant access to the bank or specific folders.</p>
+      </div>
+    )
   }
 
   return (
@@ -250,6 +260,12 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Exercise Bank</h2>
+              {isAdmin && (
+                <button onClick={() => setShowAccess(true)} className="flex items-center gap-1 px-2 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg" title="Manage teacher access">
+                  <Shield className="w-4 h-4" />
+                  Access
+                </button>
+              )}
               {!readOnly && (
                 <button
                   onClick={handleCreateFolder}
@@ -264,13 +280,14 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
 
           <div className="flex-1 overflow-auto">
             <FolderTree
-              folders={folders}
+              folders={scope.folders}
               folderCounts={folderCounts}
               selectedFolder={selectedFolder}
               onSelectFolder={setSelectedFolder}
               onFolderUpdate={fetchFolders}
               readOnly={readOnly}
               isAdmin={isAdmin}
+              selectableFolderIds={scope.folderIds}
             />
           </div>
         </div>
@@ -279,17 +296,21 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <div className="bg-white border-b border-gray-200 p-4">
+            {access.mode === 'folders' && (
+              <p className="mb-3 flex items-center gap-2 text-sm text-gray-500"><Lock className="w-4 h-4" />Only folders shared with you are available.</p>
+            )}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
                 <FolderOpen className="w-5 h-5 text-gray-500" />
                 <nav className="flex items-center space-x-2 text-sm">
                   <span className="text-gray-500">Exercise Bank</span>
-                  {breadcrumbs().map((folder, index) => (
+                  {breadcrumbs().map(folder => (
                     <React.Fragment key={folder.id}>
                       <span className="text-gray-400">/</span>
                       <button
                         onClick={() => setSelectedFolder(folder)}
-                        className="text-blue-600 hover:text-blue-800"
+                        disabled={scope.folderIds !== null && !scope.folderIds.includes(folder.id)}
+                        className="text-blue-600 hover:text-blue-800 disabled:text-gray-500 disabled:cursor-default"
                       >
                         {folder.name}
                       </button>
@@ -355,6 +376,12 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
 
           {/* Exercise Grid/List */}
           <div className="flex-1 overflow-auto p-4">
+            {loadError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm" role="alert">
+                {loadError}
+                <button onClick={fetchExercises} className="ml-3 underline">Try again</button>
+              </div>
+            )}
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[...Array(6)].map((_, i) => (
@@ -375,12 +402,12 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
                     : 'Start by creating your first exercise'
                   }
                 </p>
-                <button
+                {(!readOnly || allowedTypes) && scope.canAccess && <button
                   onClick={handleCreateExercise}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Create Exercise
-                </button>
+                </button>}
               </div>
             ) : (
               <>
@@ -404,10 +431,7 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
 
                 {/* Pagination */}
                 {(() => {
-                  const totalForFolder = selectedFolder
-                    ? (folderCounts[selectedFolder.id] || 0)
-                    : (folderCounts['all'] || 0)
-                  const totalPages = Math.ceil(totalForFolder / PAGE_SIZE)
+                  const totalPages = Math.ceil(totalExercises / PAGE_SIZE)
                   if (totalPages <= 1) return null
                   return (
                     <div className="flex items-center justify-center space-x-4 mt-6 pb-4">
@@ -438,9 +462,16 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
       </div>
 
       {/* Modals */}
+      {showAccess && isAdmin && (
+        <ExerciseBankAccessModal
+          folders={scope.folders}
+          onClose={() => setShowAccess(false)}
+          onSaved={() => window.dispatchEvent(new Event('exercise-bank-access-updated'))}
+        />
+      )}
       {showCreateExercise && (
         <CreateExerciseModal
-          folders={folders}
+          folders={scope.folders.filter(folder => scope.folderIds === null || scope.folderIds.includes(folder.id))}
           selectedFolder={selectedFolder}
           onClose={() => setShowCreateExercise(false)}
           onCreated={handleExerciseCreated}
@@ -453,6 +484,7 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
           parentFolder={selectedFolder}
           onClose={() => setShowCreateFolder(false)}
           onCreated={handleFolderCreated}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -466,6 +498,11 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null, isAdmin = false }
       )}
     </div>
   )
+}
+
+ExerciseBank.propTypes = {
+  readOnly: PropTypes.bool,
+  allowedTypes: PropTypes.arrayOf(PropTypes.string),
 }
 
 export default ExerciseBank

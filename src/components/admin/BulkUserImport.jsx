@@ -52,7 +52,7 @@ const BulkUserImport = ({ onClose, onSuccess }) => {
 
     setImporting(true)
     try {
-      const { data, error } = await supabase.functions.invoke('bulk-create-users', {
+      const { data, error } = await supabase.functions.invoke('hyper-responder', {
         body: { users: [singleUser] }
       })
 
@@ -169,7 +169,7 @@ const BulkUserImport = ({ onClose, onSuccess }) => {
 
     try {
       // Call Supabase Edge Function to create users
-      const { data, error } = await supabase.functions.invoke('bulk-create-users', {
+      const { data, error } = await supabase.functions.invoke('hyper-responder', {
         body: { users }
       })
 

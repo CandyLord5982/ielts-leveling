@@ -70,6 +70,7 @@ const Leaderboard = () => {
     catch: 'Hungry Pet',
     flappy: 'Flappy Pet',
     astroblast: 'Astro Blast',
+    dash: 'Pet Dash',
     matchgame: 'Match Up',
     wordtype: 'Word Type',
     bombparty: 'Bomb Defuse',

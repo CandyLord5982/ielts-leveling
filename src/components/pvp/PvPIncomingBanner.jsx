@@ -627,6 +627,8 @@ import { usePet as usePetHook } from "../../hooks/usePet";
 import PetWhackMole from "../pet/games/PetWhackMole";
 import PetWordScramble from "../pet/games/PetWordScramble";
 import PetAstroBlast from "../pet/games/PetAstroBlast";
+import PetDash from "../pet/games/PetDash";
+import { normalizeDashWords } from "../../utils/petDash";
 import PetMatchGame from "../pet/games/PetMatchGame";
 import PetFlappyGame from "../pet/games/PetFlappyGame";
 import PetWordType from "../pet/games/PetWordType";
@@ -647,6 +649,7 @@ const PvPResponseModal = ({ challenge, onClose }) => {
   const [step, setStep] = useState("ready"); // ready | playing | result
   const [myScore, setMyScore] = useState(null);
   const [wordBank, setWordBank] = useState([]);
+  const [dashWordBank, setDashWordBank] = useState([]);
   const [questionBank, setQuestionBank] = useState([]);
   const [saving, setSaving] = useState(false);
   const [wordBankLoading, setWordBankLoading] = useState(true);
@@ -673,6 +676,7 @@ const PvPResponseModal = ({ challenge, onClose }) => {
         .eq("is_active", true)
         .lte("min_level", profile?.current_level || 1);
       if (data && data.length >= 10) setWordBank(data);
+      setDashWordBank(normalizeDashWords(data));
 
       const { data: questions } = await supabase
         .from("pet_question_bank")
@@ -760,6 +764,16 @@ const PvPResponseModal = ({ challenge, onClose }) => {
       pvpOpponentPetUrl: challengerPetUrl,
     };
     switch (gameType) {
+      case "dash":
+        return (
+          <PetDash
+            {...commonProps}
+            onGameEnd={handleGameEnd}
+            wordBank={dashWordBank}
+            currentLevel={profile?.current_level || 1}
+            scoreToBeat={{ score: opponentScore, name: opponentName }}
+          />
+        );
       case "whackmole":
         return (
           <PetWhackMole
@@ -981,15 +995,16 @@ const PvPResponseModal = ({ challenge, onClose }) => {
 
             <p className="text-sm text-gray-600 mb-2">
               <span className="font-bold">{opponentName}</span> challenged you in{" "}
-              <span className="font-bold capitalize">{gameType}</span>
+              <span className="font-bold capitalize">{gameType === "dash" ? "Pet Dash" : gameType}</span>
             </p>
             <p className="text-sm text-gray-500 mb-6">
               Play your best!
             </p>
 
             <button
-              disabled={wordBankLoading}
+              disabled={wordBankLoading || (gameType === "dash" && dashWordBank.length < 3)}
               onClick={async () => {
+                if (gameType === "dash" && dashWordBank.length < 3) return;
                 // Check if challenge is still valid (not already forfeited or expired)
                 const { data: fresh } = await supabase
                   .from("pvp_challenges")
@@ -1017,6 +1032,11 @@ const PvPResponseModal = ({ challenge, onClose }) => {
             >
               {wordBankLoading ? "Loading..." : "Accept Challenge!"}
             </button>
+            {!wordBankLoading && gameType === "dash" && dashWordBank.length < 3 && (
+              <p className="mt-3 text-sm text-amber-700">
+                Pet Dash needs at least three different words with hints for your level.
+              </p>
+            )}
           </div>
         )}
 

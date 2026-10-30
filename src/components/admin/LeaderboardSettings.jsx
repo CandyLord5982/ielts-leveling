@@ -16,6 +16,7 @@ const GAME_TYPES = [
   { key: 'catch', label: 'Hungry Pet', icon: '🎯' },
   { key: 'flappy', label: 'Flappy Pet', icon: '🐦' },
   { key: 'astroblast', label: 'Astro Blast', icon: '🚀' },
+  { key: 'dash', label: 'Pet Dash', icon: '🏁' },
   { key: 'matchgame', label: 'Match Up', icon: '🧩' },
   { key: 'wordtype', label: 'Word Type', icon: '⌨️' },
   { key: 'bombparty', label: 'Bomb Defuse', icon: '💣' },
@@ -31,6 +32,7 @@ const TRAINING_GAMES = [
   { key: 'whackmole', label: 'Whack-a-Mole', icon: '🔨' },
   { key: 'flappy', label: 'Flappy Pet', icon: '🐦' },
   { key: 'astroblast', label: 'Astro Blast', icon: '🚀' },
+  { key: 'dash', label: 'Pet Dash', icon: '🏁' },
   { key: 'matchgame', label: 'Match Up', icon: '🧩' },
   { key: 'wordtype', label: 'Word Type', icon: '⌨️' },
   { key: 'bombparty', label: 'Bomb Defuse', icon: '💣' },
@@ -66,7 +68,7 @@ const LeaderboardSettings = () => {
   const [topRewards, setTopRewards] = useState(DEFAULT_TOP_REWARDS);
   const [maxAttempts, setMaxAttempts] = useState(0); // 0 = unlimited
   const [competitionEndDate, setCompetitionEndDate] = useState(''); // ISO date string e.g. '2026-03-10'
-  const [enabledTrainingGames, setEnabledTrainingGames] = useState(['scramble', 'whackmole', 'astroblast']);
+  const [enabledTrainingGames, setEnabledTrainingGames] = useState(['scramble', 'whackmole', 'astroblast', 'dash']);
 
   // PvP Schedule
   const [pvpEnabled, setPvpEnabled] = useState(true);

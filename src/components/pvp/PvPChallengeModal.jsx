@@ -7,6 +7,7 @@ import { usePet } from '../../hooks/usePet'
 import PetWhackMole from '../pet/games/PetWhackMole'
 import PetWordScramble from '../pet/games/PetWordScramble'
 import PetAstroBlast from '../pet/games/PetAstroBlast'
+import PetDash from '../pet/games/PetDash'
 import PetMatchGame from '../pet/games/PetMatchGame'
 import PetFlappyGame from '../pet/games/PetFlappyGame'
 import PetWordType from '../pet/games/PetWordType'
@@ -22,6 +23,7 @@ import PvPRealtimeMatchGame from './PvPRealtimeMatchGame'
 import { assetUrl } from '../../hooks/useBranding'
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule'
 import { getSetting } from '../../utils/siteSettings'
+import { normalizeDashWords } from '../../utils/petDash'
 
 const TAUNT_GIF_BASE = assetUrl('/gif/taunt')
 
@@ -159,6 +161,7 @@ const GAMES = [
   { id: 'scramble', name: 'Word Scramble', icon: assetUrl('/image/dashboard/pet-scramble.jpg'), description: 'Pop bubbles in order!' },
   { id: 'whackmole', name: 'Whack-a-Mole', icon: assetUrl('/pet-game/whack/mole-normal.png'), description: 'Tap the correct word!' },
   { id: 'astroblast', name: 'Astro Blast', icon: assetUrl('/image/inventory/spaceships/phantom-voyager.png'), description: 'Shoot the asteroids!' },
+  { id: 'dash', name: 'Pet Dash', icon: null, emoji: '🏁', description: 'Run through the right word gate!' },
   { id: 'matchgame', name: 'Match Up', icon: assetUrl('/image/dashboard/match1.png'), description: 'Match words & meanings!' },
   { id: 'flappy', name: 'Flappy Pet', icon: assetUrl('/image/dashboard/flap.png'), description: 'Fly and collect fruits!' },
   { id: 'wordtype', name: 'Word Type', icon: assetUrl('/image/dashboard/pet-type.webp'), description: 'Type the correct word!' },
@@ -177,9 +180,10 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
   const [myScore, setMyScore] = useState(null)
   const [freshChallengerScore, setFreshChallengerScore] = useState(null)
   const [wordBank, setWordBank] = useState([])
+  const [dashWordBank, setDashWordBank] = useState([])
   const [questionBank, setQuestionBank] = useState([])
   const [saving, setSaving] = useState(false)
-  const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'matchgame', 'flappy', 'wordtype'])
+  const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'dash', 'matchgame', 'flappy', 'wordtype'])
   const [hasPending, setHasPending] = useState(null)
   const [checkingPending, setCheckingPending] = useState(true)
   const [pvpStatus, setPvpStatus] = useState({ available: true, reason: '' })
@@ -246,6 +250,7 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
       .eq('is_active', true)
       .lte('min_level', profile?.current_level || 1)
     if (words && words.length >= 10) setWordBank(words)
+    setDashWordBank(normalizeDashWords(words))
   }
 
   const fetchQuestionBank = async () => {
@@ -290,6 +295,10 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
   }
 
   const acceptFromCapView = async (challenge) => {
+    if (challenge.game_type === 'dash' && dashWordBank.length < 3) {
+      alert('Pet Dash needs at least three different words with hints. Please try again after the word bank has loaded.')
+      return
+    }
     if ((userEnergy ?? 100) < 10) {
       alert('Your pet is too tired to battle! Feed your pet first.')
       return
@@ -301,6 +310,10 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
   }
 
   const startGame = async (gameId, live = false) => {
+    if (gameId === 'dash' && dashWordBank.length < 3) {
+      alert('Pet Dash needs at least three different words with hints. Please try again after the word bank has loaded.')
+      return
+    }
     if ((userEnergy ?? 100) < 10) {
       alert('Your pet is too tired to battle! Feed your pet first.')
       return
@@ -401,6 +414,8 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
     }
 
     switch (selectedGame) {
+      case 'dash':
+        return <PetDash {...commonProps} onGameEnd={(s) => handleGameEnd(s)} wordBank={dashWordBank} currentLevel={profile?.current_level || 1} />
       case 'whackmole':
         return <PetWhackMole {...commonProps} onGameEnd={(s) => handleGameEnd(s)} wordBank={wordBank} leaderboard={pvpScoreToBeat ? [pvpScoreToBeat] : []} />
       case 'scramble':
@@ -540,6 +555,10 @@ const PvPChallengeModal = ({ opponent, onClose }) => {
                 {hasPending.challenger_id !== user.id && hasPending.status === 'pending' ? (
                   <button
                     onClick={async () => {
+                      if (hasPending.game_type === 'dash' && dashWordBank.length < 3) {
+                        alert('Pet Dash needs at least three different words with hints. Please try again after the word bank has loaded.')
+                        return
+                      }
                       if ((userEnergy ?? 100) < 10) {
                         alert('Your pet is too tired to battle! Feed your pet first.')
                         return

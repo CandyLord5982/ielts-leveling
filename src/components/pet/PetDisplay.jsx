@@ -19,6 +19,7 @@ import PetFlappyGame from "./games/PetFlappyGame";
 import PetWordScramble from "./games/PetWordScramble";
 import PetWhackMole from "./games/PetWhackMole";
 import PetAstroBlast from "./games/PetAstroBlast";
+import PetDash from "./games/PetDash";
 import PetMatchGame from "./games/PetMatchGame";
 import PetWordType from "./games/PetWordType";
 import PetBombParty from "./games/PetBombParty";
@@ -34,6 +35,7 @@ import PetFishingGame from "./games/PetFishingGame";
 import { assetUrl } from '../../hooks/useBranding';
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule';
 import { getSettings, getSetting } from '../../utils/siteSettings';
+import { normalizeDashWords } from '../../utils/petDash';
 // Pet chat messages - replace with your own!
 const PET_MESSAGES = [
   // English Idioms
@@ -99,6 +101,7 @@ const PetDisplay = () => {
   const [feedAnimation, setFeedAnimation] = useState(null); // { food: '🍖', particles: [] }
   const petContainerRef = useRef(null);
   const pendingAttemptId = useRef(null);
+  const dashStartingRef = useRef(false);
 
   // Play animation state
   const [playAnimation, setPlayAnimation] = useState(null); // { xpGained: 10, phase: 'active' }
@@ -108,11 +111,13 @@ const PetDisplay = () => {
   // Chat state
   const [playDisabled, setPlayDisabled] = useState(false);
   const [playCooldown, setPlayCooldown] = useState(0);
-  const [showGame, setShowGame] = useState(null); // null | 'picker' | 'catch' | 'flappy' | 'scramble' | 'whackmole' | 'astroblast' | 'matchgame' | 'quizrush' | 'bossbattle' | 'angrypet'
-  const [gameLeaderboards, setGameLeaderboards] = useState({ whackmole: [], scramble: [], astroblast: [], matchgame: [], wordtype: [], bombparty: [], sayitright: [], quizrush: [], bossbattle: [], angrypet: [], fishing: [] });
+  const [showGame, setShowGame] = useState(null); // null | 'picker' | 'catch' | 'flappy' | 'scramble' | 'whackmole' | 'astroblast' | 'dash' | 'matchgame' | 'quizrush' | 'bossbattle' | 'angrypet'
+  const [gameLeaderboards, setGameLeaderboards] = useState({ whackmole: [], scramble: [], astroblast: [], dash: [], matchgame: [], wordtype: [], bombparty: [], sayitright: [], quizrush: [], bossbattle: [], angrypet: [], fishing: [] });
+  const [dashStarting, setDashStarting] = useState(false);
+  const [dashStartError, setDashStartError] = useState('');
   const [wordBank, setWordBank] = useState([]);
   const [questionBank, setQuestionBank] = useState([]);
-  const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'matchgame', 'wordtype', 'bombparty', 'sayitright', 'quizrush', 'bossbattle', 'angrypet', 'catch', 'fishing']);
+  const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'dash', 'matchgame', 'wordtype', 'bombparty', 'sayitright', 'quizrush', 'bossbattle', 'angrypet', 'catch', 'fishing']);
   const [competitionGame, setCompetitionGame] = useState(null); // game type with active competition
   const [chestEnabled, setChestEnabled] = useState(false); // whether chest can appear in games
   const [mazeBlocked, setMazeBlocked] = useState(false); // whether maze adventure is blocked
@@ -630,6 +635,7 @@ const PetDisplay = () => {
   };
 
   const handlePlay = async () => {
+    setDashStartError('');
     if (trainingBlocked) {
       setShowGame('picker');
       return;
@@ -647,7 +653,7 @@ const PetDisplay = () => {
   // Record attempt at game START (score 0), update with real score on end.
   // This way refresh/quit still counts as an attempt.
   const recordAttemptStart = async (gameType) => {
-    if (!gameType || !user?.id) return;
+    if (!gameType || !user?.id) return { success: false, error: 'Please sign in to start training.' };
 
     // Check attempt limit during active competition (shared cache)
     const settingsMap = await getSettings([
@@ -676,27 +682,96 @@ const PetDisplay = () => {
       weekStart.setDate(weekStart.getDate() - daysFromMonday);
       const weekStartISO = weekStart.toISOString().split('T')[0] + 'T00:00:00+07:00';
 
-      const { count } = await supabase
+      const { count, error } = await supabase
         .from('training_scores')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('game_type', gameType)
         .gte('played_at', weekStartISO);
 
+      if (error) return { success: false, error: 'Unable to check training attempts. Please try again.' };
+
       if (count >= maxAttempts) {
         pendingAttemptId.current = null;
-        return;
+        return { success: false, error: 'You have reached the attempt limit for this competition.' };
       }
     }
 
     // Always insert score — regardless of competition status
-    const { data } = await supabase.from('training_scores').insert({
+    const { data, error } = await supabase.from('training_scores').insert({
       user_id: user.id,
       game_type: gameType,
       score: 0
     }).select('id').single();
 
     pendingAttemptId.current = data?.id || null;
+    return { success: !error && !!data?.id, error: error ? 'Unable to save your training attempt. Please try again.' : null };
+  };
+
+  const startDashTraining = async () => {
+    if (dashStartingRef.current) return;
+    dashStartingRef.current = true;
+    setDashStarting(true);
+    setDashStartError('');
+
+    try {
+      const schedule = await fetchPvpSchedule();
+      const availability = checkPvpAvailability(schedule);
+      if (!availability.available && !isStaff()) {
+        setTrainingBlocked(true);
+        setTrainingBlockedReason(availability.reason);
+        return;
+      }
+
+      const words = normalizeDashWords(await fetchWordBank());
+      if (words.length < 3) {
+        setDashStartError('Pet Dash needs at least 3 different words with hints for your level. Ask your teacher to add more words.');
+        return;
+      }
+      if (!isAdmin() && (userEnergy ?? 100) < 10) {
+        setDashStartError('Training needs 10 energy. Feed your pet first!');
+        return;
+      }
+
+      const attempt = await recordAttemptStart('dash');
+      if (!attempt.success) {
+        setDashStartError(attempt.error || 'Unable to start training. Please try again.');
+        return;
+      }
+      const energy = await drainPetEnergy(10).catch(() => ({ success: false }));
+      if (!energy?.success) {
+        const unusedAttemptId = pendingAttemptId.current;
+        pendingAttemptId.current = null;
+        let attemptCleared = !unusedAttemptId;
+        if (unusedAttemptId) {
+          try {
+            const { data: removed, error } = await supabase.from('training_scores')
+              .delete()
+              .eq('id', unusedAttemptId)
+              .eq('user_id', user.id)
+              .eq('game_type', 'dash')
+              .eq('score', 0)
+              .select('id');
+            attemptCleared = !error && removed?.length === 1;
+          } catch {
+            attemptCleared = false;
+          }
+        }
+        setDashStartError(attemptCleared
+          ? energy?.error || 'Unable to use energy. Please try again.'
+          : 'Training could not start, and the unused attempt could not be cleared. Please contact your teacher before trying again.');
+        return;
+      }
+
+      setWordBank(words);
+      fetchGameLeaderboard('dash');
+      setShowGame('dash');
+    } catch {
+      setDashStartError('Unable to start Pet Dash. Please try again.');
+    } finally {
+      dashStartingRef.current = false;
+      setDashStarting(false);
+    }
   };
 
   const fetchGameLeaderboard = async (gameType) => {
@@ -754,6 +829,7 @@ const PetDisplay = () => {
       .lte('min_level', userLevel);
 
     if (words && words.length >= 10) setWordBank(words);
+    return words || [];
   };
 
   const fetchQuestionBank = async () => {
@@ -846,6 +922,7 @@ const PetDisplay = () => {
       // Track detailed per-game stats for missions
       const gameGoalMap = {
         astroblast: extra?.wordsCompleted && { goal_type: 'blast_words', increment: extra.wordsCompleted },
+        dash: extra?.wordsCompleted && { goal_type: 'answer_questions', increment: extra.wordsCompleted },
         whackmole: extra?.molesWhacked && { goal_type: 'whack_moles', increment: extra.molesWhacked },
         scramble: extra?.wordsCompleted && { goal_type: 'scramble_words', increment: extra.wordsCompleted },
         wordtype: extra?.wordsCompleted && { goal_type: 'type_words', increment: extra.wordsCompleted },
@@ -2138,9 +2215,9 @@ const PetDisplay = () => {
       {/* Game Picker Modal */}
       {showGame === 'picker' && createPortal(
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 px-4"
-          onClick={() => setShowGame(null)}
+          onClick={() => { if (!dashStarting) setShowGame(null); }}
         >
-          <div className={`relative bg-white border-2 border-blue-200 shadow-xl w-full p-6 text-center overflow-hidden ${isStaff() ? 'max-w-2xl' : 'max-w-sm'}`}
+          <div className={`relative bg-white border-2 border-blue-200 shadow-xl w-full max-h-[90dvh] p-6 text-center overflow-y-auto ${isStaff() ? 'max-w-2xl' : 'max-w-sm'}`}
             style={{ clipPath: 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)' }}
             onClick={e => e.stopPropagation()}
           >
@@ -2168,8 +2245,9 @@ const PetDisplay = () => {
             ) : (
             <>
             <p className="text-sm text-gray-500 mb-5">Earn +5 <img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-4 h-4 inline" /> on success!</p>
+            {dashStartError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{dashStartError}</p>}
             <style>{`.game-grid > button { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }`}</style>
-            <div className={`game-grid grid gap-3 ${isStaff() ? 'grid-cols-3 md:grid-cols-4' : 'grid-cols-2'}`}>
+            <fieldset disabled={dashStarting} className={`game-grid grid min-w-0 gap-3 ${isStaff() ? 'grid-cols-3 md:grid-cols-4' : 'grid-cols-2'}`}>
               {(isStaff() || enabledGames.includes('scramble')) && (
               <button
                 onClick={() => { drainPetEnergy(10); recordAttemptStart('scramble'); fetchGameLeaderboard('scramble'); setShowGame('scramble'); }}
@@ -2198,6 +2276,16 @@ const PetDisplay = () => {
                 {competitionGame === 'astroblast' && <span className="absolute -top-2 -right-2 text-lg">🏆</span>}
                 <img src={assetUrl('/image/inventory/spaceships/phantom-voyager.png')} alt="Astro Blast" className="w-20 h-20 object-contain group-hover:scale-110 transition-transform" />
                 <span className="font-bold text-gray-800 text-xs">Astro Blast</span>
+              </button>
+              )}
+              {(isStaff() || enabledGames.includes('dash')) && (
+              <button
+                onClick={startDashTraining}
+                className={`relative flex flex-col items-center gap-2 p-4 border-2 transition-all group overflow-hidden disabled:opacity-60 ${competitionGame === 'dash' ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50'}`}
+              >
+                {competitionGame === 'dash' && <span className="absolute -top-2 -right-2 text-lg">🏆</span>}
+                <span aria-hidden="true" className="flex h-20 w-20 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-100 to-sky-100 text-5xl group-hover:scale-110 transition-transform">🏁</span>
+                <span className="font-bold text-gray-800 text-xs">{dashStarting ? 'Loading…' : 'Pet Dash'}</span>
               </button>
               )}
               {(isStaff() || enabledGames.includes('flappy')) && (
@@ -2311,10 +2399,11 @@ const PetDisplay = () => {
                 )}
               </button>
 
-            </div>
+            </fieldset>
             <button
               onClick={() => setShowGame(null)}
-              className="mt-4 px-6 py-1.5 text-sm text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 transition-colors font-medium tracking-wide"
+              disabled={dashStarting}
+              className="mt-4 px-6 py-1.5 text-sm text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 transition-colors font-medium tracking-wide disabled:opacity-50"
               style={{ clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }}
             >
               Cancel
@@ -2467,6 +2556,27 @@ const PetDisplay = () => {
           chestEnabled={chestEnabled}
           currentLevel={profile?.current_level || 1}
           onGameEnd={(score, extra) => handleGameEnd(score, 'astroblast', extra)}
+          onClose={() => setShowGame(null)}
+        />
+      )}
+
+      {/* Pet Dash Mini-Game */}
+      {showGame === 'dash' && (
+        <PetDash
+          petImageUrl={(() => {
+            let baseImage = activePet.image_url;
+            if (activePet.evolution_stages && activePet.evolution_stage > 0) {
+              const stage = activePet.evolution_stages.find(s => s.stage === activePet.evolution_stage);
+              if (stage?.image_url) baseImage = stage.image_url;
+            }
+            return baseImage;
+          })()}
+          petName={activePet.nickname || activePet.name}
+          wordBank={wordBank}
+          leaderboard={gameLeaderboards.dash}
+          scoreToBeat={gameLeaderboards.dash?.[0] || null}
+          currentLevel={profile?.current_level || 1}
+          onGameEnd={(score, extra) => handleGameEnd(score, 'dash', extra)}
           onClose={() => setShowGame(null)}
         />
       )}

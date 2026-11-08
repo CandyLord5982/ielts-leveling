@@ -67,6 +67,7 @@ import {
   Headphones,
   Users,
   Palette,
+  CheckCircle,
 } from "lucide-react";
 
 import { getMapTheme } from "../../config/mapThemes";
@@ -594,6 +595,14 @@ const ExerciseList = () => {
       navigate(`/study/test-runner?sessionId=${sessionId}&courseId=${courseId}&unitId=${unitId}`, { replace: true })
     }
   }, [session])
+
+  // Minimal-style courses default to the plain list instead of the decorated map.
+  // Teachers can still flip the view toggle above to preview the other layout.
+  useEffect(() => {
+    if (course?.ui_style === 'minimal') {
+      setViewMode('list')
+    }
+  }, [course])
 
 
   // Refresh progress when userProgress changes
@@ -1269,6 +1278,93 @@ const ExerciseList = () => {
     );
   };
 
+  // Plain row for minimal-style courses - same status/progress data as SortableExerciseCard,
+  // no circular icon avatar, connecting line, or shimmer.
+  const MinimalExerciseRow = ({ exercise, index }) => {
+    const { setNodeRef, transform, transition, isDragging } = useSortable({ id: exercise.id });
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+    const { status, canAccess } = getExerciseStatus(exercise, index);
+    const progress = userProgress.find((p) => p.exercise_id === exercise.id);
+    const isLocked = !canAccess;
+    const ExerciseIcon = getExerciseIcon(exercise.exercise_type);
+
+    const handleExerciseClick = () => {
+      if (!isLocked) {
+        navigate(`${getExercisePath(exercise)}?exerciseId=${exercise.id}&sessionId=${sessionId}&courseId=${courseId}&unitId=${unitId}`);
+      }
+    };
+
+    return (
+      <li
+        ref={setNodeRef}
+        style={style}
+        onClick={handleExerciseClick}
+        className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-colors ${
+          isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-50 hover:border-gray-300'
+        }`}
+      >
+        {canCreateContent() && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (pickedExerciseIndex === null) setPickedExerciseIndex(index);
+              else if (pickedExerciseIndex === index) setPickedExerciseIndex(null);
+              else { moveExerciseToPosition(pickedExerciseIndex, index + 1); setPickedExerciseIndex(null); }
+            }}
+            className={`flex-shrink-0 p-1 rounded ${
+              pickedExerciseIndex === index ? 'text-blue-600 bg-blue-100'
+                : pickedExerciseIndex !== null ? 'text-green-600 bg-green-50 ring-2 ring-green-400'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Reorder"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
+
+        <div className={`relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+          isLocked ? 'bg-gray-100' : status === 'completed' ? 'bg-green-100' : getExerciseColor(exercise.exercise_type)
+        }`}>
+          <ExerciseIcon className={`w-5 h-5 ${isLocked ? 'text-gray-400' : status === 'completed' ? 'text-green-600' : 'text-current'}`} />
+          {status === 'completed' && (
+            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-white">
+              <CheckCircle className="w-3 h-3 text-white" />
+            </span>
+          )}
+          {isLocked && (
+            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-gray-300 flex items-center justify-center ring-2 ring-white">
+              <Lock className="w-2.5 h-2.5 text-gray-600" />
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate">{exercise.title || exercise.exercise_type}</p>
+        </div>
+
+        {!canCreateContent() && renderStars(progress?.score, status, progress?.max_score)}
+
+        {canCreateContent() && exerciseClassStats?.[exercise.id] && (
+          <StudentStatsPopover stats={exerciseClassStats[exercise.id]} size="sm" position="bottom" courseId={courseId} sessionId={sessionId} />
+        )}
+
+        {canCreateContent() && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {profile?.role === 'admin' && (
+              <button onClick={(e) => { e.stopPropagation(); handleEditExercise(exercise); }} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="Edit exercise">
+                <Edit className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={(e) => { e.stopPropagation(); handleDeleteExercise(exercise); }} className="p-1 text-red-400 hover:text-red-600 rounded" title="Delete exercise">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   if (loading && exercises.length === 0) {
     return (
       <div className="flex bg-white">
@@ -1725,15 +1821,27 @@ const ExerciseList = () => {
                 items={exercises.map((ex) => ex.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-4">
-                  {exercises.map((exercise, index) => (
-                    <SortableExerciseCard
-                      key={exercise.id}
-                      exercise={exercise}
-                      index={index}
-                    />
-                  ))}
-                </div>
+                {course?.ui_style === 'minimal' ? (
+                  <ul className="space-y-2">
+                    {exercises.map((exercise, index) => (
+                      <MinimalExerciseRow
+                        key={exercise.id}
+                        exercise={exercise}
+                        index={index}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="space-y-4">
+                    {exercises.map((exercise, index) => (
+                      <SortableExerciseCard
+                        key={exercise.id}
+                        exercise={exercise}
+                        index={index}
+                      />
+                    ))}
+                  </div>
+                )}
               </SortableContext>
             </DndContext>
           </div>

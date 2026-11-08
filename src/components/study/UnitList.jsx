@@ -1511,6 +1511,124 @@ const UnitList = () => {
                 return (a.unit_number || 0) - (b.unit_number || 0);
               });
 
+              // Minimal mode: plain list instead of the themed ribbon/background grid.
+              // Same data and handlers as the decorated view - just plainer markup.
+              if (level?.ui_style === 'minimal') {
+                return (
+                  <div className="flex flex-col gap-6 mt-4">
+                    {sortedUnits.map((unit, unitIndex) => {
+                      const unitSessions = sessions
+                        .filter((session) => session.unit_id === unit.id)
+                        .filter((session) => {
+                          if (profile?.role === 'user') return true;
+                          if (personalFilter === 'all') return true;
+                          if (personalFilter === 'shared') return !session.assigned_student_id;
+                          if (personalFilter === 'personal') return !!session.assigned_student_id;
+                          return session.assigned_student_id === personalFilter;
+                        })
+                        .sort((a, b) => (a.session_number || 0) - (b.session_number || 0));
+
+                      return (
+                        <div key={unit.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${getBorderColor(unit.color_theme).replace('border-', 'bg-').replace('500', '100')} ${getBorderColor(unit.color_theme).replace('border-', 'text-').replace('500', '700')}`}>
+                                {unitIndex + 1}
+                              </span>
+                              <h3 className="font-semibold text-gray-800 truncate">{unit.title}</h3>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {canCreateContent() && (
+                                <>
+                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move up">
+                                    <ChevronUp className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move down">
+                                    <ChevronDown className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-gray-400 hover:text-gray-600" title="Edit unit">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Add session">
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteUnit(unit)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete unit">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {unitSessions.length > 0 ? (
+                            <ul className="divide-y divide-gray-100">
+                              {unitSessions.map((session) => {
+                                const { status, canAccess } = getSessionStatus(session);
+                                const progress = sessionProgress[session.id];
+                                const isLocked = !canAccess;
+                                const isDone = status === 'completed';
+                                return (
+                                  <li
+                                    key={session.id}
+                                    onClick={() => !isLocked && handleSessionClick(session)}
+                                    onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
+                                    className={`flex items-center gap-3 px-4 py-3 ${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-50'}`}
+                                  >
+                                    <div className={`relative flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${
+                                      isLocked ? 'bg-gray-100' : isDone ? 'bg-green-100' : session.is_test ? 'bg-orange-100' : 'bg-blue-100'
+                                    }`}>
+                                      {session.icon ? (
+                                        <span className="text-base">{session.icon}</span>
+                                      ) : session.is_test ? (
+                                        <FileText className={`w-4 h-4 ${isLocked ? 'text-gray-400' : isDone ? 'text-green-600' : 'text-orange-600'}`} />
+                                      ) : (
+                                        <BookOpen className={`w-4 h-4 ${isLocked ? 'text-gray-400' : isDone ? 'text-green-600' : 'text-blue-600'}`} />
+                                      )}
+                                      {isDone && (
+                                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 ring-2 ring-white" />
+                                      )}
+                                      {isLocked && (
+                                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-gray-300 flex items-center justify-center ring-2 ring-white">
+                                          <Lock className="w-2.5 h-2.5 text-gray-600" />
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="flex-1 text-sm font-medium text-gray-700 truncate">{session.title}</span>
+                                    {session.is_test && (
+                                      <span className="text-[10px] font-bold uppercase text-orange-600 bg-orange-100 rounded px-1.5 py-0.5 flex-shrink-0">Test</span>
+                                    )}
+                                    {progress?.progress_percentage > 0 && (
+                                      <span className="text-xs text-gray-400 flex-shrink-0">{progress.progress_percentage}%</span>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : (
+                            <p className="px-4 py-3 text-sm text-gray-500">
+                              {canCreateContent() ? 'No sessions yet.' : 'Sessions will be available soon'}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {canCreateContent() && (
+                      <button
+                        onClick={() => setShowAddUnitModal(true)}
+                        className="border-2 border-dashed border-gray-300 rounded-lg py-4 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                      >
+                        + Create Unit
+                      </button>
+                    )}
+
+                    {sortedUnits.length === 0 && (
+                      <p className="text-center text-gray-500 py-8">Chưa có unit nào</p>
+                    )}
+                  </div>
+                );
+              }
+
               const allItems = [
                 ...sortedUnits.map((u, i) => ({ type: 'unit', unit: u, unitIndex: i })),
                 ...(addUnitCard ? [{ type: 'add' }] : []),

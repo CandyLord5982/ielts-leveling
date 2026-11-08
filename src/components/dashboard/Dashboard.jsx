@@ -331,34 +331,37 @@ const Dashboard = () => {
     try {
       setLoading(true)
 
-      // For students, only show enrolled courses. For admins/teachers, show all courses.
+      // For students, show enrolled courses plus any course marked public. For admins/teachers, show all courses.
       if (profile?.role === 'user') {
-        // Student: fetch only enrolled courses
-        const { data, error } = await supabase
-          .from('course_enrollments')
-          .select(`
-            courses (
-              id,
-              title,
-              description,
-              thumbnail_url,
-              level_number,
-              difficulty_label,
-              color_theme,
-              is_active
-            )
-          `)
-          .eq('student_id', profile.id)
-          .eq('is_active', true)
-          .eq('courses.is_active', true)
-          .order('level_number', { foreignTable: 'courses' })
+        const courseFields = 'id, title, description, thumbnail_url, level_number, difficulty_label, color_theme, is_active, is_public'
 
-        if (error) throw error
+        const [enrollmentResult, publicResult] = await Promise.all([
+          supabase
+            .from('course_enrollments')
+            .select(`courses (${courseFields})`)
+            .eq('student_id', profile.id)
+            .eq('is_active', true)
+            .eq('courses.is_active', true),
+          supabase
+            .from('courses')
+            .select(courseFields)
+            .eq('is_active', true)
+            .eq('is_public', true)
+        ])
 
-        // Extract courses from the enrollment data
-        const enrolledCourses = data?.map(enrollment => enrollment.courses).filter(Boolean) || []
-        console.log('Fetched enrolled courses:', enrolledCourses)
-        setCourses(enrolledCourses)
+        if (enrollmentResult.error) throw enrollmentResult.error
+        if (publicResult.error) throw publicResult.error
+
+        const enrolledCourses = enrollmentResult.data?.map(enrollment => enrollment.courses).filter(Boolean) || []
+        const publicCourses = publicResult.data || []
+
+        // De-dupe (a student can be enrolled in a course that's also public) and sort by level
+        const byId = new Map()
+        for (const course of [...enrolledCourses, ...publicCourses]) byId.set(course.id, course)
+        const combinedCourses = [...byId.values()].sort((a, b) => (a.level_number || 0) - (b.level_number || 0))
+
+        console.log('Fetched enrolled + public courses:', combinedCourses)
+        setCourses(combinedCourses)
       } else if (profile?.role === 'teacher') {
         // Teacher: fetch only assigned courses
         const { data, error } = await supabase
@@ -571,16 +574,27 @@ const Dashboard = () => {
           .map(p => p.exercise_id)
       )
 
-      // Get all courses
-      const { data: enrollments, error: enrollError } = await supabase
-        .from('course_enrollments')
-        .select('course_id')
-        .eq('student_id', profile.id)
-        .eq('is_active', true)
+      // Get enrolled courses plus any public course (mirrors fetchCourses above)
+      const [enrollmentResult, publicCoursesResult] = await Promise.all([
+        supabase
+          .from('course_enrollments')
+          .select('course_id')
+          .eq('student_id', profile.id)
+          .eq('is_active', true),
+        supabase
+          .from('courses')
+          .select('id')
+          .eq('is_active', true)
+          .eq('is_public', true)
+      ])
 
-      if (enrollError) throw enrollError
+      if (enrollmentResult.error) throw enrollmentResult.error
+      if (publicCoursesResult.error) throw publicCoursesResult.error
 
-      const courseIds = enrollments?.map(e => e.course_id) || []
+      const courseIds = [...new Set([
+        ...(enrollmentResult.data?.map(e => e.course_id) || []),
+        ...(publicCoursesResult.data?.map(c => c.id) || [])
+      ])]
       if (courseIds.length === 0) return
 
       // For each course, get total exercises and calculate progress

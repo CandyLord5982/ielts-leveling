@@ -416,8 +416,8 @@ const ExerciseList = () => {
       if (exercisesResult.error) throw exercisesResult.error;
       if (allUnitsResult.error) throw allUnitsResult.error;
 
-      // For students, verify they are enrolled in this course
-      if (profile?.role === "user") {
+      // For students, verify they are enrolled - unless the course is public
+      if (profile?.role === "user" && !courseResult.data?.is_public) {
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from("course_enrollments")
           .select("id")

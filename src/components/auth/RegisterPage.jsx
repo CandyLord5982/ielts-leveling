@@ -24,7 +24,8 @@ const RegisterPage = () => {
   const [success, setSuccess] = useState(false)
   const [loginBgImage, setLoginBgImage] = useState(DEFAULT_LOGIN_IMAGE)
 
-  const { user, signUp } = useAuth()
+  const { user, signUp, convertAnonymousAccount } = useAuth()
+  const isConverting = !!user?.is_anonymous
 
   useEffect(() => {
     fetchLoginPageImage()
@@ -73,7 +74,7 @@ const RegisterPage = () => {
     }
   }
 
-  if (user) {
+  if (user && !isConverting) {
     return <Navigate to="/" replace />
   }
 
@@ -133,9 +134,14 @@ const RegisterPage = () => {
     const generatedEmail = `${formData.username.trim().toLowerCase().replace(/\s+/g, '_')}_${randomSuffix}@ieltsleveling.local`
 
     try {
-      const { error } = await signUp(generatedEmail, formData.password, formData.fullName, formData.username.trim(), formData.courseId || null)
+      const { error } = isConverting
+        ? await convertAnonymousAccount(generatedEmail, formData.password, formData.fullName, formData.username.trim())
+        : await signUp(generatedEmail, formData.password, formData.fullName, formData.username.trim(), formData.courseId || null)
+
       if (error) {
         setError(error.message || 'Co loi xay ra khi dang ky')
+      } else if (isConverting) {
+        // No email confirmation needed - the session is already upgraded in place
       } else {
         setSuccess(true)
       }
@@ -335,7 +341,12 @@ const RegisterPage = () => {
             <div className="w-3 h-3 rounded-full bg-pink-500"></div>
           </div>
 
-          <a className="signup-title">Tao tai khoan moi</a>
+          <a className="signup-title">{isConverting ? 'Luu tien trinh cua ban' : 'Tao tai khoan moi'}</a>
+          {isConverting && (
+            <p className="text-sm text-gray-500 text-center w-[280px] -mt-4">
+              Tai khoan cua ban se giu nguyen XP, gems va thu cung hien tai.
+            </p>
+          )}
 
           <form
             onSubmit={handleSubmit}
@@ -361,7 +372,7 @@ const RegisterPage = () => {
             </div>
 
             {/* Course / Grade */}
-            {courses.length > 0 && (
+            {!isConverting && courses.length > 0 && (
               <div className="neomorphic-input w-[280px]">
                 <select
                   name="courseId"
@@ -439,24 +450,28 @@ const RegisterPage = () => {
               disabled={loading}
               className="neomorphic-button mb-4"
             >
-              {loading ? 'Loading...' : 'Dang ky'}
+              {loading ? 'Loading...' : (isConverting ? 'Luu lai' : 'Dang ky')}
             </button>
           </form>
 
           {/* Divider */}
+          {!isConverting && (
           <div className="flex items-center w-[280px]">
             <div className="flex-1 border-t border-gray-300"></div>
             <span className="px-3 text-xs text-gray-500">hoac</span>
             <div className="flex-1 border-t border-gray-300"></div>
           </div>
+          )}
 
           {/* Login link */}
+          {!isConverting && (
           <Link
             to="/login"
             className="w-[280px] border-2 border-blue-600 hover:bg-blue-600 hover:text-white text-blue-700 rounded-lg px-4 py-2.5 text-center text-sm font-medium transition-all duration-300 mb-4"
           >
             Da co tai khoan? Dang nhap
           </Link>
+          )}
         </div>
       </div>
     </div>

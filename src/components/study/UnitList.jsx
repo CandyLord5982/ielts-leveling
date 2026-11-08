@@ -189,8 +189,8 @@ const UnitList = () => {
 
       if (levelError) throw levelError;
 
-      // For students, verify they are enrolled in this course
-      if (profile?.role === "user") {
+      // For students, verify they are enrolled - unless the course is public
+      if (profile?.role === "user" && !levelData?.is_public) {
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from("course_enrollments")
           .select("id")

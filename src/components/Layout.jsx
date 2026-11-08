@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../supabase/client'
+import { REGISTER_PATH } from '../config/registration'
 import LeftSidebar from './navigation/LeftSidebar'
 import BottomNavigation from './navigation/BottomNavigation'
 import ItemDropNotification from './inventory/ItemDropNotification'
@@ -110,6 +111,16 @@ const Layout = () => {
       {FEATURES.inventory && <ChestDropNotification />}
       <NotificationModal />
       {!isInsideCourse && <PvPIncomingBanner />}
+
+      {/* Trial account notice - progress exists but is tied to a disposable session */}
+      {user?.is_anonymous && (
+        <Link
+          to={REGISTER_PATH}
+          className="block bg-blue-600 hover:bg-blue-700 text-white text-center text-sm font-medium py-2 px-4 transition-colors"
+        >
+          Bạn đang dùng thử. Tạo tài khoản để lưu lại tiến trình, XP và thú cưng →
+        </Link>
+      )}
 
       {/* Left Sidebar - Desktop and Mobile */}
       {!hideSidebar && <LeftSidebar onOpenReport={() => setShowReportModal(true)} onCollapsedChange={handleSidebarCollapsed} />}

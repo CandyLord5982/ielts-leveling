@@ -18,8 +18,9 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const [loginBgImage, setLoginBgImage] = useState(DEFAULT_LOGIN_IMAGE);
 
-  const { user, signIn } = useAuth();
+  const { user, signIn, signInAnonymously } = useAuth();
   const location = useLocation();
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const from = location.state?.from?.pathname || "/";
 
@@ -83,6 +84,21 @@ const LoginPage = () => {
       setError("Có lỗi xảy ra, vui lòng thử lại");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestSignIn = async () => {
+    setGuestLoading(true);
+    setError("");
+    try {
+      const { error } = await signInAnonymously();
+      if (error) {
+        setError("Không thể vào thử. Vui lòng thử lại");
+        setGuestLoading(false);
+      }
+    } catch (err) {
+      setError("Có lỗi xảy ra, vui lòng thử lại");
+      setGuestLoading(false);
     }
   };
 
@@ -348,6 +364,22 @@ const LoginPage = () => {
             <span className="text-sm font-medium">Google</span>
           </button> */}
 
+          {/* Divider */}
+          <div className="flex items-center w-[280px]">
+            <div className="flex-1 border-t border-gray-300"></div>
+            <span className="px-3 text-xs text-gray-500">hoặc</span>
+            <div className="flex-1 border-t border-gray-300"></div>
+          </div>
+
+          {/* Try without an account - creates a real but disposable session */}
+          <button
+            type="button"
+            onClick={handleGuestSignIn}
+            disabled={guestLoading}
+            className="w-[280px] border-2 border-blue-600 hover:bg-blue-600 hover:text-white text-blue-700 rounded-lg px-4 py-2.5 text-center text-sm font-medium transition-all duration-300 mb-4 disabled:opacity-50"
+          >
+            {guestLoading ? "Đang vào..." : "Dùng thử miễn phí"}
+          </button>
         </div>
       </div>
     </div>

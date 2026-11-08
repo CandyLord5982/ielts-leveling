@@ -108,6 +108,62 @@ export const AuthProvider = ({ children }) => {
     return { data, error }
   }
 
+  // Shared by signUp and signInAnonymously: creates the public.users row,
+  // enrolls in the explicitly chosen course (if any), and grants a starter pet.
+  const setupNewUserProfile = async (userId, { email, fullName, username, courseId }) => {
+    try {
+      const { error: profileError } = await supabase.from('users').insert({
+        id: userId,
+        email,
+        full_name: fullName,
+        username: username || null,
+        role: 'user',
+        current_level: 1,
+        xp: 0,
+        streak_count: 0
+      })
+
+      if (profileError) {
+        console.error('Error creating user profile:', profileError)
+      }
+
+      // Enroll in the course the user picked at signup, if any. No fallback course -
+      // an unenrolled user just has no courses until a teacher/admin enrolls them.
+      if (courseId) {
+        try {
+          await supabase.from('course_enrollments').insert({
+            course_id: courseId,
+            student_id: userId
+          })
+        } catch (enrollErr) {
+          console.error('Error enrolling in course:', enrollErr)
+        }
+      }
+
+      // Give a random common/uncommon pet
+      try {
+        const { data: pets } = await supabase
+          .from('pets')
+          .select('id')
+          .in('rarity', ['common', 'uncommon'])
+          .eq('is_active', true)
+
+        if (pets && pets.length > 0) {
+          const randomPet = pets[Math.floor(Math.random() * pets.length)]
+          await supabase.from('user_pets').insert({
+            user_id: userId,
+            pet_id: randomPet.id,
+            is_active: true
+          })
+        }
+      } catch (petErr) {
+        console.error('Error giving starter pet:', petErr)
+      }
+    } catch (profileError) {
+      console.error('Error creating user profile:', profileError)
+    }
+  }
+
   const signUp = async (email, password, fullName, username, courseId) => {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -121,67 +177,51 @@ export const AuthProvider = ({ children }) => {
     })
 
     if (data.user && !error) {
-      // Create user profile ngay lập tức
-      try {
-        const { error: profileError } = await supabase.from('users').insert({
-          id: data.user.id,
-          email: data.user.email,
-          full_name: fullName,
-          username: username || null,
-          role: 'user',
-          current_level: 1,
-          xp: 0,
-          streak_count: 0
-        })
+      await setupNewUserProfile(data.user.id, { email: data.user.email, fullName, username, courseId })
+    }
 
-        if (profileError) {
-          console.error('Error creating user profile:', profileError)
-        }
+    return { data, error }
+  }
 
-        // Auto-enroll in selected course (or fallback to demo_course_id)
-        try {
-          let enrollCourseId = courseId
-          if (!enrollCourseId) {
-            const { data: setting } = await supabase
-              .from('site_settings')
-              .select('setting_value')
-              .eq('setting_key', 'demo_course_id')
-              .single()
-            enrollCourseId = setting?.setting_value
-          }
+  // Lets a visitor use the app (browse courses, do exercises, earn XP) without an
+  // account. It's a real Supabase auth session (auth.uid() works, RLS applies normally) -
+  // just flagged is_anonymous so it can be upgraded in place later via convertAnonymousAccount.
+  const signInAnonymously = async () => {
+    const { data, error } = await supabase.auth.signInAnonymously()
 
-          if (enrollCourseId) {
-            await supabase.from('course_enrollments').insert({
-              course_id: enrollCourseId,
-              student_id: data.user.id
-            })
-          }
-        } catch (enrollErr) {
-          console.error('Error auto-enrolling in course:', enrollErr)
-        }
+    if (data?.user && !error) {
+      const placeholderEmail = `guest_${data.user.id}@ielts-anon.local`
+      await setupNewUserProfile(data.user.id, {
+        email: placeholderEmail,
+        fullName: 'Khách',
+        username: null,
+        courseId: null
+      })
+      window.location.reload()
+    }
 
-        // Give a random common/uncommon pet
-        try {
-          const { data: pets } = await supabase
-            .from('pets')
-            .select('id')
-            .in('rarity', ['common', 'uncommon'])
-            .eq('is_active', true)
+    return { data, error }
+  }
 
-          if (pets && pets.length > 0) {
-            const randomPet = pets[Math.floor(Math.random() * pets.length)]
-            await supabase.from('user_pets').insert({
-              user_id: data.user.id,
-              pet_id: randomPet.id,
-              is_active: true
-            })
-          }
-        } catch (petErr) {
-          console.error('Error giving starter pet:', petErr)
-        }
-      } catch (profileError) {
-        console.error('Error creating user profile:', profileError)
+  // Upgrades the current anonymous session into a real account in place: same user id,
+  // same progress/XP/pet - just adds a real email+password so they can log back in later.
+  const convertAnonymousAccount = async (email, password, fullName, username) => {
+    const { data, error } = await supabase.auth.updateUser({
+      email,
+      password,
+      data: { full_name: fullName }
+    })
+
+    if (data?.user && !error) {
+      const { error: profileError } = await supabase
+        .from('users')
+        .update({ email, full_name: fullName, username: username || null })
+        .eq('id', data.user.id)
+
+      if (profileError) {
+        console.error('Error updating user profile after conversion:', profileError)
       }
+      window.location.reload()
     }
 
     return { data, error }
@@ -267,6 +307,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     signIn,
     signUp,
+    signInAnonymously,
+    convertAnonymousAccount,
     signOut,
     updateProfile,
     isAdmin,

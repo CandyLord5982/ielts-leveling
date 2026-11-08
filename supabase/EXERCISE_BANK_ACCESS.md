@@ -22,8 +22,8 @@ exercise reads. An exercise already assigned to a class is still hidden from a
 teacher if it is outside their granted bank scope. Existing reports omit those
 exercise records. Students can read bank exercises assigned to courses in which
 they have an active enrollment, as well as active Daily Challenges published for
-today or earlier in Vietnam time. Active guest-course exercises remain public.
-Non-bank exercise reads retain their existing policies.
+today or earlier in Vietnam time. Non-bank exercise reads retain their existing
+policies.
 
 The migration enables RLS on exercises, exercise folders, users, and daily
 challenges. It adds

@@ -13,7 +13,7 @@ import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule'
 
 import { assetUrl, useBranding } from '../../hooks/useBranding';
 import { usePermissions } from '../../hooks/usePermissions';
-import { CheckCircle, Clock, XCircle, ChevronDown } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 
 // Collapsible student exercise stats for latest session — only fetches on first open
 const CourseStatsSection = ({ courseId }) => {
@@ -935,6 +935,25 @@ const Dashboard = () => {
             `}</style>
           </div>
         </div>
+      )}
+
+      {/* Spaced-repetition review for previously missed questions */}
+      {profile?.role === 'user' && (
+        <button
+          onClick={() => navigate('/review')}
+          className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mt-4 hover:border-blue-300 hover:shadow-md transition-all text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <RotateCcw className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-800">Ôn tập câu sai</p>
+              <p className="text-xs text-gray-500">Ôn lại các câu bạn từng làm sai, đúng lúc trước khi bạn quên</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
+        </button>
       )}
 
       {/* Pet Display - Full width */}

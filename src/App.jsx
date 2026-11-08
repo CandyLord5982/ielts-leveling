@@ -33,6 +33,7 @@ import MissionBoard from './components/missions/MissionBoard'
 import LiveBattlePage from './components/livebattle/LiveBattlePage'
 import UnitReportPage from './components/teacher/reports/UnitReportPage'
 import WeaknessAnalysis from './components/teacher/WeaknessAnalysis'
+import ReviewQueue from './components/review/ReviewQueue'
 import { FEATURES } from './config/features'
 
 function App() {
@@ -59,6 +60,7 @@ function App() {
                 <Route path="study/*" element={<StudyModule />} />
                 <Route path="leaderboard" element={<Leaderboard />} />
                 <Route path="progress" element={<Progress />} />
+                <Route path="review" element={<ReviewQueue />} />
                 <Route path="profile" element={<Profile />} />
                 {FEATURES.shop && <Route path="shop" element={<Shop />} />}
                 {FEATURES.inventory && <Route path="inventory" element={<Inventory />} />}

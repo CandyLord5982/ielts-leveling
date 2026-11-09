@@ -22,7 +22,7 @@ import { supabase } from '../../../supabase/client'
 import RichTextRenderer from '../../ui/RichTextRenderer'
 import { handleRichTextShortcut } from '../../../hooks/useRichTextShortcuts'
 
-const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath, focusQuestionId }) => {
+const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath, focusQuestionId, exerciseTitle = '', onCreateFromQuestions }) => {
   const normalizeQuestion = (q, idx = 0) => {
     const safeOptions = Array.isArray(q?.options) ? q.options : ['', '', '', '']
     const baseOptionExplanations = Array.isArray(q?.option_explanations)
@@ -168,6 +168,84 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
     updatedQuestions.splice(index + 1, 0, questionToDuplicate)
     setLocalQuestions(updatedQuestions)
     onQuestionsChange(updatedQuestions)
+  }
+
+  // --- Select mode: extract questions into new exercises / split into parts ---
+  // onCreateFromQuestions is provided by EditExerciseModal: ([{ title, questions }]) => Promise<boolean>
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState(() => new Set()) // indices into localQuestions
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+
+  const toggleSelected = (index) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  // Accepts "1-15, 20, 25-30" (1-based)
+  const selectRange = () => {
+    const input = window.prompt('Select questions (e.g. 1-15, 20, 25-30):')
+    if (!input) return
+    const next = new Set(selected)
+    for (const part of input.split(',')) {
+      const m = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/)
+      if (!m) continue
+      const from = Number(m[1])
+      const to = Number(m[2] || m[1])
+      for (let n = Math.min(from, to); n <= Math.max(from, to); n++) {
+        if (n >= 1 && n <= localQuestions.length) next.add(n - 1)
+      }
+    }
+    setSelected(next)
+  }
+
+  // Fresh copies so the new exercises don't share option arrays with this one
+  const cloneQuestions = (list) => list.map(q => JSON.parse(JSON.stringify(q)))
+
+  const extractSelected = async () => {
+    if (selected.size === 0 || !onCreateFromQuestions) return
+    const title = window.prompt('Title for the new exercise:', `${exerciseTitle} (Extract)`.trim())
+    if (!title || !title.trim()) return
+    const questions = cloneQuestions(localQuestions.filter((_, i) => selected.has(i)))
+    setBulkBusy(true)
+    const ok = await onCreateFromQuestions([{ title: title.trim(), questions }])
+    setBulkBusy(false)
+    if (ok) exitSelectMode()
+  }
+
+  const removeSelected = () => {
+    if (selected.size === 0) return
+    if (!window.confirm(`Remove ${selected.size} selected question(s) from this exercise? (Click Save to apply.)`)) return
+    const updated = localQuestions.filter((_, i) => !selected.has(i))
+    setLocalQuestions(updated)
+    onQuestionsChange(updated)
+    exitSelectMode()
+  }
+
+  const splitIntoParts = async () => {
+    if (!onCreateFromQuestions || localQuestions.length < 2) return
+    const input = window.prompt(`Split ${localQuestions.length} questions into how many exercises?`, '2')
+    const parts = Number(input)
+    if (!Number.isInteger(parts) || parts < 2 || parts > localQuestions.length) return
+    const size = Math.ceil(localQuestions.length / parts)
+    const groups = []
+    for (let p = 0; p < parts; p++) {
+      const chunk = localQuestions.slice(p * size, (p + 1) * size)
+      if (chunk.length) groups.push({ title: `${exerciseTitle} (Part ${p + 1})`.trim(), questions: cloneQuestions(chunk) })
+    }
+    if (!window.confirm(`Create ${groups.length} new exercises (${groups.map(g => g.questions.length).join(' / ')} questions)? This exercise stays unchanged.`)) return
+    setBulkBusy(true)
+    const ok = await onCreateFromQuestions(groups)
+    setBulkBusy(false)
+    if (ok) exitSelectMode()
   }
 
   const removeQuestion = (index) => {
@@ -1040,6 +1118,15 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
           >
             Shuffle questions: {localSettings.shuffle_questions ? 'On' : 'Off'}
           </button>
+          {onCreateFromQuestions && localQuestions.length > 1 && (
+            <button
+              type="button"
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg text-sm ${selectMode ? 'bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+            >
+              {selectMode ? 'Done selecting' : 'Select / Split'}
+            </button>
+          )}
           {localQuestions.length > 0 && (
             <button
               type="button"
@@ -1069,6 +1156,40 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
           </button>
         </div>
       </div>
+
+    {selectMode && (
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm">
+        <span className="font-medium text-indigo-900">{selected.size} selected</span>
+        <button type="button" onClick={() => setSelected(new Set(localQuestions.map((_, i) => i)))} className="px-2 py-1 text-indigo-700 hover:underline">All</button>
+        <button type="button" onClick={() => setSelected(new Set())} className="px-2 py-1 text-indigo-700 hover:underline">None</button>
+        <button type="button" onClick={selectRange} className="px-2 py-1 text-indigo-700 hover:underline">Range…</button>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={extractSelected}
+          disabled={selected.size === 0 || bulkBusy}
+          className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40"
+        >
+          Copy to new exercise
+        </button>
+        <button
+          type="button"
+          onClick={removeSelected}
+          disabled={selected.size === 0 || bulkBusy}
+          className="px-3 py-1.5 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40"
+        >
+          Remove from this exercise
+        </button>
+        <button
+          type="button"
+          onClick={splitIntoParts}
+          disabled={bulkBusy}
+          className="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-40"
+        >
+          Split all into N exercises…
+        </button>
+      </div>
+    )}
 
     {/* Global Intro Section */}
     <div className="bg-white p-4 border-l-4 border-l-blue-400 border border-gray-200 rounded-lg">
@@ -1242,6 +1363,14 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
           <div key={question.id || index} data-question-id={question.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50 transition-shadow">
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(index)}
+                    onChange={() => toggleSelected(index)}
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => toggleCollapse(index)}

@@ -98,6 +98,32 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
     setContent(newContent)
   }
 
+  // Multiple choice: create new exercises from groups of questions ([{ title, questions }]).
+  // Same row shape as ExerciseBankCard's Duplicate; the original exercise is left untouched.
+  const handleCreateFromQuestions = async (groups) => {
+    try {
+      // Drop the keys entirely (not `undefined`): supabase-js lists every key of a bulk insert
+      // as a column, so an `id: undefined` key sends NULL instead of using the default.
+      // eslint-disable-next-line no-unused-vars
+      const { id, created_at, updated_at, ...base } = exercise
+      const rows = groups.map(({ title, questions }) => ({
+        ...base,
+        title,
+        folder_id: formData.folder_id,
+        content: { ...content, questions },
+      }))
+      const { error } = await supabase.from('exercises').insert(rows)
+      if (error) throw error
+      onUpdate()
+      alert(`Created ${rows.length} new exercise${rows.length > 1 ? 's' : ''}: ${rows.map(r => `"${r.title}" (${r.content.questions.length})`).join(', ')}`)
+      return true
+    } catch (err) {
+      console.error('Error creating exercises from questions:', err)
+      alert('Failed to create exercise: ' + (err.message || 'Unknown error'))
+      return false
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -183,6 +209,8 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
             onIntroChange={(intro) => handleContentChange({ ...content, intro })}
             folderPath={getFolderPath(formData.folder_id)}
             focusQuestionId={focusQuestionId}
+            exerciseTitle={formData.title}
+            onCreateFromQuestions={handleCreateFromQuestions}
           />
         )
       case 'fill_blank':

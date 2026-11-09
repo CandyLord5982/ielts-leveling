@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import PropTypes from "prop-types";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase/client";
 import { useAuth } from "../../hooks/useAuth";
@@ -74,6 +75,9 @@ import {
 
 import { getMapTheme } from "../../config/mapThemes";
 import StudentStatsPopover from "../ui/StudentStatsPopover";
+import HudPanel from "../ui/HudPanel";
+import CourseOutline from "./CourseOutline";
+import { CLIP } from "../ui/hudClip";
 import useClassStats from "../../hooks/useClassStats";
 
 import { assetUrl } from '../../hooks/useBranding';
@@ -101,6 +105,37 @@ function getExerciseIndices(count, positions, customMappings) {
   }
   return indices;
 }
+
+// Placeholder rows shown while a session's exercises load (the rest of the page stays put)
+const ListSkeleton = ({ count = 4 }) => (
+  <div aria-hidden="true">
+    {Array.from({ length: count }).map((_, i) => (
+      <div key={i} className="relative pl-9 py-1.5">
+        <HudPanel hoverGroup={false}>
+          <div className="flex items-center gap-4 px-4 py-3.5 animate-pulse">
+            <div className="w-11 h-11 flex-shrink-0 bg-gray-200" style={{ clipPath: CLIP.icon }} />
+            <div className="flex-1 min-w-0">
+              <div className="h-4 w-1/3 bg-gray-200 mb-2" />
+              <div className="h-3 w-1/4 bg-gray-100" />
+            </div>
+          </div>
+        </HudPanel>
+      </div>
+    ))}
+  </div>
+);
+
+ListSkeleton.propTypes = { count: PropTypes.number };
+
+const OUTLINE_KEY = "courseOutlineOpen";
+const readOutlineOpen = () => {
+  if (typeof window === "undefined" || window.innerWidth < 1024) return false;
+  try {
+    return localStorage.getItem(OUTLINE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+};
 
 const EXERCISE_TYPE_LABELS = {
   flashcard: "Flashcards",
@@ -162,6 +197,17 @@ const ExerciseList = () => {
   const [draggingControlPoint, setDraggingControlPoint] = useState(null);
   const [pickedExerciseIndex, setPickedExerciseIndex] = useState(null);
   const [mapPage, setMapPage] = useState(0);
+  const [outlineOpen, setOutlineOpenState] = useState(readOutlineOpen);
+  const setOutlineOpen = (value) => {
+    setOutlineOpenState(value);
+    if (window.innerWidth >= 1024) {
+      try {
+        localStorage.setItem(OUTLINE_KEY, String(value));
+      } catch {
+        /* ignore */
+      }
+    }
+  };
   const didInitMapPage = useRef(false);
   const mapContainerRef = useRef(null);
   // Desktop detection for responsive node positions
@@ -181,24 +227,6 @@ const ExerciseList = () => {
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
-  );
-
-  // Skeleton card cho trạng thái loading
-  const SkeletonCard = () => (
-    <div className="flex items-center p-4 rounded-lg border border-gray-200 bg-white animate-pulse">
-      <div className="flex-shrink-0 w-12 h-12 mr-4">
-        <div className="w-full h-full rounded-lg bg-gray-200" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-        <div className="flex items-center space-x-4">
-          <div className="h-3 bg-gray-200 rounded w-24" />
-          <div className="h-3 bg-gray-100 rounded w-16" />
-          <div className="h-3 bg-gray-100 rounded w-14" />
-        </div>
-      </div>
-      <div className="w-5 h-5 bg-gray-200 rounded ml-4" />
-    </div>
   );
 
   const handleExercisesAssigned = async () => {
@@ -428,7 +456,7 @@ const ExerciseList = () => {
           )
           .eq("session_id", sessionId)
           .order("order_index"),
-        supabase.from("units").select("id, course_id, unit_number").order("unit_number"),
+        supabase.from("units").select("id, course_id, unit_number, title").order("unit_number"),
       ]);
 
       if (courseResult.error) throw courseResult.error;
@@ -1130,7 +1158,7 @@ const ExerciseList = () => {
     );
   };
 
-  // One exercise in the study path: a card on a thin progress rail.
+  // One exercise in the study path: a cut-corner card on a thin progress rail.
   const SortableExerciseCard = ({ exercise, index }) => {
     const { setNodeRef, transform, transition, isDragging } = useSortable({
       id: exercise.id,
@@ -1163,148 +1191,157 @@ const ExerciseList = () => {
       <div ref={setNodeRef} style={style} className="relative pl-9 py-1.5">
         {/* Progress rail: green where the path has been completed */}
         <span
-          className={`absolute left-3 w-0.5 -translate-x-1/2 ${isFirst ? "top-1/2" : "top-0"} h-1/2 ${prevDone ? "bg-emerald-400" : "bg-slate-200"} ${isFirst ? "hidden" : ""}`}
+          className={`absolute left-3 w-px -translate-x-1/2 top-0 h-1/2 ${prevDone ? "bg-emerald-400" : "bg-gray-300"} ${isFirst ? "hidden" : ""}`}
         />
         <span
-          className={`absolute left-3 w-0.5 -translate-x-1/2 top-1/2 h-1/2 ${isDone ? "bg-emerald-400" : "bg-slate-200"} ${isLast ? "hidden" : ""}`}
+          className={`absolute left-3 w-px -translate-x-1/2 top-1/2 h-1/2 ${isDone ? "bg-emerald-400" : "bg-gray-300"} ${isLast ? "hidden" : ""}`}
         />
         <span
-          className={`absolute left-3 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full ring-4 ring-slate-50 ${
+          className={`absolute left-3 top-1/2 -translate-x-1/2 -translate-y-1/2 border ${
             isDone
-              ? "w-4 h-4 bg-emerald-500"
+              ? "w-3 h-3 bg-emerald-500 border-emerald-500"
               : isNext
-                ? "w-4 h-4 bg-blue-600"
-                : "w-3 h-3 bg-slate-300"
+                ? "w-3 h-3 bg-blue-500 border-blue-500"
+                : "w-2.5 h-2.5 bg-white border-gray-300"
           }`}
-        >
-          {isDone && <CheckCircle className="w-3 h-3 text-white" />}
-        </span>
+        />
 
-        <div
+        <HudPanel
+          tone="default"
+          accentBar={isNext}
           onClick={() => openExercise(exercise)}
-          className={`group flex items-center gap-3 md:gap-4 rounded-2xl border bg-white px-3 py-3 md:px-4 md:py-3.5 shadow-sm transition-all cursor-pointer hover:shadow-md ${
-            isNext
-              ? "border-blue-300 ring-2 ring-blue-100"
-              : "border-slate-200 hover:border-slate-300"
-          }`}
+          className="cursor-pointer"
         >
-          {/* Reorder handle - admins/teachers only (click to pick up, click a destination) */}
-          {isTeacher && (
-            <button
-              type="button"
-              className={`flex-shrink-0 p-1 rounded transition-colors ${
-                pickedExerciseIndex === index
-                  ? "text-blue-600 bg-blue-100"
-                  : pickedExerciseIndex !== null
-                    ? "text-green-600 bg-green-50 hover:bg-green-100 ring-2 ring-green-400"
-                    : "text-slate-300 hover:text-slate-600 hover:bg-slate-100"
-              }`}
-              title={
-                pickedExerciseIndex === index
-                  ? "Click another exercise to place it here"
-                  : pickedExerciseIndex !== null
-                    ? "Click to place here"
-                    : "Click to pick up, then click destination"
-              }
-              onClick={(e) => {
-                e.stopPropagation();
-                if (pickedExerciseIndex === null) {
-                  setPickedExerciseIndex(index);
-                } else if (pickedExerciseIndex === index) {
-                  setPickedExerciseIndex(null);
-                } else {
-                  moveExerciseToPosition(pickedExerciseIndex, index + 1);
-                  setPickedExerciseIndex(null);
+          <div className="flex items-center gap-3 md:gap-4 px-3 py-3 md:px-4 md:py-3.5">
+            {/* Reorder handle - admins/teachers only (click to pick up, click a destination) */}
+            {isTeacher && (
+              <button
+                type="button"
+                className={`flex-shrink-0 p-1 transition-colors ${
+                  pickedExerciseIndex === index
+                    ? "text-blue-600 bg-blue-100"
+                    : pickedExerciseIndex !== null
+                      ? "text-green-600 bg-green-50 hover:bg-green-100 ring-2 ring-green-400"
+                      : "text-gray-300 hover:text-gray-600 hover:bg-gray-100"
+                }`}
+                title={
+                  pickedExerciseIndex === index
+                    ? "Click another exercise to place it here"
+                    : pickedExerciseIndex !== null
+                      ? "Click to place here"
+                      : "Click to pick up, then click destination"
                 }
-              }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (pickedExerciseIndex === null) {
+                    setPickedExerciseIndex(index);
+                  } else if (pickedExerciseIndex === index) {
+                    setPickedExerciseIndex(null);
+                  } else {
+                    moveExerciseToPosition(pickedExerciseIndex, index + 1);
+                    setPickedExerciseIndex(null);
+                  }
+                }}
+              >
+                <GripVertical className="w-5 h-5" />
+              </button>
+            )}
+
+            <span className="hidden sm:block flex-shrink-0 font-mono text-xs font-bold tracking-widest text-gray-300">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+
+            <div
+              className={`flex-shrink-0 w-11 h-11 flex items-center justify-center border border-gray-200 ${getExerciseColor(exercise.exercise_type)}`}
+              style={{ clipPath: CLIP.icon }}
             >
-              <GripVertical className="w-5 h-5" />
-            </button>
-          )}
+              <ExerciseIcon className="w-5 h-5" />
+            </div>
 
-          <span className="hidden sm:block w-6 flex-shrink-0 text-sm font-semibold tabular-nums text-slate-300">
-            {String(index + 1).padStart(2, "0")}
-          </span>
+            <div className="flex-1 min-w-0">
+              <h3 className="truncate text-sm md:text-base font-semibold text-gray-900">
+                {exercise.title || EXERCISE_TYPE_LABELS[exercise.exercise_type]}
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 truncate">
+                {EXERCISE_TYPE_LABELS[exercise.exercise_type] || "Exercise"}
+                <span className="mx-1.5 text-gray-300">/</span>
+                <span className={isDone ? "text-emerald-600 font-medium" : status === "in_progress" ? "text-amber-600 font-medium" : ""}>
+                  {statusText}
+                </span>
+              </p>
+              {renderUnfinished(exercise, status)}
+            </div>
 
-          <div
-            className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${
-              isDone ? "bg-emerald-50 text-emerald-600" : getExerciseColor(exercise.exercise_type)
-            }`}
-          >
-            <ExerciseIcon className="w-5 h-5" />
-          </div>
+            {/* Students: stars */}
+            {!isTeacher && renderStars(progress?.score, status, progress?.max_score)}
 
-          <div className="flex-1 min-w-0">
-            <h3 className="truncate text-sm md:text-base font-semibold text-slate-900">
-              {exercise.title || EXERCISE_TYPE_LABELS[exercise.exercise_type]}
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-500 truncate">
-              {EXERCISE_TYPE_LABELS[exercise.exercise_type] || "Exercise"}
-              <span className="mx-1.5 text-slate-300">·</span>
-              <span className={isDone ? "text-emerald-600 font-medium" : status === "in_progress" ? "text-amber-600 font-medium" : ""}>
-                {statusText}
-              </span>
-            </p>
-            {renderUnfinished(exercise, status)}
-          </div>
-
-          {/* Students: stars */}
-          {!isTeacher && renderStars(progress?.score, status, progress?.max_score)}
-
-          {/* Teachers: class completion + actions */}
-          {isTeacher && exerciseClassStats?.[exercise.id] && (
-            <StudentStatsPopover
-              stats={exerciseClassStats[exercise.id]}
-              size="sm"
-              position="bottom"
-              courseId={courseId}
-              sessionId={sessionId}
-            />
-          )}
-          {isTeacher && (
-            <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
-              {profile?.role === "admin" && (
+            {/* Teachers: class completion + actions */}
+            {isTeacher && exerciseClassStats?.[exercise.id] && (
+              <StudentStatsPopover
+                stats={exerciseClassStats[exercise.id]}
+                size="sm"
+                position="bottom"
+                courseId={courseId}
+                sessionId={sessionId}
+              />
+            )}
+            {isTeacher && (
+              <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
+                {profile?.role === "admin" && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditExercise(exercise);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    title="Edit exercise"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleEditExercise(exercise);
+                    handleDeleteExercise(exercise);
                   }}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                  title="Edit exercise"
+                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  title="Delete exercise"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteExercise(exercise);
-                }}
-                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                title="Delete exercise"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+              </div>
+            )}
 
-          <ChevronRight className="flex-shrink-0 w-5 h-5 text-slate-300 group-hover:text-slate-500 transition-colors" />
-        </div>
+            <ChevronRight className="flex-shrink-0 w-5 h-5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+          </div>
+        </HudPanel>
       </div>
     );
   };
 
-  if (loading && exercises.length === 0) {
+  // First load only: the page frame with placeholders. Later loads keep the page and only
+  // swap the list for a skeleton (see `switching` below).
+  if (loading && !course) {
     return (
-      <div className="flex bg-white">
-        {/* Main content skeleton */}
-        <div className="flex-1 flex flex-col overflow-hidden p-6">
-          <div className="space-y-4">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <SkeletonCard key={idx} />
-            ))}
+      <div className="relative w-full h-[100vh] overflow-hidden">
+        <div className="relative w-full h-full overflow-hidden bg-gray-50">
+          <div className="absolute inset-0 overflow-y-auto z-10 pt-28 md:pt-32 pb-24 px-4">
+            <div className="max-w-3xl mx-auto">
+              <ListSkeleton count={5} />
+            </div>
+          </div>
+          <div className="absolute top-0 inset-x-0 z-50 p-2 md:p-4 pointer-events-none">
+            <HudPanel tone="glass" hoverGroup={false} className="mx-auto max-w-3xl">
+              <div className="flex items-center gap-3 p-3 animate-pulse">
+                <div className="w-10 h-10 flex-shrink-0 bg-gray-200" style={{ clipPath: CLIP.icon }} />
+                <div className="flex-1">
+                  <div className="h-4 w-1/3 bg-gray-200 mb-2" />
+                  <div className="h-2.5 bg-gray-100" />
+                </div>
+              </div>
+            </HudPanel>
           </div>
         </div>
       </div>
@@ -1344,7 +1381,46 @@ const ExerciseList = () => {
   const mapTheme = getMapTheme(colorTheme);
   // decorated = themed map; anything else (minimal, the default) = study-path list
   const isDecorated = course?.ui_style === "decorated";
+  // Loading a different session: keep the top bar and outline, show placeholders for the list
+  const switching = loading && session?.id !== sessionId;
+  const shownTitle = switching
+    ? allCourseSessions.find((x) => x.id === sessionId)?.title || ""
+    : session.title;
+  const emptyState = (
+    <HudPanel hoverGroup={false} className="mx-auto w-full max-w-md">
+      <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+        <span
+          className="flex h-12 w-12 items-center justify-center border border-gray-300 text-gray-400"
+          style={{ clipPath: CLIP.icon }}
+        >
+          <BookOpen className="w-6 h-6" />
+        </span>
+        <h3 className="text-base font-bold tracking-tight text-gray-900">
+          {canCreateContent() ? "No exercises yet" : "Exercises coming soon"}
+        </h3>
+        <p className="text-sm text-gray-500">
+          {canCreateContent()
+            ? "Add exercises from the bank to build this session."
+            : "Exercises for this session haven't been added yet. Check back soon."}
+        </p>
+        {canCreateContent() && (
+          <button
+            type="button"
+            onClick={() => setShowAssignExerciseModal(true)}
+            className="mt-1 inline-flex items-center gap-2 bg-blue-500 px-6 py-2.5 text-sm font-bold text-white transition-all hover:brightness-110"
+            style={{ clipPath: CLIP.btn }}
+          >
+            <Plus className="w-4 h-4" />
+            Add exercises
+          </button>
+        )}
+      </div>
+    </HudPanel>
+  );
   const activeView = isDecorated ? viewMode : "list";
+  // The course outline lives beside the list view; the map view stays full screen.
+  const showOutline = activeView === "list" && allCourseSessions.length > 0;
+  const outlineShift = showOutline && outlineOpen ? "lg:left-72" : "lg:left-0";
 
   // Use desktop positions if available and on desktop, otherwise use mobile positions
   const allPositions =
@@ -1718,7 +1794,7 @@ const ExerciseList = () => {
   return (
     <div className="relative w-full h-[100vh] md:h-[100vh] overflow-hidden">
       <div
-        className="relative z-[1] w-full md:w-[100%] h-full md:h-[100vh] mx-auto overflow-hidden md:shadow-2xl bg-slate-50"
+        className="relative z-[1] w-full md:w-[100%] h-full md:h-[100vh] mx-auto overflow-hidden md:shadow-2xl bg-gray-50"
         ref={mapContainerRef}
       >
         {/* Background - only for map view */}
@@ -1736,6 +1812,12 @@ const ExerciseList = () => {
         {/* Map View */}
         {activeView === "map" && (
           <>
+            {!switching && exercises.length === 0 && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pt-28 pointer-events-none">
+                <div className="pointer-events-auto w-full">{emptyState}</div>
+              </div>
+            )}
+
             {/* Level nodes */}
             <div
               className={`absolute inset-0 w-full h-full ${positionEditorMode && editorTarget === "nodes" ? "z-30" : "z-10"}`}
@@ -1784,44 +1866,69 @@ const ExerciseList = () => {
 
         {/* List View */}
         {activeView === "list" && (
-          <div className="absolute inset-0 overflow-y-auto z-10 pt-28 md:pt-32 pb-24 px-4">
+          <div className={`absolute inset-0 ${outlineShift} overflow-y-auto z-10 pt-28 md:pt-32 pb-24 px-4 transition-[left] duration-300`}>
           <div className="max-w-3xl mx-auto">
             {/* Up next - students only */}
-            {!canCreateContent() && exercises.length > 0 && (
+            {!switching && !canCreateContent() && exercises.length > 0 && (
               nextExercise ? (
                 <button
                   type="button"
                   onClick={() => openExercise(nextExercise)}
-                  className="group relative w-full text-left mb-6 overflow-hidden rounded-3xl border border-blue-200 bg-blue-50 p-5 md:p-6 shadow-sm transition-shadow hover:shadow-md"
+                  className="group relative block w-full text-left mb-6"
                 >
-                  <p className="relative text-xs font-semibold tracking-wider uppercase text-blue-600">
-                    {completedCount === 0 ? "Start here" : "Up next"} · {nextIndex + 1} of {exercises.length}
-                  </p>
-                  <h3 className="relative mt-1 text-xl md:text-2xl font-bold leading-snug text-slate-900">
-                    {nextExercise.title || EXERCISE_TYPE_LABELS[nextExercise.exercise_type]}
-                  </h3>
-                  <p className="relative mt-1 text-sm text-slate-600">
-                    {EXERCISE_TYPE_LABELS[nextExercise.exercise_type] || "Exercise"}
-                  </p>
-                  <span className="relative mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all group-hover:gap-3 group-hover:bg-blue-700">
-                    {userProgress.find((p) => p.exercise_id === nextExercise.id)?.status === "in_progress"
-                      ? "Continue"
-                      : "Start"}
-                    <ChevronRight className="w-4 h-4" />
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 border border-blue-300 bg-blue-50 transition-colors group-hover:border-blue-400"
+                    style={{ clipPath: CLIP.card }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-[10px] left-0 w-[2px] h-[calc(100%-10px)] bg-blue-400"
+                  />
+                  <span className="relative block p-5 md:p-6">
+                    <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-blue-500">
+                      <span>[ {completedCount === 0 ? "Start here" : "Up next"} ]</span>
+                      <span className="font-mono text-gray-400">
+                        {String(nextIndex + 1).padStart(2, "0")}/{String(exercises.length).padStart(2, "0")}
+                      </span>
+                    </span>
+                    <span className="mt-2 block text-xl md:text-2xl font-bold leading-snug tracking-tight text-gray-900">
+                      {nextExercise.title || EXERCISE_TYPE_LABELS[nextExercise.exercise_type]}
+                    </span>
+                    <span className="mt-1.5 block w-16 h-[2px] bg-blue-500" />
+                    <span className="mt-2 block text-sm text-gray-500">
+                      {EXERCISE_TYPE_LABELS[nextExercise.exercise_type] || "Exercise"}
+                    </span>
+                    <span
+                      className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-400 px-7 py-2.5 text-sm font-bold uppercase tracking-wider text-white transition-all group-hover:brightness-110 group-hover:gap-3"
+                      style={{ clipPath: CLIP.btn }}
+                    >
+                      {userProgress.find((p) => p.exercise_id === nextExercise.id)?.status === "in_progress"
+                        ? "Continue"
+                        : "Start"}
+                      <ChevronRight className="w-4 h-4" />
+                    </span>
                   </span>
                 </button>
               ) : (
-                <div className="mb-6 flex items-center gap-3 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-                  <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
-                  <div>
-                    <p className="font-semibold text-emerald-900">All exercises complete</p>
-                    <p className="text-sm text-emerald-700">
-                      {earnedStars} stars earned{chestReady ? " - your reward chest is ready" : ""}
-                    </p>
+                <HudPanel tone="done" className="mb-6">
+                  <div className="flex items-center gap-3 p-5">
+                    <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">All exercises complete</p>
+                      <p className="text-sm text-emerald-600">
+                        <span className="font-mono font-bold">{earnedStars}</span> stars earned{chestReady ? " - your reward chest is ready" : ""}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </HudPanel>
               )
             )}
+            {switching ? (
+              <ListSkeleton count={Math.max(exercises.length, 4)} />
+            ) : exercises.length === 0 ? (
+              emptyState
+            ) : (
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -1842,107 +1949,138 @@ const ExerciseList = () => {
                 </div>
               </SortableContext>
             </DndContext>
+            )}
           </div>
           </div>
         )}
 
+        {showOutline && (
+          <CourseOutline
+            open={outlineOpen}
+            onOpen={() => setOutlineOpen(true)}
+            onClose={() => setOutlineOpen(false)}
+            course={course}
+            units={units}
+            sessions={allCourseSessions}
+            sessionProgress={sessionProgress}
+            currentSessionId={sessionId}
+            currentUnitId={unitId}
+            isStudent={profile?.role === "user"}
+            onBack={() => navigate(`/study/course/${currentId}`)}
+            onSelectSession={(target) => {
+              if (target.id === sessionId) {
+                if (window.innerWidth < 1024) setOutlineOpen(false);
+                return;
+              }
+              navigate(`/study/course/${currentId}/unit/${target.unit_id}/session/${target.id}`);
+              if (window.innerWidth < 1024) setOutlineOpen(false);
+            }}
+          />
+        )}
+
         {/* Top bar: back, session title + progress, admin tools, chest */}
-        <div className="absolute top-0 inset-x-0 z-50 p-2 md:p-4 pointer-events-none">
-          <div className="pointer-events-auto mx-auto max-w-3xl flex items-center gap-2 md:gap-3 rounded-2xl bg-white/85 backdrop-blur-md shadow-lg ring-1 ring-black/5 p-2 md:px-3 md:py-2.5">
-            <button
-              type="button"
-              onClick={() => navigate(`/study/course/${currentId}`)}
-              aria-label="Back to course"
-              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+        <div className={`absolute top-0 inset-x-0 ${outlineShift} z-50 p-2 md:p-4 pointer-events-none transition-[left] duration-300`}>
+          <HudPanel tone="glass" className="pointer-events-auto mx-auto max-w-3xl">
+            <div className="flex items-center gap-2 md:gap-3 p-2 md:px-3 md:py-2.5">
+              <button
+                type="button"
+                onClick={() => navigate(`/study/course/${currentId}`)}
+                aria-label="Back to course"
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                style={{ clipPath: CLIP.icon }}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
 
-            <div className="flex-1 min-w-0">
-              <h2 className="truncate text-sm md:text-lg font-bold text-slate-900 leading-tight">
-                {session.title}
-              </h2>
-              {exercises.length > 0 && (
-                <div className="mt-1 flex items-center gap-2">
-                  <div
-                    className="flex-1 h-1.5 md:h-2 rounded-full bg-slate-200 overflow-hidden"
-                    role="progressbar"
-                    aria-valuenow={completedCount}
-                    aria-valuemin={0}
-                    aria-valuemax={exercises.length}
-                  >
+              <div className="flex-1 min-w-0">
+                <h2 className="truncate text-sm md:text-lg font-bold tracking-tight text-gray-900 leading-tight">
+                  {shownTitle}
+                </h2>
+                {exercises.length > 0 && !switching && (
+                  <div className="mt-1 flex items-center gap-2">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
-                      style={{ width: `${progressPct}%` }}
-                    />
+                      className="relative flex-1 h-2.5 bg-gray-100 border border-gray-200 overflow-hidden"
+                      style={{ clipPath: CLIP.bar }}
+                      role="progressbar"
+                      aria-valuenow={completedCount}
+                      aria-valuemin={0}
+                      aria-valuemax={exercises.length}
+                    >
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] md:text-xs font-bold text-gray-600 tabular-nums">
+                      {completedCount}/{exercises.length}
+                    </span>
+                    <span className="flex items-center gap-0.5 font-mono text-[11px] md:text-xs font-bold text-amber-600 tabular-nums">
+                      <Star className="w-3 h-3 md:w-3.5 md:h-3.5 fill-amber-400 text-amber-400" />
+                      {earnedStars}
+                    </span>
                   </div>
-                  <span className="text-[11px] md:text-xs font-semibold text-slate-600 tabular-nums">
-                    {completedCount}/{exercises.length}
-                  </span>
-                  <span className="flex items-center gap-0.5 text-[11px] md:text-xs font-semibold text-amber-600 tabular-nums">
-                    <Star className="w-3 h-3 md:w-3.5 md:h-3.5 fill-amber-400 text-amber-400" />
-                    {earnedStars}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Map/list toggle + position editor: admins/teachers, decorated (map) courses only */}
-            {canCreateContent() && isDecorated && (
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setViewMode(viewMode === "map" ? "list" : "map")}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
-                  title={viewMode === "map" ? "Switch to List View" : "Switch to Map View"}
-                  aria-label={viewMode === "map" ? "Switch to List View" : "Switch to Map View"}
-                >
-                  {viewMode === "map" ? <List className="w-5 h-5" /> : <Map className="w-5 h-5" />}
-                </button>
-                {viewMode === "map" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!positionEditorMode) {
-                        initEditablePositions();
-                      }
-                      setPositionEditorMode(!positionEditorMode);
-                    }}
-                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
-                      positionEditorMode
-                        ? "bg-red-500 text-white"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                    title={positionEditorMode ? "Exit Editor" : "Edit Node Positions"}
-                    aria-label={positionEditorMode ? "Exit Editor" : "Edit Node Positions"}
-                  >
-                    <Edit className="w-5 h-5" />
-                  </button>
                 )}
               </div>
-            )}
 
-            {/* Chest - visible for everyone */}
-            <button
-              type="button"
-              onClick={handleChestClick}
-              aria-label={sessionRewards[sessionId]?.claimed ? "Reward claimed" : chestReady ? "Claim reward" : "Reward locked"}
-              className="relative flex-shrink-0 w-11 h-11 md:w-14 md:h-14"
-            >
-              <img
-                src={
-                  sessionRewards[sessionId]?.claimed
-                    ? assetUrl('/image/study/chest_open.png') // Opened
-                    : assetUrl('/image/study/chest_lock.png') // Locked or Ready
-                }
-                alt=""
-                className={`w-full h-full object-contain drop-shadow-md ${chestReady ? "animate-bounce" : ""}`}
-              />
-              {chestReady && (
-                <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white" />
+              {/* Map/list toggle + position editor: admins/teachers, decorated (map) courses only */}
+              {canCreateContent() && isDecorated && (
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode(viewMode === "map" ? "list" : "map")}
+                    className="w-10 h-10 flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                    style={{ clipPath: CLIP.icon }}
+                    title={viewMode === "map" ? "Switch to List View" : "Switch to Map View"}
+                    aria-label={viewMode === "map" ? "Switch to List View" : "Switch to Map View"}
+                  >
+                    {viewMode === "map" ? <List className="w-5 h-5" /> : <Map className="w-5 h-5" />}
+                  </button>
+                  {viewMode === "map" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!positionEditorMode) {
+                          initEditablePositions();
+                        }
+                        setPositionEditorMode(!positionEditorMode);
+                      }}
+                      className={`w-10 h-10 flex items-center justify-center border transition-colors ${
+                        positionEditorMode
+                          ? "bg-red-500 border-red-500 text-white"
+                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      }`}
+                      style={{ clipPath: CLIP.icon }}
+                      title={positionEditorMode ? "Exit Editor" : "Edit Node Positions"}
+                      aria-label={positionEditorMode ? "Exit Editor" : "Edit Node Positions"}
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
               )}
-            </button>
-          </div>
+
+              {/* Chest - visible for everyone */}
+              <button
+                type="button"
+                onClick={handleChestClick}
+                aria-label={sessionRewards[sessionId]?.claimed ? "Reward claimed" : chestReady ? "Claim reward" : "Reward locked"}
+                className="relative flex-shrink-0 w-11 h-11 md:w-14 md:h-14"
+              >
+                <img
+                  src={
+                    sessionRewards[sessionId]?.claimed
+                      ? assetUrl('/image/study/chest_open.png') // Opened
+                      : assetUrl('/image/study/chest_lock.png') // Locked or Ready
+                  }
+                  alt=""
+                  className={`w-full h-full object-contain drop-shadow-md ${chestReady ? "animate-bounce" : ""}`}
+                />
+                {chestReady && (
+                  <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
+                )}
+              </button>
+            </div>
+          </HudPanel>
         </div>
 
         {/* Position Editor Panel */}
@@ -2066,17 +2204,23 @@ const ExerciseList = () => {
           }}
         >
           <div
-            className="bg-white rounded-3xl shadow-2xl p-4 sm:p-8 max-w-2xl w-full text-center"
+            className="relative isolate drop-shadow-2xl p-4 sm:p-8 max-w-2xl w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 border border-gray-200 bg-white"
+              style={{ clipPath: CLIP.card }}
+            />
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">[ Reward ]</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 tracking-tight">
               Choose Your Reward!
             </h2>
             <p className="text-sm sm:text-lg text-gray-600 mb-4">
               Pick a card to reveal your reward
             </p>
             <div className="flex items-center justify-center gap-3 mb-4 sm:mb-8">
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg py-2 px-4 text-lg font-bold flex items-center justify-center gap-1">
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white py-2 px-4 text-lg font-bold flex items-center justify-center gap-1" style={{ clipPath: CLIP.icon }}>
                 {5 + exercises.length * 5 + 1} - {5 + exercises.length * 5 + 10}{" "}
                 <img
                   src={assetUrl('/image/study/xp.png')}
@@ -2085,7 +2229,7 @@ const ExerciseList = () => {
                 />
               </div>
               <span className="text-gray-400 font-bold">or</span>
-              <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white rounded-lg py-2 px-4 text-lg font-bold flex items-center justify-center gap-1">
+              <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white py-2 px-4 text-lg font-bold flex items-center justify-center gap-1" style={{ clipPath: CLIP.icon }}>
                 <img
                   src={assetUrl('/image/study/gem.png')}
                   alt="Gem"
@@ -2127,8 +2271,8 @@ const ExerciseList = () => {
                     >
                       {/* Card Front (Question mark) */}
                       <div
-                        className="absolute inset-0 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 shadow-lg flex items-center justify-center border-4 border-purple-300 group-hover:scale-105 transition-transform"
-                        style={{ backfaceVisibility: "hidden" }}
+                        className="absolute inset-0 bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center border-4 border-purple-300 group-hover:scale-105 transition-transform"
+                        style={{ backfaceVisibility: "hidden", clipPath: CLIP.card }}
                       >
                         <div className="text-center">
                           <div className="text-5xl sm:text-6xl font-bold text-white drop-shadow-lg">
@@ -2142,7 +2286,7 @@ const ExerciseList = () => {
 
                       {/* Card Back (reward reveal) */}
                       <div
-                        className={`absolute inset-0 rounded-xl shadow-lg flex items-center justify-center border-4 ${
+                        className={`absolute inset-0 flex items-center justify-center border-4 ${
                           isSelected
                             ? isGemCard
                               ? "bg-gradient-to-br from-emerald-400 to-teal-500 border-emerald-300"
@@ -2152,6 +2296,7 @@ const ExerciseList = () => {
                         style={{
                           backfaceVisibility: "hidden",
                           transform: "rotateY(180deg)",
+                          clipPath: CLIP.card,
                         }}
                       >
                         <div className="text-center">
@@ -2194,7 +2339,8 @@ const ExerciseList = () => {
             {selectedChest !== null && (
               <button
                 onClick={handleRewardDismiss}
-                className="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-8 rounded-lg transition-colors text-lg"
+                className="mt-6 bg-gradient-to-r from-blue-500 to-blue-400 hover:brightness-110 text-white font-bold uppercase tracking-wider py-2.5 px-10 transition-all"
+              style={{ clipPath: CLIP.btn }}
               >
                 OK
               </button>
@@ -2210,9 +2356,14 @@ const ExerciseList = () => {
           onClick={() => setShowLockedModal(false)}
         >
           <div
-            className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-center"
+            className="relative isolate drop-shadow-2xl p-6 sm:p-8 max-w-md w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 border border-gray-200 bg-white"
+              style={{ clipPath: CLIP.card }}
+            />
             <div className="mb-4">
               <img
                 src={assetUrl('/image/study/chest_lock.png')}
@@ -2220,7 +2371,8 @@ const ExerciseList = () => {
                 className="w-20 h-20 sm:w-24 sm:h-24 mx-auto object-contain"
               />
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">[ Locked ]</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 tracking-tight">
               Chest Locked!
             </h2>
             <p className="text-sm sm:text-base text-gray-600 mb-4">
@@ -2228,7 +2380,7 @@ const ExerciseList = () => {
             </p>
 
             <div className="flex items-center justify-center gap-3 mb-4 sm:mb-8">
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg py-2 px-4 text-lg font-bold flex items-center justify-center gap-1">
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white py-2 px-4 text-lg font-bold flex items-center justify-center gap-1" style={{ clipPath: CLIP.icon }}>
                 {5 + exercises.length * 5 + 1} - {5 + exercises.length * 5 + 10}{" "}
                 <img
                   src={assetUrl('/image/study/xp.png')}
@@ -2238,7 +2390,7 @@ const ExerciseList = () => {
               </div>
 
               <span className="text-gray-400 font-bold">or</span>
-              <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white rounded-lg py-2 px-4 text-lg font-bold flex items-center justify-center gap-1">
+              <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white py-2 px-4 text-lg font-bold flex items-center justify-center gap-1" style={{ clipPath: CLIP.icon }}>
                 <img
                   src={assetUrl('/image/study/gem.png')}
                   alt="Gem"
@@ -2249,7 +2401,8 @@ const ExerciseList = () => {
 
             <button
               onClick={() => setShowLockedModal(false)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+              className="bg-gradient-to-r from-blue-500 to-blue-400 hover:brightness-110 text-white font-bold uppercase tracking-wider py-2.5 px-10 transition-all"
+              style={{ clipPath: CLIP.btn }}
             >
               OK
             </button>
@@ -2264,9 +2417,14 @@ const ExerciseList = () => {
           onClick={() => setShowOpenedModal(false)}
         >
           <div
-            className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full text-center"
+            className="relative isolate drop-shadow-2xl p-6 sm:p-8 max-w-md w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 border border-gray-200 bg-white"
+              style={{ clipPath: CLIP.card }}
+            />
             <div className="mb-4">
               <img
                 src={assetUrl('/image/study/chest_open.png')}
@@ -2274,7 +2432,8 @@ const ExerciseList = () => {
                 className="w-20 h-20 sm:w-24 sm:h-24 mx-auto object-contain"
               />
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">[ Claimed ]</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 tracking-tight">
               Reward Claimed!
             </h2>
             <p className="text-sm sm:text-base text-gray-600 mb-4 ">
@@ -2282,7 +2441,7 @@ const ExerciseList = () => {
             </p>
             <div className="flex flex-col items-center gap-2 mb-6">
               {sessionRewards[sessionId]?.xp > 0 ? (
-                <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg py-3 px-6 text-2xl sm:text-3xl font-bold shadow-lg flex items-center justify-center gap-2">
+                <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white py-3 px-6 text-2xl sm:text-3xl font-bold shadow-lg flex items-center justify-center gap-2" style={{ clipPath: CLIP.icon }}>
                   <span>+{sessionRewards[sessionId]?.xp}</span>
                   <img
                     src={assetUrl('/image/study/xp.png')}
@@ -2291,7 +2450,7 @@ const ExerciseList = () => {
                   />
                 </div>
               ) : sessionRewards[sessionId]?.gems > 0 ? (
-                <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white rounded-lg py-3 px-6 text-2xl sm:text-3xl font-bold shadow-lg flex items-center justify-center gap-2">
+                <div className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white py-3 px-6 text-2xl sm:text-3xl font-bold shadow-lg flex items-center justify-center gap-2" style={{ clipPath: CLIP.icon }}>
                   <span>+{sessionRewards[sessionId]?.gems}</span>
                   <img
                     src={assetUrl('/image/study/gem.png')}
@@ -2303,7 +2462,8 @@ const ExerciseList = () => {
             </div>
             <button
               onClick={() => setShowOpenedModal(false)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+              className="bg-gradient-to-r from-blue-500 to-blue-400 hover:brightness-110 text-white font-bold uppercase tracking-wider py-2.5 px-10 transition-all"
+              style={{ clipPath: CLIP.btn }}
             >
               OK
             </button>

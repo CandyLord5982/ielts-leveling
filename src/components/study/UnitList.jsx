@@ -9,6 +9,8 @@ import EditUnitModal from "./modals/EditUnitModal";
 import AddSessionModal from "./modals/AddSessionModal";
 import EditSessionModal from "./modals/EditSessionModal";
 import { assetUrl } from '../../hooks/useBranding';
+import HudPanel from "../ui/HudPanel";
+import { CLIP } from "../ui/hudClip";
 // Thay spinner bằng skeleton để điều hướng mượt hơn
 import {
   ArrowLeft,
@@ -1540,6 +1542,7 @@ const UnitList = () => {
                   : null;
                 const nextUnitIndex = nextGroup ? sortedUnits.indexOf(nextGroup.unit) : -1;
                 const doneTotal = allVisible.filter(isSessionDone).length;
+                const pad = (n) => String(n).padStart(2, '0');
 
                 const sessionStatusText = (session) => {
                   const { status } = getSessionStatus(session);
@@ -1549,7 +1552,7 @@ const UnitList = () => {
                     return { text: `Opens ${new Date(session.open_date).toLocaleDateString()}`, cls: '' };
                   }
                   if (status === 'closed') return { text: 'Closed', cls: '' };
-                  if (pct > 0) return { text: `In progress · ${pct}%`, cls: 'text-amber-600 font-medium' };
+                  if (pct > 0) return { text: `In progress ${pct}%`, cls: 'text-amber-600 font-medium' };
                   return { text: 'Not started', cls: '' };
                 };
 
@@ -1561,57 +1564,84 @@ const UnitList = () => {
                         <button
                           type="button"
                           onClick={() => handleSessionClick(nextSession)}
-                          className="group relative w-full text-left overflow-hidden rounded-3xl border border-blue-200 bg-blue-50 p-5 md:p-6 shadow-sm transition-shadow hover:shadow-md"
+                          className="group relative block w-full text-left"
                         >
-                          <p className="relative text-xs font-semibold tracking-wider uppercase text-blue-600">
-                            {doneTotal === 0 ? 'Start here' : 'Up next'} · Unit {nextUnitIndex + 1}
-                          </p>
-                          <h3 className="relative mt-1 text-xl md:text-2xl font-bold leading-snug text-slate-900">{nextSession.title}</h3>
-                          <p className="relative mt-1 text-sm text-slate-600 truncate">
-                            {nextGroup.unit.title}
-                            {nextSession.is_test ? ' · Test' : ''}
-                          </p>
-                          <span className="relative mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all group-hover:gap-3 group-hover:bg-blue-700">
-                            {(sessionProgress[nextSession.id]?.progress_percentage || 0) > 0 ? 'Continue' : 'Start'}
-                            <ChevronRight className="w-4 h-4" />
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 border border-blue-300 bg-blue-50 transition-colors group-hover:border-blue-400"
+                            style={{ clipPath: CLIP.card }}
+                          />
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute top-[10px] left-0 w-[2px] h-[calc(100%-10px)] bg-blue-400"
+                          />
+                          <span className="relative block p-5 md:p-6">
+                            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-blue-500">
+                              <span>[ {doneTotal === 0 ? 'Start here' : 'Up next'} ]</span>
+                              <span className="font-mono text-gray-400">Unit {pad(nextUnitIndex + 1)}</span>
+                            </span>
+                            <span className="mt-2 block text-xl md:text-2xl font-bold leading-snug tracking-tight text-gray-900">
+                              {nextSession.title}
+                            </span>
+                            <span className="mt-1.5 block w-16 h-[2px] bg-blue-500" />
+                            <span className="mt-2 block text-sm text-gray-500 truncate">
+                              {nextGroup.unit.title}
+                              {nextSession.is_test ? ' · Test' : ''}
+                            </span>
+                            <span
+                              className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-400 px-7 py-2.5 text-sm font-bold uppercase tracking-wider text-white transition-all group-hover:brightness-110 group-hover:gap-3"
+                              style={{ clipPath: CLIP.btn }}
+                            >
+                              {(sessionProgress[nextSession.id]?.progress_percentage || 0) > 0 ? 'Continue' : 'Start'}
+                              <ChevronRight className="w-4 h-4" />
+                            </span>
                           </span>
                         </button>
                       ) : (
-                        <div className="flex items-center gap-3 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-                          <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
-                          <div>
-                            <p className="font-semibold text-emerald-900">Everything complete</p>
-                            <p className="text-sm text-emerald-700">{doneTotal} of {allVisible.length} sessions done</p>
+                        <HudPanel tone="done">
+                          <div className="flex items-center gap-3 p-5">
+                            <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
+                            <div>
+                              <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Everything complete</p>
+                              <p className="text-sm text-emerald-600">
+                                <span className="font-mono font-bold">{doneTotal}/{allVisible.length}</span> sessions done
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        </HudPanel>
                       )
                     )}
 
                     {unitGroups.map(({ unit, list: unitSessions }, unitIndex) => {
                       const unitDone = unitSessions.filter(isSessionDone).length;
+                      const isNextUnit = !canCreateContent() && nextGroup?.unit.id === unit.id;
                       const unitPct = unitSessions.length ? Math.round((unitDone / unitSessions.length) * 100) : 0;
 
                       return (
-                        <section key={unit.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                          <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5 md:py-4 border-b border-slate-100">
+                        <HudPanel key={unit.id} tone="muted" hoverGroup={false}>
+                          <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5 md:py-4">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-white tabular-nums">
-                                {unitIndex + 1}
+                              <span
+                                className={`flex h-9 w-9 flex-shrink-0 items-center justify-center border font-mono text-sm font-bold ${isNextUnit ? 'border-blue-500 text-blue-600' : 'border-gray-300 text-gray-600'}`}
+                                style={{ clipPath: CLIP.icon }}
+                              >
+                                {pad(unitIndex + 1)}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <h3 className="font-semibold text-slate-900 truncate">{unit.title}</h3>
+                                <h3 className="font-bold tracking-tight text-gray-900 truncate">{unit.title}</h3>
                                 {unitSessions.length > 0 && (
                                   <div className="mt-1 flex items-center gap-2">
                                     <div
-                                      className="h-1.5 w-24 md:w-32 rounded-full bg-slate-200 overflow-hidden"
+                                      className="relative h-2.5 w-24 md:w-32 bg-gray-100 border border-gray-200 overflow-hidden"
+                                      style={{ clipPath: CLIP.bar }}
                                       role="progressbar"
                                       aria-valuenow={unitDone}
                                       aria-valuemin={0}
                                       aria-valuemax={unitSessions.length}
                                     >
-                                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${unitPct}%` }} />
+                                      <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700" style={{ width: `${unitPct}%` }} />
                                     </div>
-                                    <span className="text-xs font-medium text-slate-500 tabular-nums">
+                                    <span className="font-mono text-xs font-bold text-gray-500 tabular-nums">
                                       {unitDone}/{unitSessions.length}
                                     </span>
                                   </div>
@@ -1621,16 +1651,16 @@ const UnitList = () => {
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {canCreateContent() && (
                                 <>
-                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Move up">
+                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move up">
                                     <ChevronUp className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Move down">
+                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move down">
                                     <ChevronDown className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-slate-400 hover:text-slate-700" title="Edit unit">
+                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-gray-400 hover:text-gray-700" title="Edit unit">
                                     <Edit className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-slate-400 hover:text-blue-600" title="Add session">
+                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Add session">
                                     <Plus className="w-4 h-4" />
                                   </button>
                                   <button onClick={() => handleDeleteUnit(unit)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete unit">
@@ -1642,7 +1672,7 @@ const UnitList = () => {
                           </div>
 
                           {unitSessions.length > 0 ? (
-                            <div className="px-3 py-2 md:px-4 bg-slate-50/60">
+                            <div className="px-3 pb-3 md:px-4">
                               {unitSessions.map((session, i) => {
                                 const { canAccess } = getSessionStatus(session);
                                 const isLocked = !canAccess;
@@ -1654,88 +1684,96 @@ const UnitList = () => {
                                 const st = sessionStatusText(session);
                                 const pct = sessionProgress[session.id]?.progress_percentage || 0;
                                 const tone = isLocked
-                                  ? 'bg-slate-100 text-slate-400'
-                                  : isDone
-                                    ? 'bg-emerald-50 text-emerald-600'
-                                    : session.is_test
-                                      ? 'bg-orange-50 text-orange-600'
-                                      : 'bg-blue-50 text-blue-600';
+                                  ? 'bg-gray-100 border-gray-200 text-gray-400'
+                                  : session.is_test
+                                      ? 'bg-orange-50 border-orange-200 text-orange-600'
+                                      : 'bg-blue-50 border-blue-200 text-blue-600';
 
                                 return (
                                   <div key={session.id} className="relative pl-9 py-1.5">
-                                    <span className={`absolute left-3 w-0.5 -translate-x-1/2 top-0 h-1/2 ${prevDone ? 'bg-emerald-400' : 'bg-slate-200'} ${isFirst ? 'hidden' : ''}`} />
-                                    <span className={`absolute left-3 w-0.5 -translate-x-1/2 top-1/2 h-1/2 ${isDone ? 'bg-emerald-400' : 'bg-slate-200'} ${isLast ? 'hidden' : ''}`} />
+                                    <span className={`absolute left-3 w-px -translate-x-1/2 top-0 h-1/2 ${prevDone ? 'bg-emerald-400' : 'bg-gray-300'} ${isFirst ? 'hidden' : ''}`} />
+                                    <span className={`absolute left-3 w-px -translate-x-1/2 top-1/2 h-1/2 ${isDone ? 'bg-emerald-400' : 'bg-gray-300'} ${isLast ? 'hidden' : ''}`} />
                                     <span
-                                      className={`absolute left-3 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full ring-4 ring-slate-50 ${
-                                        isDone ? 'w-4 h-4 bg-emerald-500' : isNext ? 'w-4 h-4 bg-blue-600' : 'w-3 h-3 bg-slate-300'
+                                      className={`absolute left-3 top-1/2 -translate-x-1/2 -translate-y-1/2 border ${
+                                        isDone
+                                          ? 'w-3 h-3 bg-emerald-500 border-emerald-500'
+                                          : isNext
+                                            ? 'w-3 h-3 bg-blue-500 border-blue-500'
+                                            : 'w-2.5 h-2.5 bg-white border-gray-300'
                                       }`}
-                                    >
-                                      {isDone && <CheckCircle className="w-3 h-3 text-white" />}
-                                    </span>
+                                    />
 
-                                    <div
+                                    <HudPanel
+                                      tone="default"
+                                      accentBar={isNext}
                                       onClick={() => !isLocked && handleSessionClick(session)}
                                       onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
-                                      className={`group flex items-center gap-3 md:gap-4 rounded-2xl border bg-white px-3 py-3 md:px-4 shadow-sm transition-all ${
-                                        isLocked ? 'cursor-not-allowed opacity-60 border-slate-200' : 'cursor-pointer hover:shadow-md'
-                                      } ${isNext ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300'}`}
+                                      className={isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
                                     >
-                                      <div className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
-                                        {session.icon ? (
-                                          <span className="text-xl">{session.icon}</span>
-                                        ) : session.is_test ? (
-                                          <FileText className="w-5 h-5" />
-                                        ) : (
-                                          <BookOpen className="w-5 h-5" />
-                                        )}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="truncate text-sm md:text-base font-semibold text-slate-900">{session.title}</p>
-                                        <p className="mt-0.5 text-xs text-slate-500 truncate">
-                                          {session.is_test && (
-                                            <>
-                                              <span className="font-semibold text-orange-600">Test</span>
-                                              <span className="mx-1.5 text-slate-300">·</span>
-                                            </>
+                                      <div className="flex items-center gap-3 md:gap-4 px-3 py-3 md:px-4">
+                                        <div
+                                          className={`flex-shrink-0 w-11 h-11 flex items-center justify-center border ${tone}`}
+                                          style={{ clipPath: CLIP.icon }}
+                                        >
+                                          {session.icon ? (
+                                            <span className="text-xl">{session.icon}</span>
+                                          ) : session.is_test ? (
+                                            <FileText className="w-5 h-5" />
+                                          ) : (
+                                            <BookOpen className="w-5 h-5" />
                                           )}
-                                          <span className={st.cls}>{st.text}</span>
-                                        </p>
-                                        {!isDone && !isLocked && pct > 0 && (
-                                          <div className="mt-1.5 h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                                            <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
-                                          </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="truncate text-sm md:text-base font-semibold text-gray-900">{session.title}</p>
+                                          <p className="mt-0.5 text-xs text-gray-500 truncate">
+                                            {session.is_test && (
+                                              <>
+                                                <span className="font-medium text-orange-600">Test</span>
+                                                <span className="mx-1.5 text-gray-300">/</span>
+                                              </>
+                                            )}
+                                            <span className={st.cls}>{st.text}</span>
+                                          </p>
+                                          {!isDone && !isLocked && pct > 0 && (
+                                            <div
+                                              className="mt-1.5 h-1.5 bg-gray-100 border border-gray-200 overflow-hidden"
+                                              style={{ clipPath: CLIP.bar }}
+                                            >
+                                              <div className="h-full bg-gradient-to-r from-amber-400 to-yellow-400" style={{ width: `${pct}%` }} />
+                                            </div>
+                                          )}
+                                        </div>
+                                        {isLocked ? (
+                                          <Lock className="flex-shrink-0 w-4 h-4 text-gray-400" />
+                                        ) : (
+                                          <ChevronRight className="flex-shrink-0 w-5 h-5 text-gray-300 group-hover:text-gray-500 transition-colors" />
                                         )}
                                       </div>
-                                      {isLocked ? (
-                                        <Lock className="flex-shrink-0 w-4 h-4 text-slate-400" />
-                                      ) : (
-                                        <ChevronRight className="flex-shrink-0 w-5 h-5 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                                      )}
-                                    </div>
+                                    </HudPanel>
                                   </div>
                                 );
                               })}
                             </div>
                           ) : (
-                            <p className="px-5 py-4 text-sm text-slate-500">
+                            <p className="px-5 pb-4 text-sm text-gray-500">
                               {canCreateContent() ? 'No sessions yet.' : 'Sessions will be available soon'}
                             </p>
                           )}
-                        </section>
+                        </HudPanel>
                       );
                     })}
 
                     {canCreateContent() && (
                       <button
                         onClick={() => setShowAddUnitModal(true)}
-                        className="border-2 border-dashed border-slate-300 rounded-2xl py-4 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                        className="border-2 border-dashed border-gray-300 py-4 text-sm font-semibold uppercase tracking-wider text-gray-400 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
                         + Create Unit
                       </button>
                     )}
 
                     {sortedUnits.length === 0 && (
-                      <p className="text-center text-slate-500 py-8">Chưa có unit nào</p>
+                      <p className="text-center text-gray-500 py-8">Chưa có unit nào</p>
                     )}
                   </div>
                 );

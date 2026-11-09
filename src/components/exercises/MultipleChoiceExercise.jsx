@@ -20,6 +20,7 @@ import PetTutorBubble from '../pet/PetTutorBubble'
 import { getPetTutorExplanation } from '../../utils/petChatService'
 import { FEATURES } from '../../config/features'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
+import SelectionHighlighter from '../ui/SelectionHighlighter'
 
 import { assetUrl } from '../../hooks/useBranding';
 // Theme-based side decoration images for PC
@@ -977,7 +978,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
         />
       </div>
 
-      <div className="relative px-2 md:pt-2 pb-12">
+      <SelectionHighlighter className="relative px-2 md:pt-2 pb-12">
         <div className={`${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} mx-auto space-y-6 relative z-20`}>
           {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
 
@@ -1485,7 +1486,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
             )}
           </>
         </div>
-      </div>
+      </SelectionHighlighter>
 
       {/* Quiz Complete Screen */}
       {isQuizComplete && (

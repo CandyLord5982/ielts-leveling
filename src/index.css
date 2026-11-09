@@ -331,3 +331,9 @@
     }
   }
 }
+
+/* Temporary text highlights (SelectionHighlighter, CSS Custom Highlight API) */
+::highlight(sel-hl-0) { background-color: #fef08a; color: inherit; }
+::highlight(sel-hl-1) { background-color: #fbcfe8; color: inherit; }
+::highlight(sel-hl-2) { background-color: #bfdbfe; color: inherit; }
+::highlight(sel-hl-3) { background-color: #bbf7d0; color: inherit; }

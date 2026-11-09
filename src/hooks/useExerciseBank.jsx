@@ -1,6 +1,95 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase/client'
 
+const chunk = (arr, size = 100) => {
+  const out = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+// Count rows in `table` whose `column` is in `ids` (batched to keep URLs short)
+const countRefs = async (table, column, ids) => {
+  let total = 0
+  for (const part of chunk(ids)) {
+    const { count, error } = await supabase
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .in(column, part)
+    if (error) throw error
+    total += count || 0
+  }
+  return total
+}
+
+// Collect the folder's whole subtree and everything that would be deleted with it.
+// Sets `blockedReason` if any exercise is still referenced somewhere that must be cleaned up first.
+export const planFolderDelete = async (folderId) => {
+  const folderIds = [folderId]
+  let frontier = [folderId]
+  while (frontier.length) {
+    const next = []
+    for (const part of chunk(frontier)) {
+      const { data, error } = await supabase
+        .from('exercise_folders')
+        .select('id')
+        .in('parent_folder_id', part)
+      if (error) throw error
+      next.push(...(data || []).map((f) => f.id))
+    }
+    frontier = next.filter((id) => !folderIds.includes(id))
+    folderIds.push(...frontier)
+  }
+
+  const exerciseIds = []
+  for (const part of chunk(folderIds)) {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('id')
+      .in('folder_id', part)
+    if (error) throw error
+    exerciseIds.push(...(data || []).map((e) => e.id))
+  }
+
+  const plan = {
+    folderIds,
+    exerciseIds,
+    subfolderCount: folderIds.length - 1,
+    exerciseCount: exerciseIds.length,
+    assignmentCount: 0,
+    blockedReason: null,
+  }
+
+  if (exerciseIds.length) {
+    // Same rule as deleteExercise, plus tables whose FK has no ON DELETE CASCADE
+    // Assignments cascade on exercise delete, so just report the count for the confirm dialog
+    plan.assignmentCount = await countRefs('exercise_assignments', 'exercise_id', exerciseIds)
+    const daily = await countRefs('daily_challenges', 'exercise_id', exerciseIds)
+    if (daily > 0) {
+      plan.blockedReason = `${daily} exercise(s) in this folder are used by daily challenges and can't be deleted.`
+      return plan
+    }
+    const tests = await countRefs('test_question_attempts', 'exercise_id', exerciseIds)
+    if (tests > 0) {
+      plan.blockedReason = `${tests} test attempt record(s) reference exercises in this folder, so it can't be deleted.`
+      return plan
+    }
+  }
+  return plan
+}
+
+// Delete exercises first (exercises.folder_id has no cascade), then the folder (subfolders cascade).
+export const executeFolderDelete = async (plan) => {
+  for (const part of chunk(plan.exerciseIds)) {
+    const { error } = await supabase.from('exercises').delete().in('id', part)
+    if (error) throw error
+  }
+  const { error } = await supabase
+    .from('exercise_folders')
+    .delete()
+    .eq('id', plan.folderIds[0])
+  if (error) throw error
+}
+
 export const useExerciseBank = () => {
   const [folders, setFolders] = useState([])
   const [exercises, setExercises] = useState([])
@@ -124,35 +213,12 @@ export const useExerciseBank = () => {
     }
   }
 
-  // Delete folder
+  // Delete folder (recursively: subfolders + exercises)
   const deleteFolder = async (folderId) => {
     try {
-      // Check if folder has children
-      const { data: children } = await supabase
-        .from('exercise_folders')
-        .select('id')
-        .eq('parent_folder_id', folderId)
-
-      if (children && children.length > 0) {
-        throw new Error('Cannot delete folder with subfolders')
-      }
-
-      // Check if folder has exercises
-      const { data: exercises } = await supabase
-        .from('exercises')
-        .select('id')
-        .eq('folder_id', folderId)
-
-      if (exercises && exercises.length > 0) {
-        throw new Error('Cannot delete folder with exercises')
-      }
-
-      const { error } = await supabase
-        .from('exercise_folders')
-        .delete()
-        .eq('id', folderId)
-
-      if (error) throw error
+      const plan = await planFolderDelete(folderId)
+      if (plan.blockedReason) throw new Error(plan.blockedReason)
+      await executeFolderDelete(plan)
 
       // Refresh folders
       await fetchFolders()

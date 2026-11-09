@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import PropTypes from 'prop-types'
-import { supabase } from '../../../supabase/client'
 import {
   Folder,
   ChevronRight,
@@ -16,6 +15,7 @@ import {
   HelpCircle,
   Lock
 } from 'lucide-react'
+import { planFolderDelete, executeFolderDelete } from '../../../hooks/useExerciseBank'
 import CreateFolderModal from './CreateFolderModal'
 import EditFolderModal from './EditFolderModal'
 
@@ -190,38 +190,23 @@ const FolderTree = ({ folders, folderCounts = {}, selectedFolder, onSelectFolder
             <button
               onClick={async () => {
                 try {
-                  // Prevent delete if folder has children or exercises
-                  const { error: childErr, count: childCount } = await supabase
-                    .from('exercise_folders')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('parent_folder_id', folder.id)
-                  if (childErr) throw childErr
+                  const plan = await planFolderDelete(folder.id)
 
-                  const { error: exErr, count: exCount } = await supabase
-                    .from('exercises')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('folder_id', folder.id)
-                  if (exErr) throw exErr
-
-                  const hasChildren = childCount > 0
-                  const hasExercises = exCount > 0 || (folderCounts[folder.id] || 0) > 0
-
-                  if (hasChildren || hasExercises) {
-                    alert('Folder is not empty. Please remove subfolders and exercises first.')
+                  if (plan.blockedReason) {
+                    alert(`Can't delete "${folder.name}": ${plan.blockedReason}`)
                     setContextMenu(null)
                     return
                   }
 
-                  if (!window.confirm(`Delete folder "${folder.name}"? This cannot be undone.`)) {
+                  const contents = plan.subfolderCount || plan.exerciseCount
+                    ? ` and everything in it (${plan.subfolderCount} subfolder(s), ${plan.exerciseCount} exercise(s), including ${plan.assignmentCount} session assignment(s) and their student progress/attempts)`
+                    : ''
+                  if (!window.confirm(`Delete folder "${folder.name}"${contents}? This cannot be undone.`)) {
                     setContextMenu(null)
                     return
                   }
 
-                  const { error } = await supabase
-                    .from('exercise_folders')
-                    .delete()
-                    .eq('id', folder.id)
-                  if (error) throw error
+                  await executeFolderDelete(plan)
                   onFolderUpdate && onFolderUpdate()
                 } catch (e) {
                   console.error('Error deleting folder:', e)

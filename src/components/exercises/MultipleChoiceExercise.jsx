@@ -159,7 +159,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
       onClose={() => setShowEditModal(false)}
       exercise={exercise}
       focusQuestionId={editFocusId}
-      onUpdate={() => { setShowEditModal(false); fetchExercise() }}
+      onUpdate={() => fetchExercise({ silent: true })}
     />
   ) : null
   const [viewMode, setViewMode] = useState(testMode ? 'all-at-once' : 'one-by-one')
@@ -351,9 +351,9 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     }
   }
 
-  const fetchExercise = async () => {
+  const fetchExercise = async (opts) => {
     try {
-      setLoading(true)
+      if (!opts?.silent) setLoading(true) // silent: refresh in place (after an admin edit), no spinner
       setError(null)
 
       const { data, error } = await supabase

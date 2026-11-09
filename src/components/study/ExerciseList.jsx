@@ -327,10 +327,11 @@ const ExerciseList = () => {
     }
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (opts) => {
     // Derive effective course id if missing
     try {
-      setLoading(true);
+      // fetchData({ silent: true }) refreshes in place without the full-page spinner
+      if (!opts?.silent) setLoading(true);
       setError(null);
 
       // Step 1: ensure we have a course id

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../../supabase/client'
 import { Save, AlertCircle, Tag } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
@@ -35,6 +35,9 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [folders, setFolders] = useState([])
+  const [saved, setSaved] = useState(false)
+  const savedTimer = useRef(null)
+  useEffect(() => () => clearTimeout(savedTimer.current), [])
 
   useEffect(() => {
     if (isOpen && exercise) {
@@ -114,7 +117,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
       }))
       const { error } = await supabase.from('exercises').insert(rows)
       if (error) throw error
-      onUpdate()
+      onUpdate({ silent: true })
       alert(`Created ${rows.length} new exercise${rows.length > 1 ? 's' : ''}: ${rows.map(r => `"${r.title}" (${r.content.questions.length})`).join(', ')}`)
       return true
     } catch (err) {
@@ -160,13 +163,11 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
 
       if (error) throw error
 
-      // Refresh the exercise list
-      onUpdate()
-
-      // Close modal
-      onClose()
-
-      alert('Exercise updated successfully!')
+      // Refresh the parent quietly (no spinner) and stay in the editor with an inline "Saved" note
+      onUpdate({ silent: true })
+      setSaved(true)
+      clearTimeout(savedTimer.current)
+      savedTimer.current = setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       console.error('Error updating exercise:', err)
       setError(err.message || 'Failed to update exercise')
@@ -346,12 +347,13 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
           <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900">Edit Exercise</h2>
             <div className="flex items-center gap-2">
+              {saved && <span className="text-sm text-green-600 font-medium">Saved ✓</span>}
               <button
                 type="button"
                 onClick={onClose}
                 className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {saved ? 'Close' : 'Cancel'}
               </button>
               <button
                 type="submit"

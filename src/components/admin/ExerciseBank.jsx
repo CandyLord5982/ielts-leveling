@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import PropTypes from 'prop-types'
 import { supabase } from '../../supabase/client'
 import { useExerciseBankAccess } from '../../hooks/useExerciseBankAccess'
@@ -63,7 +63,12 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
   const [currentPage, setCurrentPage] = useState(0)
   const PAGE_SIZE = 20
   const fetchFolders = useCallback(() => setFolderRevision(value => value + 1), [])
-  const fetchExercises = useCallback(() => setExerciseRevision(value => value + 1), [])
+  // fetchExercises({ silent: true }) refreshes the list in place, without clearing it or showing the spinner
+  const silentRefreshRef = useRef(false)
+  const fetchExercises = useCallback((opts) => {
+    if (opts?.silent) silentRefreshRef.current = true
+    setExerciseRevision(value => value + 1)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -110,14 +115,16 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
   useEffect(() => {
     if (!foldersLoaded || !dataReady || !canAccess) return
     let cancelled = false
-    setExercises([])
+    const silent = silentRefreshRef.current
+    silentRefreshRef.current = false
+    if (!silent) setExercises([])
     if (!scope.canAccess) {
       setTotalExercises(0)
       setLoading(false)
       return
     }
     const loadExercises = async () => {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setLoadError('')
       try {
         let query = supabase.from('exercises').select('*', { count: 'exact' }).eq('is_in_bank', true).eq('is_active', true)

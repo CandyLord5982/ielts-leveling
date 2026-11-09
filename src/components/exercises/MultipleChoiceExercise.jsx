@@ -10,6 +10,7 @@ import { supabase } from '../../supabase/client'
 import Button from '../ui/Button'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import RichTextRenderer, { RichTextWithAudio } from '../ui/RichTextRenderer'
+import { exerciseSignature, loadProgress, saveProgress, clearProgress } from '../../utils/mcProgress'
 import EditExerciseModal from '../admin/ExerciseBank/EditExerciseModal'
 import { CheckCircle, XCircle, ArrowRight, ArrowLeft, Star, MessageCircle, Pencil } from 'lucide-react'
 import Button3D from '../ui/Button3D'
@@ -51,32 +52,6 @@ const themeSideImages = {
 
 const getThemeSideImages = (theme) => {
   return themeSideImages[theme] || themeSideImages.blue
-}
-
-// Mid-exercise progress is kept in localStorage (same browser/device only) so a student
-// who leaves halfway resumes where they stopped, with the same shuffled question/option order.
-const PROGRESS_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const progressKey = (userId, exerciseId) => `mc-progress:${userId}:${exerciseId}`
-// Changes when the exercise is edited, which invalidates stale snapshots.
-const exerciseSignature = (ex) => `${ex.updated_at || ''}:${ex.content?.questions?.length || 0}`
-
-const loadProgress = (userId, exerciseId, signature) => {
-  try {
-    const raw = localStorage.getItem(progressKey(userId, exerciseId))
-    if (!raw) return null
-    const snap = JSON.parse(raw)
-    if (snap.signature !== signature || Date.now() - snap.savedAt > PROGRESS_TTL_MS) {
-      localStorage.removeItem(progressKey(userId, exerciseId))
-      return null
-    }
-    return snap
-  } catch {
-    return null
-  }
-}
-
-const clearProgress = (userId, exerciseId) => {
-  try { localStorage.removeItem(progressKey(userId, exerciseId)) } catch { /* storage unavailable */ }
 }
 
 const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
@@ -251,21 +226,21 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     if (questionResults.length === 0 && !isRetryMode) return
     // Skip the brief window where an answer is selected but its result isn't recorded yet
     if (selectedAnswer !== null && questionResults.length <= currentQuestionIndex) return
-    try {
-      localStorage.setItem(progressKey(user.id, exerciseId), JSON.stringify({
-        signature: exerciseSignature(exercise),
-        savedAt: Date.now(),
-        questions,
-        originalQuestions,
-        currentQuestionIndex,
-        selectedAnswer,
-        showExplanation,
-        questionResults,
-        wrongQuestions,
-        firstAttemptResults,
-        isRetryMode,
-      }))
-    } catch { /* storage full or unavailable - progress just won't resume */ }
+    saveProgress(user.id, exerciseId, {
+      signature: exerciseSignature(exercise),
+      updatedAt: exercise.updated_at || null,
+      answered: questionResults.length,
+      total: questions.length,
+      questions,
+      originalQuestions,
+      currentQuestionIndex,
+      selectedAnswer,
+      showExplanation,
+      questionResults,
+      wrongQuestions,
+      firstAttemptResults,
+      isRetryMode,
+    })
   }, [
     testMode, isTeacherView, user, exerciseId, exercise, loading, viewMode, isQuizComplete,
     questions, originalQuestions, currentQuestionIndex, selectedAnswer, showExplanation,

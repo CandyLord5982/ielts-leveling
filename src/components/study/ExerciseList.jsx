@@ -7,6 +7,7 @@ import { useProgress } from "../../hooks/useProgress";
 import Button from "../ui/Button";
 import AssignExerciseModal from "./modals/AssignExerciseModal";
 import EditExerciseModal from "../admin/ExerciseBank/EditExerciseModal";
+import { getProgressSummary } from "../../utils/mcProgress";
 import {
   DndContext,
   closestCenter,
@@ -837,6 +838,43 @@ const ExerciseList = () => {
     };
   };
 
+  // Started-but-unfinished marker for students. Multiple choice shows how far they got, read from
+  // the local resume snapshot (same device only); other types / other devices just get a label.
+  // compact = small pill for map nodes.
+  const renderUnfinished = (exercise, status, compact = false) => {
+    if (canCreateContent() || status !== "in_progress") return null;
+    const resume =
+      exercise.exercise_type === "multiple_choice" && user
+        ? getProgressSummary(user.id, exercise.id, exercise.updated_at)
+        : null;
+    if (compact) {
+      return (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 md:mt-2 px-1.5 py-0.5 rounded-full bg-white/90 shadow text-[9px] md:text-xs font-bold text-amber-600 whitespace-nowrap">
+          {resume ? `${resume.answered}/${resume.total}` : "..."}
+        </div>
+      );
+    }
+    return (
+      <div className="mt-1.5 flex items-center gap-2">
+        {resume ? (
+          <>
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-400 rounded-full"
+                style={{ width: `${Math.round((resume.answered / resume.total) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-500 flex-shrink-0">
+              {resume.answered}/{resume.total}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-amber-600">Đang làm dở</span>
+        )}
+      </div>
+    );
+  };
+
   // Get star count based on score: 95-100 = 3 stars, 90-95 = 2 stars, passed (<90) = 1 star, not passed = 0 stars
   const getStarCount = (score, status, max_score = 100) => {
     console.log(`⭐ getStarCount: score=${score}, status=${status}, max_score=${max_score}`);
@@ -1234,6 +1272,7 @@ const ExerciseList = () => {
               <h3 className="text-base font-medium text-gray-800">
                 {exercise.title}
               </h3>
+              {renderUnfinished(exercise, status)}
             </div>
 
             {/* Stars on the right */}
@@ -1289,7 +1328,6 @@ const ExerciseList = () => {
     const progress = userProgress.find((p) => p.exercise_id === exercise.id);
     const isLocked = !canAccess;
     const ExerciseIcon = getExerciseIcon(exercise.exercise_type);
-
     const handleExerciseClick = () => {
       if (!isLocked) {
         navigate(`${getExercisePath(exercise)}?exerciseId=${exercise.id}&sessionId=${sessionId}&courseId=${courseId}&unitId=${unitId}`);
@@ -1342,6 +1380,7 @@ const ExerciseList = () => {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-800 truncate">{exercise.title || exercise.exercise_type}</p>
+          {renderUnfinished(exercise, status)}
         </div>
 
         {!canCreateContent() && renderStars(progress?.score, status, progress?.max_score)}
@@ -1680,6 +1719,8 @@ const ExerciseList = () => {
             </span>
           </button>
         </div>
+        {!isDummy && !completed && exercise &&
+          renderUnfinished(exercise, userProgress.find((p) => p.exercise_id === exercise.id)?.status, true)}
         {!isDummy && completed && (
           <div className="absolute top-full left-1/2 -translate-x-1/2 flex gap-0.5 mt-1 justify-center items-center">
             {[1, 2, 3].map((star) => (

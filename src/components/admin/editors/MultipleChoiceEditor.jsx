@@ -6,21 +6,13 @@ import {
   Copy,
   ChevronUp,
   ChevronDown,
-  Upload,
   Check,
   HelpCircle,
-  X,
-  Table,
-  Link,
-  Image,
-  Music,
-  AlignLeft,
-  AlignCenter,
-  AlignRight
+  X
 } from 'lucide-react'
-import { supabase } from '../../../supabase/client'
-import RichTextRenderer from '../../ui/RichTextRenderer'
 import { handleRichTextShortcut } from '../../../hooks/useRichTextShortcuts'
+import RichTextField from './shared/RichTextField'
+import AutoGrowTextarea from './shared/AutoGrowTextarea'
 
 const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath, focusQuestionId, exerciseTitle = '', onCreateFromQuestions }) => {
   const normalizeQuestion = (q, idx = 0) => {
@@ -49,6 +41,8 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
   }
 
   const [localQuestions, setLocalQuestions] = useState((questions || []).map((q, i) => normalizeQuestion(q, i)))
+  // Option field being edited (`${questionIndex}-${optionIndex}`): it expands to show its full text
+  const [focusedOption, setFocusedOption] = useState(null)
   const [bulkImportMode, setBulkImportMode] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [lastBulkText, setLastBulkText] = useState('')
@@ -61,54 +55,11 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       if (saved) setLastBulkText(saved)
     } catch { /* ignore */ }
   }, [])
-  const fileInputRefs = useRef({})
   const questionInputRefs = useRef({})
   const explanationInputRefs = useRef({})
-  const [previewOpen, setPreviewOpen] = useState({})
-  const [urlModal, setUrlModal] = useState({ isOpen: false, type: '', questionIndex: -1 })
-  const [urlInput, setUrlInput] = useState('')
-  const [linkText, setLinkText] = useState('Reference')
-  const [imageSize, setImageSize] = useState('medium')
-  const [customWidth, setCustomWidth] = useState('')
-  const [customHeight, setCustomHeight] = useState('')
-  const [audioControls, setAudioControls] = useState(true)
-  const [audioAutoplay, setAudioAutoplay] = useState(false)
-  const [audioLoop, setAudioLoop] = useState(false)
-  const [audioMaxPlays, setAudioMaxPlays] = useState(0)
-  const [audioPlaybackRate, setAudioPlaybackRate] = useState(1)
   const [collapsedQuestions, setCollapsedQuestions] = useState({})
   const [undoHistory, setUndoHistory] = useState({})
   const [redoHistory, setRedoHistory] = useState({})
-  const [tableModal, setTableModal] = useState({ isOpen: false, questionIndex: -1 })
-  const [tableRows, setTableRows] = useState(2)
-  const [tableColumns, setTableColumns] = useState(2)
-  const [tableWidth, setTableWidth] = useState('100%') // '100%' or 'auto'
-  const [tableBorder, setTableBorder] = useState(true) // true or false
-
-  const [modalUploading, setModalUploading] = useState(false)
-  const mediaModalInputRef = useRef(null)
-
-  const uploadMediaFile = async (file) => {
-    if (!file) return
-    setModalUploading(true)
-    try {
-      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
-      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
-      const { error: uploadError } = await supabase.storage
-        .from('exercise-files')
-        .upload(path, file, { cacheControl: '3600', upsert: true })
-      if (uploadError) throw uploadError
-      const { data: publicData } = supabase.storage
-        .from('exercise-files')
-        .getPublicUrl(path)
-      if (publicData?.publicUrl) setUrlInput(publicData.publicUrl)
-    } catch (e) {
-      console.error('Media upload failed:', e)
-      alert('Media upload failed.')
-    } finally {
-      setModalUploading(false)
-    }
-  }
 
   // Settings state
   const [localSettings, setLocalSettings] = useState({
@@ -276,73 +227,6 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
     onQuestionsChange(updatedQuestions)
   }
 
-  const insertAtCursor = (index, textToInsert) => {
-    const textarea = questionInputRefs.current[index]
-    if (index === -1) {
-      const current = intro || ''
-      if (!textarea) {
-        onIntroChange && onIntroChange(current + (current ? '\n\n' : '') + textToInsert)
-        return
-      }
-      const start = textarea.selectionStart || 0
-      const end = textarea.selectionEnd || 0
-      const newValue = current.slice(0, start) + textToInsert + current.slice(end)
-      onIntroChange && onIntroChange(newValue)
-      setTimeout(() => {
-        textarea.focus()
-        const caret = start + textToInsert.length
-        textarea.setSelectionRange(caret, caret)
-      }, 0)
-      return
-    }
-    const current = localQuestions[index]
-    if (!current) return
-    if (!textarea) {
-      updateQuestion(index, 'question', (current.question || '') + (current.question ? '\n\n' : '') + textToInsert)
-      return
-    }
-    const start = textarea.selectionStart || 0
-    const end = textarea.selectionEnd || 0
-    const value = current.question || ''
-    const newValue = value.slice(0, start) + textToInsert + value.slice(end)
-    updateQuestion(index, 'question', newValue)
-    setTimeout(() => {
-      textarea.focus()
-      const caret = start + textToInsert.length
-      textarea.setSelectionRange(caret, caret)
-    }, 0)
-  }
-
-  const applyIntroAlignment = (alignment) => {
-    const textarea = questionInputRefs.current[-1]
-    if (!textarea) return
-    const start = textarea.selectionStart || 0
-    const end = textarea.selectionEnd || 0
-    const value = intro || ''
-    const selected = value.slice(start, end)
-    const wrapped = `<div style="text-align: ${alignment}">${selected || 'text here'}</div>`
-    const newValue = value.slice(0, start) + wrapped + value.slice(end)
-    onIntroChange && onIntroChange(newValue)
-  }
-
-  const applyAlignment = (index, alignment) => {
-    const textarea = questionInputRefs.current[index]
-    const current = localQuestions[index]
-    if (!textarea) return
-    const start = textarea.selectionStart || 0
-    const end = textarea.selectionEnd || 0
-    const value = current.question || ''
-    const selected = value.slice(start, end)
-    const wrapped = `<div style="text-align: ${alignment}">${selected || 'text here'}</div>`
-    const newValue = value.slice(0, start) + wrapped + value.slice(end)
-    updateQuestion(index, 'question', newValue)
-    setTimeout(() => {
-      textarea.focus()
-      const caret = start + wrapped.length
-      textarea.setSelectionRange(caret, caret)
-    }, 0)
-  }
-
   const handleKeyboardShortcut = (e, index, field = 'question') => {
     // Only handle Ctrl/Cmd key combinations
     if (!e.ctrlKey && !e.metaKey) return
@@ -422,296 +306,6 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       }
       return
     }
-  }
-
-  const handleSelectFile = (index) => {
-    if (!fileInputRefs.current[index]) return
-    fileInputRefs.current[index].click()
-  }
-
-  const handleImageUpload = async (index, file) => {
-    if (!file) return
-    try {
-      const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
-      const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
-      const { error: uploadError } = await supabase.storage
-        .from('exercise-files')
-        .upload(path, file, { cacheControl: '3600', upsert: true })
-      if (uploadError) throw uploadError
-
-      const { data: publicData } = supabase.storage
-        .from('exercise-files')
-        .getPublicUrl(path)
-
-      const publicUrl = publicData?.publicUrl
-      if (!publicUrl) throw new Error('Cannot get public URL')
-
-      const sizeStyle = getImageSizeStyle()
-      insertAtCursor(index, `\n<img src="${publicUrl}" alt="" ${sizeStyle} />\n`)
-      alert('Image uploaded and inserted into question!')
-    } catch (e) {
-      console.error('Image upload failed:', e)
-      alert('Image upload failed. Please ensure the bucket "exercise-images" exists and RLS allows uploads.')
-    }
-  }
-
-  const handlePasteImageUrl = (index) => {
-    setUrlModal({ isOpen: true, type: 'image', questionIndex: index })
-    setUrlInput('')
-    setLinkText('')
-    setImageSize('medium')
-    setCustomWidth('')
-    setCustomHeight('')
-  }
-
-  const handleInsertLink = (index) => {
-    setUrlModal({ isOpen: true, type: 'link', questionIndex: index })
-    setUrlInput('')
-    setLinkText('Reference')
-  }
-
-  const handleInsertAudio = (index) => {
-    setUrlModal({ isOpen: true, type: 'audio', questionIndex: index })
-    setUrlInput('')
-    setLinkText('')
-    setImageSize('medium')
-    setCustomWidth('')
-    setCustomHeight('')
-    setAudioControls(true)
-    setAudioAutoplay(false)
-    setAudioLoop(false)
-    setAudioPlaybackRate(1)
-  }
-
-  const handleInsertTable = (index) => {
-    setTableModal({ isOpen: true, questionIndex: index })
-    setTableRows(2)
-    setTableColumns(2)
-    setTableWidth('100%')
-    setTableBorder(true)
-  }
-
-  const handleTableSubmit = () => {
-    const rows = parseInt(tableRows) || 2
-    const cols = parseInt(tableColumns) || 2
-
-    // Determine table layout based on width setting
-    const isFlexible = tableWidth === 'auto'
-    const tableLayout = isFlexible ? 'auto' : 'fixed'
-    const widthStyle = tableWidth
-
-    // Determine border style
-    const borderStyle = tableBorder ? 'border: 1px solid #ddd;' : 'border: none;'
-
-    let tableHTML = `<table style="width: ${widthStyle}; border-collapse: collapse; margin: 10px 0; table-layout: ${tableLayout};">\n`
-
-    for (let i = 0; i < rows; i++) {
-      tableHTML += '  <tr>\n'
-      for (let j = 0; j < cols; j++) {
-        const cellNumber = i * cols + j + 1
-        // Only add width for fixed layout tables
-        const cellWidth = isFlexible ? '' : ` width: ${Math.floor(100 / cols)}%;`
-        tableHTML += `    <td style="${borderStyle} padding: 8px;${cellWidth} vertical-align: top;">Cell ${cellNumber}</td>\n`
-      }
-      tableHTML += '  </tr>\n'
-    }
-
-    tableHTML += '</table>'
-
-    // Check if this is for intro (questionIndex === -1)
-    if (tableModal.questionIndex === -1) {
-      // Insert into intro
-      const textarea = questionInputRefs.current[-1]
-      const current = intro || ''
-
-      if (!textarea) {
-        onIntroChange && onIntroChange(current + (current ? '\n\n' : '') + tableHTML)
-      } else {
-        const start = textarea.selectionStart || 0
-        const end = textarea.selectionEnd || 0
-        const newValue = current.slice(0, start) + tableHTML + current.slice(end)
-        onIntroChange && onIntroChange(newValue)
-        setTimeout(() => {
-          textarea.focus()
-          const caret = start + tableHTML.length
-          textarea.setSelectionRange(caret, caret)
-        }, 0)
-      }
-    } else {
-      // Insert into question
-      insertAtCursor(tableModal.questionIndex, tableHTML)
-    }
-
-    setTableModal({ isOpen: false, questionIndex: -1 })
-  }
-
-  const handleTableCancel = () => {
-    setTableModal({ isOpen: false, questionIndex: -1 })
-    setTableRows(2)
-    setTableColumns(2)
-    setTableWidth('100%')
-    setTableBorder(true)
-  }
-
-  const getImageSizeStyle = () => {
-    if (imageSize === 'custom') {
-      const width = customWidth ? `width="${customWidth}"` : ''
-      const height = customHeight ? `height="${customHeight}"` : ''
-      return `${width} ${height}`.trim()
-    }
-    
-    const sizeMap = {
-      'small': 'width="200"',
-      'medium': 'width="400"',
-      'large': 'width="600"',
-      'full': 'width="100%"'
-    }
-    
-    return sizeMap[imageSize] || sizeMap['medium']
-  }
-
-  const handleImagePaste = async (e, index) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-    for (const item of items) {
-      const isImage = item.type.startsWith('image/')
-      const isAudio = item.type.startsWith('audio/')
-      if (!isImage && !isAudio) continue
-      e.preventDefault()
-      const file = item.getAsFile()
-      if (!file) return
-      try {
-        const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
-        const ext = file.type.split('/')[1] || (isImage ? 'png' : 'mp3')
-        const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_pasted.${ext}`
-        const { error: uploadError } = await supabase.storage
-          .from('exercise-files')
-          .upload(path, file, { cacheControl: '3600', upsert: true })
-        if (uploadError) throw uploadError
-        const { data: publicData } = supabase.storage
-          .from('exercise-files')
-          .getPublicUrl(path)
-        const publicUrl = publicData?.publicUrl
-        if (!publicUrl) throw new Error('Cannot get public URL')
-        if (isImage) {
-          const sizeStyle = getImageSizeStyle()
-          insertAtCursor(index, `<img src="${publicUrl}" alt="" ${sizeStyle} />`)
-        } else {
-          const audioAttrs = getAudioAttributes()
-          insertAtCursor(index, `<audio src="${publicUrl}" ${audioAttrs}></audio>`)
-        }
-      } catch (err) {
-        console.error('Paste upload failed:', err)
-        alert(`Failed to upload pasted ${isImage ? 'image' : 'audio'}`)
-      }
-      return
-    }
-  }
-
-  const getAudioAttributes = () => {
-    const attributes = []
-    if (audioControls) attributes.push('controls')
-    if (audioAutoplay) attributes.push('autoplay')
-    if (audioLoop) attributes.push('loop')
-    if (audioMaxPlays > 0) attributes.push(`data-max-plays="${audioMaxPlays}"`)
-    if (audioPlaybackRate && audioPlaybackRate !== 1) attributes.push(`data-playback-rate="${audioPlaybackRate}"`)
-    return attributes.join(' ')
-  }
-
-  const handleUrlSubmit = () => {
-    if (!urlInput.trim()) return
-
-    try {
-      new URL(urlInput.trim())
-      const trimmedUrl = urlInput.trim()
-
-      // Check if this is for intro (questionIndex === -1)
-      if (urlModal.questionIndex === -1) {
-        // Insert into intro
-        const textarea = questionInputRefs.current[-1]
-        const current = intro || ''
-        let textToInsert = ''
-
-        if (urlModal.type === 'image') {
-          const sizeStyle = getImageSizeStyle()
-          textToInsert = `\n<img src="${trimmedUrl}" alt="" ${sizeStyle} />\n`
-        } else if (urlModal.type === 'link') {
-          const text = linkText.trim() || 'Reference'
-          textToInsert = `[${text}](${trimmedUrl})`
-        } else if (urlModal.type === 'audio') {
-          const audioAttrs = getAudioAttributes()
-          textToInsert = `<audio src="${trimmedUrl}" ${audioAttrs}></audio>`
-        }
-
-        if (!textarea) {
-          onIntroChange && onIntroChange(current + (current ? '\n\n' : '') + textToInsert)
-        } else {
-          const start = textarea.selectionStart || 0
-          const end = textarea.selectionEnd || 0
-          const newValue = current.slice(0, start) + textToInsert + current.slice(end)
-          onIntroChange && onIntroChange(newValue)
-          setTimeout(() => {
-            textarea.focus()
-            const caret = start + textToInsert.length
-            textarea.setSelectionRange(caret, caret)
-          }, 0)
-        }
-      } else {
-        // Insert into question
-        if (urlModal.type === 'image') {
-          const sizeStyle = getImageSizeStyle()
-          insertAtCursor(urlModal.questionIndex, `\n<img src="${trimmedUrl}" alt="" ${sizeStyle} />\n`)
-        } else if (urlModal.type === 'link') {
-          const text = linkText.trim() || 'Reference'
-          insertAtCursor(urlModal.questionIndex, `[${text}](${trimmedUrl})`)
-        } else if (urlModal.type === 'audio') {
-          const audioAttrs = getAudioAttributes()
-          insertAtCursor(urlModal.questionIndex, `<audio src="${trimmedUrl}" ${audioAttrs}></audio>`)
-        }
-      }
-
-      setUrlModal({ isOpen: false, type: '', questionIndex: -1 })
-      setUrlInput('')
-      setLinkText('')
-      setImageSize('medium')
-      setCustomWidth('')
-      setCustomHeight('')
-      setAudioControls(true)
-      setAudioAutoplay(false)
-      setAudioLoop(false)
-      setAudioMaxPlays(0)
-      setAudioPlaybackRate(1)
-    } catch {
-      alert('Vui lòng nhập URL hợp lệ (bắt đầu bằng http:// hoặc https://)')
-    }
-  }
-
-  const handleUrlCancel = () => {
-    setUrlModal({ isOpen: false, type: '', questionIndex: -1 })
-    setUrlInput('')
-    setLinkText('')
-    setImageSize('medium')
-    setCustomWidth('')
-    setCustomHeight('')
-    setAudioControls(true)
-    setAudioAutoplay(false)
-    setAudioLoop(false)
-    setAudioMaxPlays(0)
-    setAudioPlaybackRate(1)
-  }
-
-  const markdownToHtml = (text) => {
-    if (!text) return ''
-    let html = text
-    // Images ![alt](url) - markdown format
-    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (m, alt, url) => `<img src="${url}" alt="${alt || ''}" class="max-w-full h-auto rounded-lg my-2" />`)
-    // HTML img tags - preserve existing attributes
-    html = html.replace(/<img([^>]*?)>/g, (m, attrs) => `<img${attrs} class="max-w-full h-auto rounded-lg my-2" />`)
-    // HTML audio tags - preserve existing attributes
-    html = html.replace(/<audio([^>]*?)>/g, (m, attrs) => `<audio${attrs} class="w-full my-2"></audio>`)
-    // Links [text](url)
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, (m, text1, url) => `<a href="${url}" target="_blank" rel="noreferrer">${text1 || url}</a>`)
-    return html
   }
 
   const updateOption = (questionIndex, optionIndex, value) => {
@@ -1201,90 +795,17 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
 
     {/* Global Intro Section */}
     <div className="bg-white p-4 border-l-4 border-l-blue-400 border border-gray-200 rounded-lg">
-      <div className="flex items-center gap-2 mb-1">
-        <label className="text-sm font-semibold text-blue-700 mr-auto">
-          Intro
-          <span className="text-xs font-normal text-gray-400 ml-1">(Optional)</span>
-        </label>
-        <input
-          ref={(el) => (fileInputRefs.current[-1] = el)}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (!file) return
-            const uploadImageForIntro = async () => {
-              try {
-                const basePath = folderPath ? `exercise_bank/${folderPath}` : 'exercise_bank'
-                const path = `${basePath}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
-                const { error: uploadError } = await supabase.storage
-                  .from('exercise-files')
-                  .upload(path, file, { cacheControl: '3600', upsert: true })
-                if (uploadError) throw uploadError
-
-                const { data: publicData } = supabase.storage
-                  .from('exercise-files')
-                  .getPublicUrl(path)
-
-                const publicUrl = publicData?.publicUrl
-                if (!publicUrl) throw new Error('Cannot get public URL')
-
-                const sizeStyle = getImageSizeStyle()
-                const textarea = questionInputRefs.current[-1]
-                const current = intro || ''
-                if (!textarea) {
-                  onIntroChange && onIntroChange(current + (current ? '\n\n' : '') + `<img src="${publicUrl}" alt="" ${sizeStyle} />`)
-                  return
-                }
-                const start = textarea.selectionStart || 0
-                const end = textarea.selectionEnd || 0
-                const textToInsert = `\n<img src="${publicUrl}" alt="" ${sizeStyle} />\n`
-                const newValue = current.slice(0, start) + textToInsert + current.slice(end)
-                onIntroChange && onIntroChange(newValue)
-                setTimeout(() => {
-                  textarea.focus()
-                  const caret = start + textToInsert.length
-                  textarea.setSelectionRange(caret, caret)
-                }, 0)
-                alert('Image uploaded and inserted into intro!')
-              } catch (e) {
-                console.error('Image upload failed:', e)
-                alert('Image upload failed. Please ensure the bucket "exercise-images" exists and RLS allows uploads.')
-              }
-            }
-            uploadImageForIntro()
-          }}
-        />
-        <button type="button" onClick={() => { const input = fileInputRefs.current[-1]; if (input) input.click() }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-          <Upload className="w-3 h-3" /> Upload
-        </button>
-        <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'image', questionIndex: -1 }); setUrlInput(''); setLinkText(''); setImageSize('medium'); setCustomWidth(''); setCustomHeight('') }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-          <Image className="w-3 h-3" /> Image
-        </button>
-        <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'audio', questionIndex: -1 }); setUrlInput(''); setLinkText(''); setImageSize('medium'); setCustomWidth(''); setCustomHeight(''); setAudioControls(true); setAudioAutoplay(false); setAudioLoop(false) }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-          <Music className="w-3 h-3" /> Audio
-        </button>
-        <button type="button" onClick={() => { setUrlModal({ isOpen: true, type: 'link', questionIndex: -1 }); setUrlInput(''); setLinkText('Reference') }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-          <Link className="w-3 h-3" /> Link
-        </button>
-        <button type="button" onClick={() => { setTableModal({ isOpen: true, questionIndex: -1 }); setTableRows(2); setTableColumns(2); setTableWidth('100%'); setTableBorder(true) }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-          <Table className="w-3 h-3" /> Table
-        </button>
-        <div className="flex gap-1 ml-2 border-l pl-2 border-gray-300">
-          <button type="button" onClick={() => applyIntroAlignment('left')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align left"><AlignLeft className="w-3 h-3" /></button>
-          <button type="button" onClick={() => applyIntroAlignment('center')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align center"><AlignCenter className="w-3 h-3" /></button>
-          <button type="button" onClick={() => applyIntroAlignment('right')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align right"><AlignRight className="w-3 h-3" /></button>
-        </div>
-      </div>
-      <textarea
-        ref={(el) => (questionInputRefs.current[-1] = el)}
+      <RichTextField
         value={intro || ''}
-        onChange={(e) => onIntroChange && onIntroChange(e.target.value)}
-        onKeyDown={(e) => handleRichTextShortcut(e, questionInputRefs.current[-1], intro || '', (v) => onIntroChange && onIntroChange(v))}
-        onPaste={(e) => handleImagePaste(e, -1)}
-        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-        rows={2}
+        onChange={(v) => onIntroChange && onIntroChange(v)}
+        folderPath={folderPath}
+        preview={false}
+        toolbarLead={
+          <label className="text-sm font-semibold text-blue-700 mr-auto">
+            Intro
+            <span className="text-xs font-normal text-gray-400 ml-1">(Optional)</span>
+          </label>
+        }
         placeholder="Nhập nội dung giới thiệu chung cho bài trắc nghiệm..."
       />
     </div>
@@ -1441,62 +962,22 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
 
             {/* Question Text */}
             <div className="mb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <input
-                  ref={(el) => (fileInputRefs.current[index] = el)}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleImageUpload(index, e.target.files?.[0])}
-                />
-                <button type="button" onClick={() => handleSelectFile(index)} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-                  <Upload className="w-3 h-3" /> Upload
-                </button>
-                <button type="button" onClick={() => handlePasteImageUrl(index)} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-                  <Image className="w-3 h-3" /> Image
-                </button>
-                <button type="button" onClick={() => handleInsertAudio(index)} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-                  <Music className="w-3 h-3" /> Audio
-                </button>
-                <button type="button" onClick={() => handleInsertLink(index)} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-                  <Link className="w-3 h-3" /> Link
-                </button>
-                <button type="button" onClick={() => handleInsertTable(index)} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded inline-flex items-center gap-1">
-                  <Table className="w-3 h-3" /> Table
-                </button>
-                <div className="flex gap-1 ml-2 border-l pl-2 border-gray-300">
-                  <button type="button" onClick={() => applyAlignment(index, 'left')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align left"><AlignLeft className="w-3 h-3" /></button>
-                  <button type="button" onClick={() => applyAlignment(index, 'center')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align center"><AlignCenter className="w-3 h-3" /></button>
-                  <button type="button" onClick={() => applyAlignment(index, 'right')} className="p-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" title="Align right"><AlignRight className="w-3 h-3" /></button>
-                </div>
-                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                  <input type="checkbox" checked={question.shuffle_options !== false} onChange={(e) => updateQuestion(index, 'shuffle_options', e.target.checked)} className="w-3 h-3 text-blue-600 rounded" />
-                  Randomize
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setPreviewOpen(prev => ({ ...prev, [index]: !prev[index] }))}
-                  className="px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs"
-                >
-                  {previewOpen[index] ? 'Hide' : 'Preview'}
-                </button>
-              </div>
-              <textarea
-                ref={(el) => (questionInputRefs.current[index] = el)}
+              <RichTextField
                 value={question.question || ''}
-                onChange={(e) => updateQuestion(index, 'question', e.target.value)}
+                onChange={(v) => updateQuestion(index, 'question', v)}
+                folderPath={folderPath}
                 onKeyDown={(e) => handleKeyboardShortcut(e, index)}
-                onPaste={(e) => handleImagePaste(e, index)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                rows={2}
+                textareaRef={(el) => (questionInputRefs.current[index] = el)}
+                toolbarExtra={
+                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input type="checkbox" checked={question.shuffle_options !== false} onChange={(e) => updateQuestion(index, 'shuffle_options', e.target.checked)} className="w-3 h-3 text-blue-600 rounded" />
+                    Randomize
+                  </label>
+                }
                 placeholder="Enter your question here..."
               />
             </div>
-            {previewOpen[index] && (
-              <div className="mb-2 p-2 bg-white border rounded text-sm">
-                <RichTextRenderer content={markdownToHtml(question.question || '')} allowImages allowLinks className="prose max-w-none" />
-              </div>
-            )}
+
 
             {/* Options */}
             <div className="mb-4">
@@ -1516,9 +997,10 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
               {/* Options row */}
               <div className="flex gap-1.5 items-center">
                 {(question.options || []).map((option, optionIndex) => (
-                  <div key={optionIndex} className="flex-1 flex items-center gap-1 min-w-0">
+                  <div key={optionIndex} className={`${focusedOption === `${index}-${optionIndex}` ? 'flex-[4]' : 'flex-1'} flex items-start gap-1 min-w-0`}>
                     <button
                       type="button"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => updateQuestion(index, 'correct_answer', optionIndex)}
                       className={`p-1 rounded border-2 transition-colors shrink-0 ${
                         question.correct_answer === optionIndex
@@ -1529,21 +1011,23 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
                     >
                       <Check className="w-3 h-3" />
                     </button>
-                    <span className="text-xs font-medium text-gray-500 shrink-0">{String.fromCharCode(65 + optionIndex)}</span>
-                    <input
-                      type="text"
+                    <span className="text-xs font-medium text-gray-500 shrink-0 pt-1.5">{String.fromCharCode(65 + optionIndex)}</span>
+                    <AutoGrowTextarea
+                      singleLine
                       value={option}
+                      onFocus={() => setFocusedOption(`${index}-${optionIndex}`)}
+                      onBlur={() => setFocusedOption(null)}
                       onChange={(e) => updateOption(index, optionIndex, e.target.value)}
                       onKeyDown={(e) => {
                         if ((e.ctrlKey || e.metaKey) && /^[biuBIU]$/.test(e.key)) {
                           handleRichTextShortcut(e, e.target, option, (v) => updateOption(index, optionIndex, v))
                         }
                       }}
-                      className="w-full min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-full min-w-0 px-2 py-1 text-sm leading-5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                       placeholder={String.fromCharCode(65 + optionIndex)}
                     />
                     {question.options.length > 2 && (
-                      <button type="button" onClick={() => removeOption(index, optionIndex)} className="p-0.5 text-red-400 hover:text-red-600 shrink-0" title="Remove">
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => removeOption(index, optionIndex)} className="p-0.5 mt-1 text-red-400 hover:text-red-600 shrink-0" title="Remove">
                         <X className="w-3 h-3" />
                       </button>
                     )}
@@ -1572,7 +1056,7 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
                       setLocalQuestions(updated)
                       onQuestionsChange(updated)
                     }}
-                    className="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                    className={`${focusedOption === `${index}-${optionIndex}` ? 'flex-[4]' : 'flex-1'} min-w-0 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 bg-gray-50`}
                     placeholder={`${String.fromCharCode(65 + optionIndex)} explanation`}
                   />
                 ))}
@@ -1604,428 +1088,6 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
         )}
       </div>
 
-      {/* Table Input Modal */}
-      {tableModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Insert Table</h3>
-              <button
-                onClick={handleTableCancel}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Rows
-                </label>
-                <input
-                  type="number"
-                  value={tableRows}
-                  onChange={(e) => setTableRows(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  min="1"
-                  max="20"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Columns
-                </label>
-                <input
-                  type="number"
-                  value={tableColumns}
-                  onChange={(e) => setTableColumns(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  min="1"
-                  max="10"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Table Width
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTableWidth('100%')}
-                    className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-colors ${
-                      tableWidth === '100%'
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    Full Width (100%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTableWidth('auto')}
-                    className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-colors ${
-                      tableWidth === 'auto'
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    Flexible (Auto)
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tableWidth === '100%'
-                    ? 'Table stretches to full width with equal columns'
-                    : 'Table shrinks to fit content size'}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Border Style
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTableBorder(true)}
-                    className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-colors ${
-                      tableBorder
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    With Borders
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTableBorder(false)}
-                    className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-colors ${
-                      !tableBorder
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    No Borders
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tableBorder
-                    ? 'Cells will have visible borders'
-                    : 'Borderless table for cleaner layout'}
-                </p>
-              </div>
-
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  Preview: {tableRows || 0} rows × {tableColumns || 0} columns ({tableWidth === '100%' ? 'Full width' : 'Flexible'}, {tableBorder ? 'With borders' : 'No borders'})
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                onClick={handleTableCancel}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleTableSubmit}
-                disabled={!tableRows || !tableColumns || tableRows < 1 || tableColumns < 1}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
-              >
-                <Table className="w-4 h-4" />
-                Insert Table
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* URL Input Modal */}
-      {urlModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {urlModal.type === 'image' ? 'Thêm hình ảnh' : 
-                 urlModal.type === 'audio' ? 'Thêm âm thanh' : 'Thêm liên kết'}
-              </h3>
-              <button
-                onClick={handleUrlCancel}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL
-                </label>
-                <input
-                  type="url"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder={
-                    urlModal.type === 'image' ? 'https://example.com/image.jpg' :
-                    urlModal.type === 'audio' ? 'https://example.com/audio.mp3' :
-                    'https://example.com/link'
-                  }
-                  autoFocus
-                />
-              {(urlModal.type === 'image' || urlModal.type === 'audio') && (
-                <div className="mt-2">
-                  <input
-                    ref={mediaModalInputRef}
-                    type="file"
-                    accept={urlModal.type === 'image' ? 'image/*' : 'audio/*'}
-                    className="hidden"
-                    onChange={(e) => { uploadMediaFile(e.target.files?.[0]); e.target.value = '' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => mediaModalInputRef.current?.click()}
-                    disabled={modalUploading}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
-                  >
-                    <Upload className="w-4 h-4" />
-                    {modalUploading ? 'Uploading...' : 'Or upload from device'}
-                  </button>
-                </div>
-              )}
-              </div>
-              
-              {urlModal.type === 'link' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Text hiển thị (tùy chọn)
-                  </label>
-                  <input
-                    type="text"
-                    value={linkText}
-                    onChange={(e) => setLinkText(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Reference"
-                  />
-                </div>
-              )}
-
-              {urlModal.type === 'image' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kích thước hình ảnh
-                  </label>
-                  <div className="space-y-3">
-                    {/* Size Presets */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { value: 'small', label: 'Nhỏ (200px)', icon: '📏' },
-                        { value: 'medium', label: 'Trung bình (400px)', icon: '📐' },
-                        { value: 'large', label: 'Lớn (600px)', icon: '📊' },
-                        { value: 'full', label: 'Toàn màn hình', icon: '🖥️' }
-                      ].map((size) => (
-                        <button
-                          key={size.value}
-                          type="button"
-                          onClick={() => setImageSize(size.value)}
-                          className={`p-2 rounded-lg border text-sm transition-colors ${
-                            imageSize === size.value
-                              ? 'border-blue-500 bg-blue-50 text-blue-700'
-                              : 'border-gray-300 hover:border-gray-400'
-                          }`}
-                        >
-                          <span className="mr-1">{size.icon}</span>
-                          {size.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Custom Size */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="customSize"
-                        checked={imageSize === 'custom'}
-                        onChange={(e) => setImageSize(e.target.checked ? 'custom' : 'medium')}
-                        className="rounded"
-                      />
-                      <label htmlFor="customSize" className="text-sm text-gray-700">
-                        Kích thước tùy chỉnh
-                      </label>
-                    </div>
-
-                    {imageSize === 'custom' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Chiều rộng (px)</label>
-                          <input
-                            type="number"
-                            value={customWidth}
-                            onChange={(e) => setCustomWidth(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                            placeholder="400"
-                            min="50"
-                            max="1200"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Chiều cao (px)</label>
-                          <input
-                            type="number"
-                            value={customHeight}
-                            onChange={(e) => setCustomHeight(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                            placeholder="300"
-                            min="50"
-                            max="800"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {urlModal.type === 'audio' && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-700">Tùy chọn âm thanh</h4>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={audioControls} onChange={(e) => setAudioControls(e.target.checked)} className="rounded" />
-                  Hiển thị controls (play/pause/volume)
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={audioAutoplay} onChange={(e) => setAudioAutoplay(e.target.checked)} className="rounded" />
-                  Tự động phát (autoplay)
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={audioLoop} onChange={(e) => setAudioLoop(e.target.checked)} className="rounded" />
-                  Lặp lại (loop)
-                </label>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-700 w-24">Giới hạn phát:</label>
-                  <input 
-                    type="number" 
-                    min="0"
-                    value={audioMaxPlays} 
-                    onChange={(e) => setAudioMaxPlays(parseInt(e.target.value) || 0)} 
-                    className="w-20 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-xs text-gray-500">(0 = không giới hạn)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-700 w-24">Tốc độ phát:</label>
-                  <select
-                    value={audioPlaybackRate}
-                    onChange={(e) => setAudioPlaybackRate(parseFloat(e.target.value))}
-                    className="w-32 p-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={0.5}>0.5x (Rất chậm)</option>
-                    <option value={0.75}>0.75x (Chậm)</option>
-                    <option value={1}>1x (Bình thường)</option>
-                    <option value={1.25}>1.25x (Nhanh)</option>
-                    <option value={1.5}>1.5x (Rất nhanh)</option>
-                  </select>
-                </div>
-              </div>
-              )}
-              
-              {urlInput && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                  {urlModal.type === 'image' ? (
-                    <div>
-                      <img 
-                        src={urlInput} 
-                        alt="Preview" 
-                        className="max-w-full object-contain rounded border"
-                        style={{
-                          width: imageSize === 'custom' && customWidth ? `${customWidth}px` : 
-                                 imageSize === 'small' ? '200px' :
-                                 imageSize === 'medium' ? '400px' :
-                                 imageSize === 'large' ? '600px' : '100%',
-                          height: imageSize === 'custom' && customHeight ? `${customHeight}px` : 'auto',
-                          maxHeight: '200px'
-                        }}
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'block'
-                        }}
-                      />
-                      <div className="text-sm text-red-500" style={{display: 'none'}}>
-                        Không thể tải hình ảnh
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Kích thước: {imageSize === 'custom' ? 
-                          `${customWidth || 'auto'} x ${customHeight || 'auto'}px` :
-                          imageSize === 'small' ? '200px' :
-                          imageSize === 'medium' ? '400px' :
-                          imageSize === 'large' ? '600px' : '100%'}
-                      </div>
-                    </div>
-                  ) : urlModal.type === 'audio' ? (
-                    <div>
-                      <audio
-                        ref={(el) => { if (el) el.playbackRate = audioPlaybackRate }}
-                        src={urlInput}
-                        controls={audioControls}
-                        autoPlay={audioAutoplay}
-                        loop={audioLoop}
-                        className="w-full"
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'block'
-                        }}
-                      />
-                      <div className="text-sm text-red-500" style={{display: 'none'}}>
-                        Không thể tải âm thanh
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Tùy chọn: {audioControls ? 'Controls' : 'Không controls'} |
-                        {audioAutoplay ? ' Autoplay' : ' Không autoplay'} |
-                        {audioLoop ? ' Loop' : ' Không loop'} |
-                        Tốc độ {audioPlaybackRate}x
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm">
-                      <a href={urlInput} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                        {linkText || urlInput}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                onClick={handleUrlCancel}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleUrlSubmit}
-                disabled={!urlInput.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                {urlModal.type === 'image' ? 'Thêm hình ảnh' : 
-                 urlModal.type === 'audio' ? 'Thêm âm thanh' : 'Thêm liên kết'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

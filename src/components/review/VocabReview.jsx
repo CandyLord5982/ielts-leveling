@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from '../../utils/srs'
-import { ArrowLeft, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, RotateCcw, Plus } from 'lucide-react'
 
 // Quizlet-style review of words saved from the dictionary popup.
 // Phase 1: show meaning -> pick the word. Phase 2: show meaning -> type the word.
@@ -175,6 +175,12 @@ const VocabReview = () => {
               ? 'Nhấp đúp vào một từ bất kỳ để tra nghĩa, rồi bấm "Lưu từ".'
               : 'Các từ đã lưu của bạn chưa đến hạn ôn lại.'}
           </p>
+          <button
+            onClick={() => navigate('/review/vocab/words', { state: { add: true } })}
+            className="mt-5 inline-flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Thêm từ
+          </button>
         </div>
       </div>
     )

@@ -28,6 +28,9 @@ import EditExerciseModal from './ExerciseBank/EditExerciseModal'
 import ExerciseBankAccessModal from './ExerciseBank/ExerciseBankAccessModal'
 import BulkRenameModal from './ExerciseBank/BulkRenameModal'
 
+// The list never needs `content` (can be large); edit/duplicate fetch the full row on demand
+const LIST_COLUMNS = 'id, title, exercise_type, difficulty_level, estimated_duration, xp_reward, tags, folder_id, created_at'
+
 const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
   const { access, loading: accessLoading, error: accessError, canAccess, isAdmin, userId, accessKey, refreshAccess } = useExerciseBankAccess()
   const [folders, setFolders] = useState([])
@@ -129,7 +132,7 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
       if (!silent) setLoading(true)
       setLoadError('')
       try {
-        let query = supabase.from('exercises').select('*', { count: 'exact' }).eq('is_in_bank', true).eq('is_active', true)
+        let query = supabase.from('exercises').select(LIST_COLUMNS, { count: 'exact' }).eq('is_in_bank', true).eq('is_active', true)
         if (scope.folderIds !== null) query = query.in('folder_id', scope.folderIds)
         if (selectedFolder) query = query.eq('folder_id', selectedFolder.id)
         if (filterType !== 'all') query = query.eq('exercise_type', filterType)
@@ -309,8 +312,13 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
     setShowCreateFolder(true)
   }
 
-  const handleEditExercise = (exercise) => {
-    setEditingExercise(exercise)
+  const handleEditExercise = async (exercise) => {
+    const { data, error } = await supabase.from('exercises').select('*').eq('id', exercise.id).single()
+    if (error) {
+      alert('Could not load exercise: ' + error.message)
+      return
+    }
+    setEditingExercise(data)
     setShowEditExercise(true)
   }
 

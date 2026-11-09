@@ -4,6 +4,7 @@ import { X, Loader2, BookmarkPlus, Check } from 'lucide-react'
 import { lookupWord } from '../../utils/dictionaryApi'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
+import MeaningPicker, { firstChoice, resolveChoice } from './MeaningPicker'
 
 const WORD_RE = /^[a-zA-Z][a-zA-Z'-]*$/
 
@@ -14,9 +15,16 @@ const WordLookupPopup = () => {
   const popupRef = useRef(null)
   const { user } = useAuth()
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
+  const [choice, setChoice] = useState(null) // which definition "Lưu từ" saves
+
+  // Default to the first definition whenever a new entry arrives.
+  const entry = state?.entry
+  useEffect(() => {
+    setChoice(firstChoice(entry?.meanings))
+  }, [entry])
 
   // Reset / pre-check whether the looked-up word is already saved.
-  const entryWord = state?.entry?.word?.toLowerCase()
+  const entryWord = entry?.word?.toLowerCase()
   useEffect(() => {
     setSaveState('idle')
     if (!user || !entryWord) return
@@ -34,10 +42,9 @@ const WordLookupPopup = () => {
   }, [user, entryWord])
 
   const handleSave = async () => {
-    const entry = state?.entry
-    const meaning = entry?.meanings?.find((m) => m.definitions?.length)
-    const def = meaning?.definitions[0]
-    if (!user || !entry || !def) return
+    const picked = resolveChoice(entry?.meanings, choice)
+    if (!user || !entry || !picked) return
+    const { meaning, def } = picked
     setSaveState('saving')
     const { error } = await supabase.from('saved_words').upsert(
       {
@@ -107,7 +114,7 @@ const WordLookupPopup = () => {
 
   if (!state) return null
 
-  const { word, x, y, status, entry, error } = state
+  const { word, x, y, status, error } = state
 
   const popupWidth = 320
   const left = Math.min(Math.max(8, x - popupWidth / 2), window.innerWidth - popupWidth - 8)
@@ -150,21 +157,15 @@ const WordLookupPopup = () => {
 
       {status === 'done' && entry && (
         <div className="space-y-3">
-          {(entry.meanings || []).map((meaning, i) => (
-            <div key={i}>
-              <p className="text-xs font-medium text-blue-600 uppercase tracking-wide mb-1">
-                {meaning.partOfSpeech}
-              </p>
-              <ol className="list-decimal list-inside space-y-1">
-                {(meaning.definitions || []).slice(0, 3).map((def, j) => (
-                  <li key={j} className="text-gray-800">
-                    {def.definition}
-                    {def.example && <div className="text-gray-400 italic pl-1">&ldquo;{def.example}&rdquo;</div>}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ))}
+          {user && saveState !== 'saved' && (
+            <p className="text-xs text-gray-400">Chọn nghĩa muốn lưu:</p>
+          )}
+          <MeaningPicker
+            meanings={entry.meanings}
+            selected={user && saveState !== 'saved' ? choice : null}
+            onSelect={setChoice}
+            limit={3}
+          />
           {user && (
             <button
               onClick={handleSave}

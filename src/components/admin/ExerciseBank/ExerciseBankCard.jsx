@@ -18,13 +18,15 @@ import {
   Image,
   FileText,
   Video,
-  Palette
+  Palette,
+  Loader2
 } from 'lucide-react'
 
 const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = false, allowedTypes = null, selectMode = false, isSelected = false, onToggleSelect = null }) => {
   const navigate = useNavigate()
   const canEdit = allowedTypes ? allowedTypes.includes(exercise.exercise_type) : !readOnly
   const [showMenu, setShowMenu] = useState(false)
+  const [busyLabel, setBusyLabel] = useState(null) // e.g. 'Opening…' while the full exercise loads
   const [showAssignments, setShowAssignments] = useState(false)
   const [assignments, setAssignments] = useState([])
   const [loadingAssignments, setLoadingAssignments] = useState(false)
@@ -142,45 +144,6 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
     }
   }
 
-  const getContentPreview = (exercise) => {
-    const c = exercise.content
-    if (!c) return 'No content yet'
-    if (exercise.exercise_type === 'color_fill') {
-      const regionCount = (c.regions || []).length
-      const questionCount = (c.text_fields || []).filter(field => field.kind !== 'label').length
-      if (regionCount === 0) return 'No regions yet'
-      return `${regionCount} region${regionCount !== 1 ? 's' : ''}`
-        + (questionCount > 0 ? ` · ${questionCount} question${questionCount !== 1 ? 's' : ''}` : '')
-        + ` · ${(c.palette || []).length} colors`
-    }
-    const qs = c.questions || c.cards || c.flashcards || []
-    const count = qs.length
-    if (count === 0) return 'No questions yet'
-    const first = qs[0]
-    let firstText = ''
-    switch (exercise.exercise_type) {
-      case 'flashcard':
-        firstText = first.front || first.term || ''
-        break
-      case 'pronunciation':
-        firstText = first.text || ''
-        break
-      case 'speaking_assessment':
-        firstText = first.prompt || ''
-        break
-      case 'pdf_worksheet':
-        return c.pdf_url ? `PDF: ${count} question${count !== 1 ? 's' : ''}` : 'PDF worksheet'
-      case 'ielts_reading':
-        return c.passage?.title ? `Passage: ${c.passage.title}` : 'IELTS Reading'
-      default:
-        firstText = first.question || first.prompt || first.text || first.sentence || ''
-    }
-    // Strip HTML tags
-    const clean = firstText.replace(/<[^>]*>/g, '').trim()
-    const preview = clean.length > 80 ? clean.substring(0, 80) + '…' : clean
-    return `${count} question${count !== 1 ? 's' : ''}${preview ? ` · ${preview}` : ''}`
-  }
-
   const getDifficultyColor = (level) => {
     switch (level) {
       case 1:
@@ -245,11 +208,15 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
     setShowMenu(false)
   }
 
-  const handleEdit = () => {
-    if (onEdit) {
-      onEdit(exercise)
-    }
+  const handleEdit = async () => {
     setShowMenu(false)
+    if (!onEdit || busyLabel) return
+    setBusyLabel('Opening…')
+    try {
+      await onEdit(exercise)
+    } finally {
+      setBusyLabel(null)
+    }
   }
 
   const handleDelete = async () => {
@@ -350,10 +317,21 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
 
 
   const handleDuplicate = async () => {
+    setShowMenu(false)
+    if (busyLabel) return
+    setBusyLabel('Duplicating…')
     try {
+      // The list only loads light columns, so fetch the full row (incl. content) before copying
+      const { data: full, error: fetchError } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('id', exercise.id)
+        .single()
+      if (fetchError) throw fetchError
+
       // Create duplicate with modified title
       const duplicate = {
-        ...exercise,
+        ...full,
         id: undefined, // Let Supabase generate new ID
         title: `${exercise.title} (Copy)`,
         created_at: undefined,
@@ -373,17 +351,24 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
     } catch (error) {
       console.error('Error duplicating exercise:', error)
       alert('Failed to duplicate exercise: ' + error.message)
+    } finally {
+      setBusyLabel(null)
     }
-    setShowMenu(false)
   }
 
-
+  const busyOverlay = busyLabel && (
+    <div className="absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-lg bg-white/70 text-sm font-medium text-blue-700" role="status">
+      <Loader2 className="w-4 h-4 animate-spin" />
+      {busyLabel}
+    </div>
+  )
 
   const TypeIcon = getTypeIcon(exercise.exercise_type)
 
   if (viewMode === 'list') {
     return (
-      <div className="bg-white rounded-lg border hover:border-blue-200 transition-colors">
+      <div className="relative bg-white rounded-lg border hover:border-blue-200 transition-colors">
+        {busyOverlay}
         <div className="p-4 flex items-center justify-between">
           <div className="flex items-center space-x-4 flex-1 min-w-0">
             {selectMode && canEdit && (
@@ -577,7 +562,8 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
 
   // Grid view
   return (
-    <div className="bg-white rounded-lg border hover:border-blue-200 hover:shadow-md transition-all cursor-pointer group">
+    <div className="relative bg-white rounded-lg border hover:border-blue-200 hover:shadow-md transition-all cursor-pointer group">
+      {busyOverlay}
       <div className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
@@ -671,13 +657,6 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         <p className="text-sm text-gray-500 mb-3">
           {getTypeLabel(exercise.exercise_type)}
         </p>
-
-        {/* Content Preview */}
-        <div className="bg-gray-50 rounded-lg p-3 mb-3 min-h-[60px]">
-          <p className="text-xs text-gray-600 line-clamp-3">
-            {getContentPreview(exercise)}
-          </p>
-        </div>
 
         {/* Footer */}
         <div className="flex flex-wrap items-center justify-between text-xs text-gray-500 gap-2">

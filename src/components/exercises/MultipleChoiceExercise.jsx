@@ -53,6 +53,32 @@ const getThemeSideImages = (theme) => {
   return themeSideImages[theme] || themeSideImages.blue
 }
 
+// Mid-exercise progress is kept in localStorage (same browser/device only) so a student
+// who leaves halfway resumes where they stopped, with the same shuffled question/option order.
+const PROGRESS_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const progressKey = (userId, exerciseId) => `mc-progress:${userId}:${exerciseId}`
+// Changes when the exercise is edited, which invalidates stale snapshots.
+const exerciseSignature = (ex) => `${ex.updated_at || ''}:${ex.content?.questions?.length || 0}`
+
+const loadProgress = (userId, exerciseId, signature) => {
+  try {
+    const raw = localStorage.getItem(progressKey(userId, exerciseId))
+    if (!raw) return null
+    const snap = JSON.parse(raw)
+    if (snap.signature !== signature || Date.now() - snap.savedAt > PROGRESS_TTL_MS) {
+      localStorage.removeItem(progressKey(userId, exerciseId))
+      return null
+    }
+    return snap
+  } catch {
+    return null
+  }
+}
+
+const clearProgress = (userId, exerciseId) => {
+  try { localStorage.removeItem(progressKey(userId, exerciseId)) } catch { /* storage unavailable */ }
+}
+
 const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -213,6 +239,39 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     initExercise()
   }, [exerciseId, user])
 
+  // Persist one-by-one progress after each answer / next; clear it once the quiz is done.
+  useEffect(() => {
+    if (testMode || isTeacherView || !user || !exerciseId || !exercise || loading) return
+    if (viewMode !== 'one-by-one') return
+    if (isQuizComplete) {
+      clearProgress(user.id, exerciseId)
+      return
+    }
+    // Nothing worth resuming yet
+    if (questionResults.length === 0 && !isRetryMode) return
+    // Skip the brief window where an answer is selected but its result isn't recorded yet
+    if (selectedAnswer !== null && questionResults.length <= currentQuestionIndex) return
+    try {
+      localStorage.setItem(progressKey(user.id, exerciseId), JSON.stringify({
+        signature: exerciseSignature(exercise),
+        savedAt: Date.now(),
+        questions,
+        originalQuestions,
+        currentQuestionIndex,
+        selectedAnswer,
+        showExplanation,
+        questionResults,
+        wrongQuestions,
+        firstAttemptResults,
+        isRetryMode,
+      }))
+    } catch { /* storage full or unavailable - progress just won't resume */ }
+  }, [
+    testMode, isTeacherView, user, exerciseId, exercise, loading, viewMode, isQuizComplete,
+    questions, originalQuestions, currentQuestionIndex, selectedAnswer, showExplanation,
+    questionResults, wrongQuestions, firstAttemptResults, isRetryMode,
+  ])
+
   // Fetch max attempt_number from database to continue from where we left off
   useEffect(() => {
     if (testMode) return
@@ -355,8 +414,24 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           }
         }
 
-        setQuestions(processedQuestions)
-        setOriginalQuestions(processedQuestions) // Store original questions for retry
+        // Resume a half-finished one-by-one run (students only; teachers/admins preview fresh)
+        const snap = user && !isTeacherView && exerciseViewMode === 'one-by-one'
+          ? loadProgress(user.id, exerciseId, exerciseSignature(data))
+          : null
+        if (snap) {
+          setQuestions(snap.questions)
+          setOriginalQuestions(snap.originalQuestions)
+          setCurrentQuestionIndex(snap.currentQuestionIndex)
+          setSelectedAnswer(snap.selectedAnswer)
+          setShowExplanation(snap.showExplanation)
+          setQuestionResults(snap.questionResults)
+          setWrongQuestions(snap.wrongQuestions)
+          setFirstAttemptResults(snap.firstAttemptResults)
+          setIsRetryMode(snap.isRetryMode)
+        } else {
+          setQuestions(processedQuestions)
+          setOriginalQuestions(processedQuestions) // Store original questions for retry
+        }
 
         // Save recent exercise
         try {

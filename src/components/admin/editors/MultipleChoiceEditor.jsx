@@ -1019,6 +1019,14 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
           >
             {localSettings.view_mode === 'one-by-one' ? 'One by One' : 'All at Once'}
           </button>
+          <button
+            type="button"
+            onClick={() => updateSetting('shuffle_questions', !localSettings.shuffle_questions)}
+            className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg text-sm ${localSettings.shuffle_questions ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-400 hover:bg-gray-500'}`}
+            title="Randomize the order of questions for each student"
+          >
+            Shuffle questions: {localSettings.shuffle_questions ? 'On' : 'Off'}
+          </button>
           {localQuestions.length > 0 && (
             <button
               type="button"

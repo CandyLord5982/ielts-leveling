@@ -319,6 +319,14 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           }
         })
 
+        // Optional exercise-level setting: randomize question order (separate from option shuffle)
+        if (exerciseSettings.shuffle_questions) {
+          for (let i = processedQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [processedQuestions[i], processedQuestions[j]] = [processedQuestions[j], processedQuestions[i]]
+          }
+        }
+
         setQuestions(processedQuestions)
         setOriginalQuestions(processedQuestions) // Store original questions for retry
 
@@ -413,6 +421,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
   // Handle answer selection in all-at-once mode
   const handleAllAtOnceAnswerSelect = (questionIndex, answerIndex) => {
+    if (showAllResults) return
     setAllAnswers(prev => ({
       ...prev,
       [questionIndex]: answerIndex
@@ -1024,8 +1033,10 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                             <button
                               key={index}
                               onClick={() => handleAnswerSelect(index)}
-                              disabled={selectedAnswer !== null}
-                              className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium`}
+                              // aria-disabled instead of disabled: browsers block text selection inside
+                              // disabled buttons, which breaks the double-click dictionary lookup.
+                              aria-disabled={selectedAnswer !== null}
+                              className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium ${selectedAnswer !== null ? 'cursor-default select-text' : ''}`}
                               style={{
                                 padding: 0,
                                 borderRadius: '0.75em',
@@ -1263,8 +1274,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                               <button
                                 key={optionIndex}
                                 onClick={() => handleAllAtOnceAnswerSelect(questionIndex, optionIndex)}
-                                disabled={showAllResults}
-                                className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium`}
+                                aria-disabled={showAllResults}
+                                className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium ${showAllResults ? 'cursor-default select-text' : ''}`}
                                 style={{
                                   padding: 0,
                                   borderRadius: '0.75em',

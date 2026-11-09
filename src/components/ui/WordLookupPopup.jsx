@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2, BookmarkPlus, Check } from 'lucide-react'
 import { lookupWord } from '../../utils/dictionaryApi'
+import { useAuth } from '../../hooks/useAuth'
+import { supabase } from '../../supabase/client'
 
 const WORD_RE = /^[a-zA-Z][a-zA-Z'-]*$/
 
@@ -10,11 +12,52 @@ const WORD_RE = /^[a-zA-Z][a-zA-Z'-]*$/
 const WordLookupPopup = () => {
   const [state, setState] = useState(null) // { word, x, y, status, entry, error }
   const popupRef = useRef(null)
+  const { user } = useAuth()
+  const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
+
+  // Reset / pre-check whether the looked-up word is already saved.
+  const entryWord = state?.entry?.word?.toLowerCase()
+  useEffect(() => {
+    setSaveState('idle')
+    if (!user || !entryWord) return
+    let cancelled = false
+    supabase
+      .from('saved_words')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('word', entryWord)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data) setSaveState('saved')
+      })
+    return () => { cancelled = true }
+  }, [user, entryWord])
+
+  const handleSave = async () => {
+    const entry = state?.entry
+    const meaning = entry?.meanings?.find((m) => m.definitions?.length)
+    const def = meaning?.definitions[0]
+    if (!user || !entry || !def) return
+    setSaveState('saving')
+    const { error } = await supabase.from('saved_words').upsert(
+      {
+        user_id: user.id,
+        word: entry.word.toLowerCase(),
+        phonetic: entry.phonetic || null,
+        part_of_speech: meaning.partOfSpeech || null,
+        definition: def.definition,
+        example: def.example || null,
+      },
+      { onConflict: 'user_id,word', ignoreDuplicates: true },
+    )
+    if (error) console.error('Error saving word:', error)
+    setSaveState(error ? 'error' : 'saved')
+  }
 
   useEffect(() => {
     const handleDblClick = (e) => {
       const target = e.target
-      if (target.closest('input, textarea, [contenteditable="true"], button, a, [data-no-lookup]')) return
+      if (target.closest('input, textarea, [contenteditable="true"], button:not([aria-disabled="true"]), a, [data-no-lookup]')) return
 
       const selection = window.getSelection()
       const word = selection?.toString().trim()
@@ -103,6 +146,20 @@ const WordLookupPopup = () => {
               </ol>
             </div>
           ))}
+          {user && (
+            <button
+              onClick={handleSave}
+              disabled={saveState === 'saving' || saveState === 'saved'}
+              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                saveState === 'saved'
+                  ? 'bg-green-50 text-green-700 cursor-default'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60'
+              }`}
+            >
+              {saveState === 'saved' ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+              {saveState === 'saved' ? 'Đã lưu để ôn tập' : saveState === 'saving' ? 'Đang lưu...' : saveState === 'error' ? 'Lỗi, thử lại' : 'Lưu từ'}
+            </button>
+          )}
         </div>
       )}
     </div>,

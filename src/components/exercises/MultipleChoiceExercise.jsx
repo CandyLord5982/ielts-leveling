@@ -138,6 +138,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     />
   ) : null
   const [viewMode, setViewMode] = useState(testMode ? 'all-at-once' : 'one-by-one')
+  // Per-exercise layout (editor setting): 'split' = question on the left, options stacked on the right (md+ screens)
+  const splitLayout = exercise?.content?.settings?.layout === 'split'
   const [allAnswers, setAllAnswers] = useState(() => (testMode && initialAnswers) ? initialAnswers : {}) // Object to store all answers: {questionIndex: selectedAnswerIndex}
   const [showAllResults, setShowAllResults] = useState(false)
 
@@ -976,7 +978,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
       </div>
 
       <div className="relative px-2 md:pt-2 pb-12">
-        <div className="max-w-4xl mx-auto space-y-6 relative z-20">
+        <div className={`${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} mx-auto space-y-6 relative z-20`}>
           {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
 
           {/* Teacher Do mode banner */}
@@ -1021,7 +1023,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
           {/* Global Intro (exercise.content.settings/intros) - hide on celebration screen */}
           {!isQuizComplete && exercise?.content?.intro && String(exercise.content.intro).trim() && (
-            <div className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
+            <div className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200`}>
               <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
             </div>
           )}
@@ -1043,7 +1045,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           <>
             {/* One-by-one mode */}
             {viewMode === 'one-by-one' && (
-              <div className="w-full max-w-4xl min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg">
+              <div className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg`}>
 
                 {/* Colored circles on top right */}
                 <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
@@ -1052,7 +1054,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                   <div className="w-3 h-3 rounded-full bg-pink-500"></div>
                 </div>
                 <div className="relative z-10 p-4 md:p-8 pt-8 border-l-4 border-blue-400 rounded-l-lg">
-                  <div className="space-y-4 md:space-y-6">
+                  <div className={splitLayout ? 'space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-6 md:items-start' : 'space-y-4 md:space-y-6'}>
 
                     {/* Question - single unified version */}
                     <div className="mb-6">
@@ -1088,7 +1090,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
                     {/* Options - responsive grid */}
                     <div className="space-y-3 md:space-y-0">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                      <div className={`grid grid-cols-1 ${splitLayout ? '' : 'md:grid-cols-2'} gap-3 md:gap-4`}>
                         {currentQuestion.options.map((option, index) => {
                           let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
 
@@ -1207,7 +1209,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
                     {/* Explanation and Next Button */}
                     {showExplanation && selectedAnswer !== null && (
-                      <div className="space-y-4">
+                      <div className={`space-y-4 ${splitLayout ? 'md:col-span-2' : ''}`}>
                         {(currentQuestion.option_explanations?.[selectedAnswer] || currentQuestion.explanation) && (
                           <div className="p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
                             <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h3>
@@ -1281,8 +1283,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
             {viewMode === 'all-at-once' && (
               <div className="space-y-6">
                 {questions.map((question, questionIndex) => (
-                  <div key={questionIndex} className="w-full max-w-4xl min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200">
-                    <div className="space-y-4 md:space-y-6">
+                  <div key={questionIndex} className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200`}>
+                    <div className={splitLayout ? 'space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-6 md:items-start' : 'space-y-4 md:space-y-6'}>
 
                       {/* Question */}
                       <div className="mb-6">
@@ -1316,7 +1318,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
                       {/* Options */}
                       <div className="space-y-3 md:space-y-0">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                        <div className={`grid grid-cols-1 ${splitLayout ? '' : 'md:grid-cols-2'} gap-3 md:gap-4`}>
                           {question.options.map((option, optionIndex) => {
                             const isSelected = allAnswers[questionIndex] === optionIndex
                             const isCorrect = optionIndex === question.correct_answer
@@ -1450,7 +1452,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
                       {/* Explanation for this question */}
                       {showAllResults && allAnswers[questionIndex] !== undefined && (question.option_explanations?.[allAnswers[questionIndex]] || question.explanation) && (
-                        <div className="mt-4 p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className={`mt-4 p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg ${splitLayout ? 'md:col-span-2' : ''}`}>
                           <h4 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h4>
                           <RichTextRenderer
                             content={question.option_explanations?.[allAnswers[questionIndex]] || question.explanation}

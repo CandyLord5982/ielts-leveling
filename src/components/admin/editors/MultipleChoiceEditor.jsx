@@ -1112,6 +1112,14 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
           </button>
           <button
             type="button"
+            onClick={() => updateSetting('layout', localSettings.layout === 'split' ? 'stacked' : 'split')}
+            className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm"
+            title="Split: question on the left, options stacked on the right (desktop only)"
+          >
+            Layout: {localSettings.layout === 'split' ? 'Split' : 'Stacked'}
+          </button>
+          <button
+            type="button"
             onClick={() => updateSetting('shuffle_questions', !localSettings.shuffle_questions)}
             className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg text-sm ${localSettings.shuffle_questions ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-400 hover:bg-gray-500'}`}
             title="Randomize the order of questions for each student"

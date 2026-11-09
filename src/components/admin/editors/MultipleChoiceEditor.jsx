@@ -22,7 +22,7 @@ import { supabase } from '../../../supabase/client'
 import RichTextRenderer from '../../ui/RichTextRenderer'
 import { handleRichTextShortcut } from '../../../hooks/useRichTextShortcuts'
 
-const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath }) => {
+const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath, focusQuestionId }) => {
   const normalizeQuestion = (q, idx = 0) => {
     const safeOptions = Array.isArray(q?.options) ? q.options : ['', '', '', '']
     const baseOptionExplanations = Array.isArray(q?.option_explanations)
@@ -119,6 +119,19 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
   useEffect(() => {
     setLocalQuestions((questions || []).map((q, i) => normalizeQuestion(q, i)))
   }, [questions])
+
+  // Opened from a preview: scroll to (and briefly highlight) the question being viewed.
+  const focusedRef = useRef(null)
+  useEffect(() => {
+    if (!focusQuestionId || focusedRef.current === focusQuestionId) return
+    const el = document.querySelector(`[data-question-id="${CSS.escape(String(focusQuestionId))}"]`)
+    if (!el) return
+    focusedRef.current = focusQuestionId
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.classList.add('ring-2', 'ring-blue-400')
+    const t = setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 2500)
+    return () => clearTimeout(t)
+  }, [focusQuestionId, localQuestions])
 
   useEffect(() => {
     if (settings) {
@@ -1226,7 +1239,7 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
         {localQuestions.map((question, index) => {
           const isCollapsed = collapsedQuestions[index]
           return (
-          <div key={question.id || index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <div key={question.id || index} data-question-id={question.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50 transition-shadow">
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
                 <button

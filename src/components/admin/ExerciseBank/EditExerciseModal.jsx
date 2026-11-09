@@ -18,7 +18,7 @@ import VideoUploadEditor from '../editors/VideoUploadEditor'
 import IeltsReadingEditor from '../editors/IeltsReadingEditor'
 import ListeningDictationEditor from '../editors/ListeningDictationEditor'
 
-const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
+const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionId = null }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -182,6 +182,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate }) => {
             intro={content.intro || ''}
             onIntroChange={(intro) => handleContentChange({ ...content, intro })}
             folderPath={getFolderPath(formData.folder_id)}
+            focusQuestionId={focusQuestionId}
           />
         )
       case 'fill_blank':

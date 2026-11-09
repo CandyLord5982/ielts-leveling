@@ -10,7 +10,8 @@ import { supabase } from '../../supabase/client'
 import Button from '../ui/Button'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import RichTextRenderer, { RichTextWithAudio } from '../ui/RichTextRenderer'
-import { CheckCircle, XCircle, ArrowRight, ArrowLeft, Star, MessageCircle } from 'lucide-react'
+import EditExerciseModal from '../admin/ExerciseBank/EditExerciseModal'
+import { CheckCircle, XCircle, ArrowRight, ArrowLeft, Star, MessageCircle, Pencil } from 'lucide-react'
 import Button3D from '../ui/Button3D'
 import ExerciseHeader from '../ui/ExerciseHeader'
 import CelebrationScreen from '../ui/CelebrationScreen'
@@ -108,6 +109,33 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   // View mode state - read from exercise settings (force all-at-once in testMode)
   const isTeacherView = canCreateContent()
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
+
+  // Admin-only: edit this exercise without going back to the exercise bank
+  const { isAdmin } = useAuth()
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editFocusId, setEditFocusId] = useState(null)
+  const openEditor = (questionId = null) => {
+    setEditFocusId(questionId)
+    setShowEditModal(true)
+  }
+  const editExerciseButton = isAdmin && exercise ? (
+    <button
+      // In Do mode jump to the question on screen; Review mode has per-question buttons instead.
+      onClick={() => openEditor(teacherMode === 'do' ? questions[currentQuestionIndex]?.id : null)}
+      className="flex items-center gap-2 px-4 py-2 text-blue-700 hover:text-blue-900 border border-blue-200 rounded-lg"
+    >
+      <Pencil className="w-4 h-4" /> Edit
+    </button>
+  ) : null
+  const editExerciseModal = isAdmin && exercise ? (
+    <EditExerciseModal
+      isOpen={showEditModal}
+      onClose={() => setShowEditModal(false)}
+      exercise={exercise}
+      focusQuestionId={editFocusId}
+      onUpdate={() => { setShowEditModal(false); fetchExercise() }}
+    />
+  ) : null
   const [viewMode, setViewMode] = useState(testMode ? 'all-at-once' : 'one-by-one')
   const [allAnswers, setAllAnswers] = useState(() => (testMode && initialAnswers) ? initialAnswers : {}) // Object to store all answers: {questionIndex: selectedAnswerIndex}
   const [showAllResults, setShowAllResults] = useState(false)
@@ -727,11 +755,13 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                 Do
               </button>
             </div>
+            {editExerciseButton}
             <button onClick={handleBackNavigation} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded-lg">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
           </div>
         </div>
+        {editExerciseModal}
         {exercise?.content?.intro && String(exercise.content.intro).trim() && (
           <div className="mb-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
             <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
@@ -742,6 +772,15 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
             <div key={qIndex} className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
               <div className="flex items-start gap-3 mb-4">
                 <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">{qIndex + 1}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => openEditor(question.id)}
+                    title="Edit this question"
+                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
                 <div className="flex-1">
                   <RichTextWithAudio
                     content={
@@ -894,6 +933,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           {isTeacherView && teacherMode === 'do' && (
             <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
               <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
+              {editExerciseButton}
+              {editExerciseModal}
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setTeacherMode('review')}

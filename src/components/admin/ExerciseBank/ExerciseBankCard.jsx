@@ -21,7 +21,7 @@ import {
   Palette
 } from 'lucide-react'
 
-const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = false, allowedTypes = null }) => {
+const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = false, allowedTypes = null, selectMode = false, isSelected = false, onToggleSelect = null }) => {
   const navigate = useNavigate()
   const canEdit = allowedTypes ? allowedTypes.includes(exercise.exercise_type) : !readOnly
   const [showMenu, setShowMenu] = useState(false)
@@ -386,6 +386,14 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
       <div className="bg-white rounded-lg border hover:border-blue-200 transition-colors">
         <div className="p-4 flex items-center justify-between">
           <div className="flex items-center space-x-4 flex-1 min-w-0">
+            {selectMode && canEdit && (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelect?.(exercise)}
+                className="w-4 h-4 text-blue-600 rounded flex-shrink-0"
+              />
+            )}
             {/* Type Icon */}
             <div className="flex-shrink-0">
               <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -574,6 +582,14 @@ const ExerciseBankCard = ({ exercise, viewMode, onUpdate, onEdit, readOnly = fal
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-2">
+            {selectMode && canEdit && (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelect?.(exercise)}
+                className="w-4 h-4 text-blue-600 rounded flex-shrink-0"
+              />
+            )}
             <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <TypeIcon className="w-4 h-4 text-blue-600" />
             </div>

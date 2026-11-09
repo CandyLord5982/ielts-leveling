@@ -17,7 +17,8 @@ import {
   Brain,
   Video,
   Shield,
-  Lock
+  Lock,
+  CheckSquare
 } from 'lucide-react'
 import FolderTree from './ExerciseBank/FolderTree'
 import ExerciseBankCard from './ExerciseBank/ExerciseBankCard'
@@ -25,6 +26,7 @@ import CreateExerciseModal from './ExerciseBank/CreateExerciseModal'
 import CreateFolderModal from './ExerciseBank/CreateFolderModal'
 import EditExerciseModal from './ExerciseBank/EditExerciseModal'
 import ExerciseBankAccessModal from './ExerciseBank/ExerciseBankAccessModal'
+import BulkRenameModal from './ExerciseBank/BulkRenameModal'
 
 const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
   const { access, loading: accessLoading, error: accessError, canAccess, isAdmin, userId, accessKey, refreshAccess } = useExerciseBankAccess()
@@ -175,6 +177,129 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
     loadCounts()
     return () => { cancelled = true }
   }, [foldersLoaded, dataReady, scope, exerciseRevision])
+
+  // --- Bulk actions (select mode) ---
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedMap, setSelectedMap] = useState(() => new Map()) // id -> exercise (kept across pages)
+  const [showBulkRename, setShowBulkRename] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  const cardReadOnly = (readOnly && !allowedTypes) || (!isAdmin && selectedFolder?.read_only === true)
+  const canEditExercise = (ex) => (allowedTypes ? allowedTypes.includes(ex.exercise_type) : !cardReadOnly)
+  const canBulk = !readOnly || !!allowedTypes
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedMap(new Map())
+  }
+
+  const toggleSelected = (exercise) => {
+    setSelectedMap(prev => {
+      const next = new Map(prev)
+      if (next.has(exercise.id)) next.delete(exercise.id)
+      else next.set(exercise.id, exercise)
+      return next
+    })
+  }
+
+  const selectAllOnPage = () => {
+    setSelectedMap(prev => {
+      const next = new Map(prev)
+      exercises.filter(canEditExercise).forEach(ex => next.set(ex.id, ex))
+      return next
+    })
+  }
+
+  const folderLabel = (folder) => {
+    const names = []
+    const seen = new Set()
+    let cur = folder
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id)
+      names.unshift(cur.name)
+      cur = scope.folders.find(f => f.id === cur.parent_folder_id)
+    }
+    return names.join(' / ')
+  }
+
+  // Folders the current user may move exercises into
+  const moveTargets = scope.folders
+    .filter(f => (scope.folderIds === null || scope.folderIds.includes(f.id)) && (isAdmin || f.read_only !== true))
+    .map(f => ({ id: f.id, label: folderLabel(f) }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+
+  const afterBulk = () => {
+    exitSelectMode()
+    fetchExercises()
+  }
+
+  const bulkDelete = async () => {
+    const ids = [...selectedMap.keys()]
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    try {
+      // Same rule as single delete: exercises assigned to a session can't be deleted until unassigned
+      const { data: assigned, error: assignErr } = await supabase
+        .from('exercise_assignments')
+        .select('exercise_id')
+        .in('exercise_id', ids)
+      if (assignErr) throw assignErr
+      const blocked = new Set((assigned || []).map(a => a.exercise_id))
+      const deletable = ids.filter(id => !blocked.has(id))
+
+      if (deletable.length === 0) {
+        alert('None of the selected exercises can be deleted: all are assigned to sessions. Unassign them first.')
+        return
+      }
+      const skippedNote = blocked.size > 0
+        ? `\n\n${blocked.size} assigned to sessions will be skipped:\n- ${[...blocked].map(id => selectedMap.get(id)?.title).slice(0, 8).join('\n- ')}`
+        : ''
+      if (!window.confirm(`Delete ${deletable.length} exercise(s)? This cannot be undone.${skippedNote}`)) return
+
+      const { error } = await supabase.from('exercises').delete().in('id', deletable)
+      if (error) throw error
+      afterBulk()
+    } catch (err) {
+      console.error('Bulk delete failed:', err)
+      alert('Failed to delete: ' + (err.message || 'Unknown error'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkMove = async (folderId) => {
+    const ids = [...selectedMap.keys()]
+    if (!folderId || ids.length === 0) return
+    const target = moveTargets.find(f => f.id === folderId)
+    if (!window.confirm(`Move ${ids.length} exercise(s) to "${target?.label}"?`)) return
+    setBulkBusy(true)
+    try {
+      const { error } = await supabase.from('exercises').update({ folder_id: folderId }).in('id', ids)
+      if (error) throw error
+      afterBulk()
+    } catch (err) {
+      console.error('Bulk move failed:', err)
+      alert('Failed to move: ' + (err.message || 'Unknown error'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkRename = async (changes) => {
+    try {
+      const results = await Promise.all(
+        changes.map(c => supabase.from('exercises').update({ title: c.to }).eq('id', c.id))
+      )
+      const failed = results.filter(r => r.error)
+      if (failed.length > 0) throw new Error(`${failed.length} of ${changes.length} failed: ${failed[0].error.message}`)
+      setShowBulkRename(false)
+      afterBulk()
+    } catch (err) {
+      console.error('Bulk rename failed:', err)
+      alert('Failed to rename: ' + (err.message || 'Unknown error'))
+      fetchExercises()
+    }
+  }
 
   const handleCreateExercise = () => {
     setShowCreateExercise(true)
@@ -328,6 +453,15 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
 
               {(!readOnly || allowedTypes) && (
                 <div className="flex items-center space-x-3">
+                  {exercises.length > 0 && (
+                    <button
+                      onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                      className={`px-4 py-2 rounded-lg border transition-colors flex items-center space-x-2 ${selectMode ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <CheckSquare className="w-4 h-4" />
+                      <span>{selectMode ? 'Done' : 'Select'}</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleCreateExercise}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
@@ -418,6 +552,37 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
               </div>
             ) : (
               <>
+                {selectMode && canBulk && (
+                  <div className="sticky top-0 z-30 mb-3 flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm">
+                    <span className="font-medium text-indigo-900">{selectedMap.size} selected</span>
+                    <button onClick={selectAllOnPage} className="px-2 py-1 text-indigo-700 hover:underline">Select page</button>
+                    <button onClick={() => setSelectedMap(new Map())} className="px-2 py-1 text-indigo-700 hover:underline">Clear</button>
+                    <span className="flex-1" />
+                    <select
+                      value=""
+                      onChange={(e) => bulkMove(e.target.value)}
+                      disabled={selectedMap.size === 0 || bulkBusy}
+                      className="px-2 py-1.5 border border-indigo-200 rounded-lg bg-white text-gray-700 disabled:opacity-40 max-w-[14rem]"
+                    >
+                      <option value="">Move to folder…</option>
+                      {moveTargets.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                    </select>
+                    <button
+                      onClick={() => setShowBulkRename(true)}
+                      disabled={selectedMap.size === 0 || bulkBusy}
+                      className="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-40"
+                    >
+                      Rename…
+                    </button>
+                    <button
+                      onClick={bulkDelete}
+                      disabled={selectedMap.size === 0 || bulkBusy}
+                      className="px-3 py-1.5 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
                 <div className={
                   viewMode === 'grid'
                     ? 'grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4'
@@ -430,8 +595,11 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
                       viewMode={viewMode}
                       onUpdate={fetchExercises}
                       onEdit={handleEditExercise}
-                      readOnly={(readOnly && !allowedTypes) || (!isAdmin && selectedFolder?.read_only === true)}
+                      readOnly={cardReadOnly}
                       allowedTypes={allowedTypes}
+                      selectMode={selectMode && canBulk}
+                      isSelected={selectedMap.has(exercise.id)}
+                      onToggleSelect={toggleSelected}
                     />
                   ))}
                 </div>
@@ -492,6 +660,14 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
           onClose={() => setShowCreateFolder(false)}
           onCreated={handleFolderCreated}
           isAdmin={isAdmin}
+        />
+      )}
+
+      {showBulkRename && (
+        <BulkRenameModal
+          exercises={[...selectedMap.values()]}
+          onClose={() => setShowBulkRename(false)}
+          onApply={bulkRename}
         />
       )}
 

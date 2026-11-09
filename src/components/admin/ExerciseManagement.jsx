@@ -3,9 +3,6 @@ import { supabase } from '../../supabase/client'
 import { parseFlashcardsFromCSV, generateCSVTemplate } from '../../utils/csvParser'
 import SmartDragDropEditor from './editors/SmartDragDropEditor'
 import AIFillBlankEditor from './editors/AIFillBlankEditor'
-
-// Debug import
-console.log('🔍 SmartDragDropEditor imported:', SmartDragDropEditor)
 import {
   Plus,
   Edit,

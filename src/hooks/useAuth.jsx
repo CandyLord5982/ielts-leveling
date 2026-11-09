@@ -24,31 +24,48 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Listen for auth changes - handles initial session automatically
+    // Events after which the profile row should be (re)loaded:
+    // INITIAL_SESSION - page load with an existing session
+    // SIGNED_IN       - a sign-in on this tab
+    // TOKEN_REFRESHED - periodic token refresh (also keeps last_seen_at fresh)
+    // USER_UPDATED    - e.g. a guest account converted to a real one
+    const PROFILE_EVENTS = ['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED']
+
+    // Listen for auth changes - handles initial session automatically.
+    // The callback must stay synchronous: it runs while supabase-js holds its auth lock, and
+    // awaiting another Supabase call in here can deadlock (which is what the 5s profile timeout
+    // used to catch). Supabase work is deferred with setTimeout so it runs after the callback returns.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         console.log('🔐 Auth event:', event)
 
-        try {
-          if (session?.user) {
-            // Only update user state if the user actually changed
-            setUser(prev => prev?.id === session.user.id ? prev : session.user)
-            // INITIAL_SESSION: Fired on page load with existing session
-            // TOKEN_REFRESHED: Fired after user signs in successfully
-            if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-              await fetchUserProfile(session.user.id)
-              // Update last_seen_at for online presence
-              supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', session.user.id).then()
-            }
-          } else {
-            setUser(null)
-            setProfile(null)
-          }
-        } catch (error) {
-          console.error('❌ Error in auth state change:', error)
-        } finally {
+        if (!session?.user) {
+          setUser(null)
+          setProfile(null)
           setLoading(false)
+          return
         }
+
+        // Only update user state if the user actually changed
+        setUser(prev => prev?.id === session.user.id ? prev : session.user)
+
+        if (!PROFILE_EVENTS.includes(event)) {
+          setLoading(false)
+          return
+        }
+
+        const userId = session.user.id
+        setTimeout(async () => {
+          try {
+            await fetchUserProfile(userId)
+            // Update last_seen_at for online presence
+            supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', userId).then()
+          } catch (error) {
+            console.error('❌ Error in auth state change:', error)
+          } finally {
+            setLoading(false)
+          }
+        }, 0)
       }
     )
 
@@ -59,10 +76,11 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('📝 Fetching profile for user:', userId)
 
-      // Add timeout to prevent infinite hanging
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Profile fetch timeout after 5s')), 5000)
-      )
+      // Safety net so a stuck request can't leave the app loading forever
+      let timeoutId
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Profile fetch timeout after 5s')), 5000)
+      })
 
       const fetchPromise = Promise.all([
         supabase
@@ -78,6 +96,7 @@ export const AuthProvider = ({ children }) => {
       ])
 
       const [userResult, equipResult] = await Promise.race([fetchPromise, timeoutPromise])
+        .finally(() => clearTimeout(timeoutId))
 
       if (userResult.error) {
         console.error('❌ Error fetching user profile:', userResult.error)
@@ -128,35 +147,36 @@ export const AuthProvider = ({ children }) => {
 
       // Enroll in the course the user picked at signup, if any. No fallback course -
       // an unenrolled user just has no courses until a teacher/admin enrolls them.
+      // (Supabase returns { error } instead of throwing, so check it explicitly.)
       if (courseId) {
-        try {
-          await supabase.from('course_enrollments').insert({
-            course_id: courseId,
-            student_id: userId
-          })
-        } catch (enrollErr) {
-          console.error('Error enrolling in course:', enrollErr)
+        const { error: enrollError } = await supabase.from('course_enrollments').insert({
+          course_id: courseId,
+          student_id: userId
+        })
+        if (enrollError) {
+          console.error('Error enrolling in course:', enrollError)
         }
       }
 
       // Give a random common/uncommon pet
-      try {
-        const { data: pets } = await supabase
-          .from('pets')
-          .select('id')
-          .in('rarity', ['common', 'uncommon'])
-          .eq('is_active', true)
+      const { data: pets, error: petsError } = await supabase
+        .from('pets')
+        .select('id')
+        .in('rarity', ['common', 'uncommon'])
+        .eq('is_active', true)
 
-        if (pets && pets.length > 0) {
-          const randomPet = pets[Math.floor(Math.random() * pets.length)]
-          await supabase.from('user_pets').insert({
-            user_id: userId,
-            pet_id: randomPet.id,
-            is_active: true
-          })
+      if (petsError) {
+        console.error('Error loading starter pets:', petsError)
+      } else if (pets && pets.length > 0) {
+        const randomPet = pets[Math.floor(Math.random() * pets.length)]
+        const { error: petError } = await supabase.from('user_pets').insert({
+          user_id: userId,
+          pet_id: randomPet.id,
+          is_active: true
+        })
+        if (petError) {
+          console.error('Error giving starter pet:', petError)
         }
-      } catch (petErr) {
-        console.error('Error giving starter pet:', petErr)
       }
     } catch (profileError) {
       console.error('Error creating user profile:', profileError)

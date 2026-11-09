@@ -227,6 +227,8 @@ export const AuthProvider = ({ children }) => {
   }
 
   const signOut = async () => {
+    // Guests can't sign out: signing back in as a guest would create a new orphan user row.
+    if (user?.is_anonymous) return { error: new Error('Guests cannot sign out') }
     const { error } = await supabase.auth.signOut()
     if (!error) {
       setUser(null)

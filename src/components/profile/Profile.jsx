@@ -31,6 +31,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import ClaimCelebration from '../ui/ClaimCelebration'
+import { FEATURES } from '../../config/features'
 
 const CLIP_CARD = 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)'
 const CLIP_SM = 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)'
@@ -1469,7 +1470,8 @@ const Profile = () => {
               </>
             )}
 
-            {/* Custom Uploaded Avatars */}
+            {/* Custom Uploaded Avatars (hidden unless FEATURES.avatarUpload) */}
+            {FEATURES.avatarUpload && (
             <div className="mt-6 mb-4 border-t pt-4">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-semibold text-gray-700">Avatar tự tải lên</h4>
@@ -1558,6 +1560,7 @@ const Profile = () => {
                 </p>
               )}
             </div>
+            )}
 
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200" style={{ clipPath: CLIP_SM }}>
               <div className="text-center">
@@ -1767,7 +1770,7 @@ const Profile = () => {
       )}
 
       {/* Log Out Button */}
-      {isOwnProfile && (
+      {isOwnProfile && !user?.is_anonymous && (
         <div className="mt-6 mb-8 flex justify-center">
           <button
             onClick={async () => { await signOut(); navigate('/login'); }}

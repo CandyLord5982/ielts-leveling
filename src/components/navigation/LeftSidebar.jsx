@@ -65,7 +65,7 @@ const Tooltip = ({ label, children }) => {
 }
 
 const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
-  const { profile, signOut, isAdmin, isTeacher } = useAuth()
+  const { user, profile, signOut, isAdmin, isTeacher } = useAuth()
   const { branding } = useBranding()
   const { currentBadge } = useStudentLevels()
   const { newItemCount } = useInventory()
@@ -452,12 +452,14 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
             </Link>
           )}
 
-          <ActionButton
-            onClick={handleSignOut}
-            label="Đăng xuất"
-            className="text-red-600 hover:bg-red-50"
-            iconEl={<LogOut size={22} className="flex-shrink-0" />}
-          />
+          {!user?.is_anonymous && (
+            <ActionButton
+              onClick={handleSignOut}
+              label="Đăng xuất"
+              className="text-red-600 hover:bg-red-50"
+              iconEl={<LogOut size={22} className="flex-shrink-0" />}
+            />
+          )}
         </div>
       </aside>
     </>

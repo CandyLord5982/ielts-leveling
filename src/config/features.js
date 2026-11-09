@@ -12,4 +12,6 @@ export const FEATURES = {
   missions: flag(import.meta.env.VITE_MISSIONS_ENABLED),
   tournaments: flag(import.meta.env.VITE_TOURNAMENTS_ENABLED),
   classwar: flag(import.meta.env.VITE_CLASSWAR_ENABLED),
+  // Opt-in (off by default): set VITE_AVATAR_UPLOAD_ENABLED=true to show custom avatar uploads.
+  avatarUpload: import.meta.env.VITE_AVATAR_UPLOAD_ENABLED === 'true',
 }

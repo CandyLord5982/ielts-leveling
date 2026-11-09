@@ -454,7 +454,7 @@ const CourseModal = ({ course, teachers, onSave, onCancel, loading }) => {
     teacher_ids: course?.course_teachers?.map(ct => ct.teacher.id) || [],
     is_active: course?.is_active ?? true,
     is_public: course?.is_public ?? false,
-    ui_style: course?.ui_style || 'decorated'
+    ui_style: course?.ui_style || 'minimal'
   });
   const [errors, setErrors] = useState({});
   const [uploading, setUploading] = useState(false);
@@ -745,11 +745,11 @@ const CourseModal = ({ course, teachers, onSave, onCancel, loading }) => {
               onChange={(e) => handleInputChange('ui_style', e.target.value)}
               className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white"
             >
+              <option value="minimal">Minimal (study path list) - default</option>
               <option value="decorated">Decorated (themed map, ribbons)</option>
-              <option value="minimal">Minimal (plain list)</option>
             </select>
             <p className="text-xs text-gray-500">
-              Minimal drops the themed backgrounds and map layout for a plain list. Teachers still see the full editing tools either way.
+              Minimal replaces the themed map with a clean study-path list (new courses start here). Teachers still see the full editing tools either way.
             </p>
           </div>
 

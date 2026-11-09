@@ -30,6 +30,8 @@ import {
   Users,
   Copy,
   Clock,
+  ChevronRight,
+  CheckCircle,
 } from "lucide-react";
 import StudentStatsPopover from "../ui/StudentStatsPopover";
 import useClassStats from "../../hooks/useClassStats";
@@ -1511,45 +1513,124 @@ const UnitList = () => {
                 return (a.unit_number || 0) - (b.unit_number || 0);
               });
 
-              // Minimal mode: plain list instead of the themed ribbon/background grid.
-              // Same data and handlers as the decorated view - just plainer markup.
-              if (level?.ui_style === 'minimal') {
+              // Minimal style (the default): a clean study path. Same data and handlers as the
+              // decorated view - an "Up next" card, then one section per unit with its sessions on a rail.
+              if (level?.ui_style !== 'decorated') {
+                const unitGroups = sortedUnits.map((unit) => ({
+                  unit,
+                  list: sessions
+                    .filter((session) => session.unit_id === unit.id)
+                    .filter((session) => {
+                      if (profile?.role === 'user') return true;
+                      if (personalFilter === 'all') return true;
+                      if (personalFilter === 'shared') return !session.assigned_student_id;
+                      if (personalFilter === 'personal') return !!session.assigned_student_id;
+                      return session.assigned_student_id === personalFilter;
+                    })
+                    .sort((a, b) => (a.session_number || 0) - (b.session_number || 0)),
+                }));
+
+                const allVisible = unitGroups.flatMap((g) => g.list);
+                const isSessionDone = (s) => getSessionStatus(s).status === 'completed';
+                const nextGroup = unitGroups.find((g) =>
+                  g.list.some((s) => getSessionStatus(s).canAccess && !isSessionDone(s)),
+                );
+                const nextSession = nextGroup
+                  ? nextGroup.list.find((s) => getSessionStatus(s).canAccess && !isSessionDone(s))
+                  : null;
+                const nextUnitIndex = nextGroup ? sortedUnits.indexOf(nextGroup.unit) : -1;
+                const doneTotal = allVisible.filter(isSessionDone).length;
+
+                const sessionStatusText = (session) => {
+                  const { status } = getSessionStatus(session);
+                  const pct = sessionProgress[session.id]?.progress_percentage || 0;
+                  if (status === 'completed') return { text: 'Completed', cls: 'text-emerald-600 font-medium' };
+                  if (status === 'scheduled') {
+                    return { text: `Opens ${new Date(session.open_date).toLocaleDateString()}`, cls: '' };
+                  }
+                  if (status === 'closed') return { text: 'Closed', cls: '' };
+                  if (pct > 0) return { text: `In progress · ${pct}%`, cls: 'text-amber-600 font-medium' };
+                  return { text: 'Not started', cls: '' };
+                };
+
                 return (
-                  <div className="flex flex-col gap-6 mt-4">
-                    {sortedUnits.map((unit, unitIndex) => {
-                      const unitSessions = sessions
-                        .filter((session) => session.unit_id === unit.id)
-                        .filter((session) => {
-                          if (profile?.role === 'user') return true;
-                          if (personalFilter === 'all') return true;
-                          if (personalFilter === 'shared') return !session.assigned_student_id;
-                          if (personalFilter === 'personal') return !!session.assigned_student_id;
-                          return session.assigned_student_id === personalFilter;
-                        })
-                        .sort((a, b) => (a.session_number || 0) - (b.session_number || 0));
+                  <div className="max-w-3xl mx-auto flex flex-col gap-6 mt-4">
+                    {/* Up next - students only */}
+                    {!canCreateContent() && allVisible.length > 0 && (
+                      nextSession ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSessionClick(nextSession)}
+                          className="group relative w-full text-left overflow-hidden rounded-3xl border border-blue-200 bg-blue-50 p-5 md:p-6 shadow-sm transition-shadow hover:shadow-md"
+                        >
+                          <p className="relative text-xs font-semibold tracking-wider uppercase text-blue-600">
+                            {doneTotal === 0 ? 'Start here' : 'Up next'} · Unit {nextUnitIndex + 1}
+                          </p>
+                          <h3 className="relative mt-1 text-xl md:text-2xl font-bold leading-snug text-slate-900">{nextSession.title}</h3>
+                          <p className="relative mt-1 text-sm text-slate-600 truncate">
+                            {nextGroup.unit.title}
+                            {nextSession.is_test ? ' · Test' : ''}
+                          </p>
+                          <span className="relative mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all group-hover:gap-3 group-hover:bg-blue-700">
+                            {(sessionProgress[nextSession.id]?.progress_percentage || 0) > 0 ? 'Continue' : 'Start'}
+                            <ChevronRight className="w-4 h-4" />
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-3 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                          <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
+                          <div>
+                            <p className="font-semibold text-emerald-900">Everything complete</p>
+                            <p className="text-sm text-emerald-700">{doneTotal} of {allVisible.length} sessions done</p>
+                          </div>
+                        </div>
+                      )
+                    )}
+
+                    {unitGroups.map(({ unit, list: unitSessions }, unitIndex) => {
+                      const unitDone = unitSessions.filter(isSessionDone).length;
+                      const unitPct = unitSessions.length ? Math.round((unitDone / unitSessions.length) * 100) : 0;
 
                       return (
-                        <div key={unit.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${getBorderColor(unit.color_theme).replace('border-', 'bg-').replace('500', '100')} ${getBorderColor(unit.color_theme).replace('border-', 'text-').replace('500', '700')}`}>
+                        <section key={unit.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                          <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5 md:py-4 border-b border-slate-100">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-white tabular-nums">
                                 {unitIndex + 1}
                               </span>
-                              <h3 className="font-semibold text-gray-800 truncate">{unit.title}</h3>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold text-slate-900 truncate">{unit.title}</h3>
+                                {unitSessions.length > 0 && (
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <div
+                                      className="h-1.5 w-24 md:w-32 rounded-full bg-slate-200 overflow-hidden"
+                                      role="progressbar"
+                                      aria-valuenow={unitDone}
+                                      aria-valuemin={0}
+                                      aria-valuemax={unitSessions.length}
+                                    >
+                                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${unitPct}%` }} />
+                                    </div>
+                                    <span className="text-xs font-medium text-slate-500 tabular-nums">
+                                      {unitDone}/{unitSessions.length}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {canCreateContent() && (
                                 <>
-                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move up">
+                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Move up">
                                     <ChevronUp className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move down">
+                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Move down">
                                     <ChevronDown className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-gray-400 hover:text-gray-600" title="Edit unit">
+                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-slate-400 hover:text-slate-700" title="Edit unit">
                                     <Edit className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Add session">
+                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-slate-400 hover:text-blue-600" title="Add session">
                                     <Plus className="w-4 h-4" />
                                   </button>
                                   <button onClick={() => handleDeleteUnit(unit)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete unit">
@@ -1561,69 +1642,100 @@ const UnitList = () => {
                           </div>
 
                           {unitSessions.length > 0 ? (
-                            <ul className="divide-y divide-gray-100">
-                              {unitSessions.map((session) => {
-                                const { status, canAccess } = getSessionStatus(session);
-                                const progress = sessionProgress[session.id];
+                            <div className="px-3 py-2 md:px-4 bg-slate-50/60">
+                              {unitSessions.map((session, i) => {
+                                const { canAccess } = getSessionStatus(session);
                                 const isLocked = !canAccess;
-                                const isDone = status === 'completed';
+                                const isDone = isSessionDone(session);
+                                const isNext = !canCreateContent() && nextSession?.id === session.id;
+                                const prevDone = i > 0 && isSessionDone(unitSessions[i - 1]);
+                                const isFirst = i === 0;
+                                const isLast = i === unitSessions.length - 1;
+                                const st = sessionStatusText(session);
+                                const pct = sessionProgress[session.id]?.progress_percentage || 0;
+                                const tone = isLocked
+                                  ? 'bg-slate-100 text-slate-400'
+                                  : isDone
+                                    ? 'bg-emerald-50 text-emerald-600'
+                                    : session.is_test
+                                      ? 'bg-orange-50 text-orange-600'
+                                      : 'bg-blue-50 text-blue-600';
+
                                 return (
-                                  <li
-                                    key={session.id}
-                                    onClick={() => !isLocked && handleSessionClick(session)}
-                                    onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
-                                    className={`flex items-center gap-3 px-4 py-3 ${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-50'}`}
-                                  >
-                                    <div className={`relative flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${
-                                      isLocked ? 'bg-gray-100' : isDone ? 'bg-green-100' : session.is_test ? 'bg-orange-100' : 'bg-blue-100'
-                                    }`}>
-                                      {session.icon ? (
-                                        <span className="text-base">{session.icon}</span>
-                                      ) : session.is_test ? (
-                                        <FileText className={`w-4 h-4 ${isLocked ? 'text-gray-400' : isDone ? 'text-green-600' : 'text-orange-600'}`} />
+                                  <div key={session.id} className="relative pl-9 py-1.5">
+                                    <span className={`absolute left-3 w-0.5 -translate-x-1/2 top-0 h-1/2 ${prevDone ? 'bg-emerald-400' : 'bg-slate-200'} ${isFirst ? 'hidden' : ''}`} />
+                                    <span className={`absolute left-3 w-0.5 -translate-x-1/2 top-1/2 h-1/2 ${isDone ? 'bg-emerald-400' : 'bg-slate-200'} ${isLast ? 'hidden' : ''}`} />
+                                    <span
+                                      className={`absolute left-3 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full ring-4 ring-slate-50 ${
+                                        isDone ? 'w-4 h-4 bg-emerald-500' : isNext ? 'w-4 h-4 bg-blue-600' : 'w-3 h-3 bg-slate-300'
+                                      }`}
+                                    >
+                                      {isDone && <CheckCircle className="w-3 h-3 text-white" />}
+                                    </span>
+
+                                    <div
+                                      onClick={() => !isLocked && handleSessionClick(session)}
+                                      onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
+                                      className={`group flex items-center gap-3 md:gap-4 rounded-2xl border bg-white px-3 py-3 md:px-4 shadow-sm transition-all ${
+                                        isLocked ? 'cursor-not-allowed opacity-60 border-slate-200' : 'cursor-pointer hover:shadow-md'
+                                      } ${isNext ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                      <div className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
+                                        {session.icon ? (
+                                          <span className="text-xl">{session.icon}</span>
+                                        ) : session.is_test ? (
+                                          <FileText className="w-5 h-5" />
+                                        ) : (
+                                          <BookOpen className="w-5 h-5" />
+                                        )}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="truncate text-sm md:text-base font-semibold text-slate-900">{session.title}</p>
+                                        <p className="mt-0.5 text-xs text-slate-500 truncate">
+                                          {session.is_test && (
+                                            <>
+                                              <span className="font-semibold text-orange-600">Test</span>
+                                              <span className="mx-1.5 text-slate-300">·</span>
+                                            </>
+                                          )}
+                                          <span className={st.cls}>{st.text}</span>
+                                        </p>
+                                        {!isDone && !isLocked && pct > 0 && (
+                                          <div className="mt-1.5 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                                            <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      {isLocked ? (
+                                        <Lock className="flex-shrink-0 w-4 h-4 text-slate-400" />
                                       ) : (
-                                        <BookOpen className={`w-4 h-4 ${isLocked ? 'text-gray-400' : isDone ? 'text-green-600' : 'text-blue-600'}`} />
-                                      )}
-                                      {isDone && (
-                                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 ring-2 ring-white" />
-                                      )}
-                                      {isLocked && (
-                                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-gray-300 flex items-center justify-center ring-2 ring-white">
-                                          <Lock className="w-2.5 h-2.5 text-gray-600" />
-                                        </span>
+                                        <ChevronRight className="flex-shrink-0 w-5 h-5 text-slate-300 group-hover:text-slate-500 transition-colors" />
                                       )}
                                     </div>
-                                    <span className="flex-1 text-sm font-medium text-gray-700 truncate">{session.title}</span>
-                                    {session.is_test && (
-                                      <span className="text-[10px] font-bold uppercase text-orange-600 bg-orange-100 rounded px-1.5 py-0.5 flex-shrink-0">Test</span>
-                                    )}
-                                    {progress?.progress_percentage > 0 && (
-                                      <span className="text-xs text-gray-400 flex-shrink-0">{progress.progress_percentage}%</span>
-                                    )}
-                                  </li>
+                                  </div>
                                 );
                               })}
-                            </ul>
+                            </div>
                           ) : (
-                            <p className="px-4 py-3 text-sm text-gray-500">
+                            <p className="px-5 py-4 text-sm text-slate-500">
                               {canCreateContent() ? 'No sessions yet.' : 'Sessions will be available soon'}
                             </p>
                           )}
-                        </div>
+                        </section>
                       );
                     })}
 
                     {canCreateContent() && (
                       <button
                         onClick={() => setShowAddUnitModal(true)}
-                        className="border-2 border-dashed border-gray-300 rounded-lg py-4 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                        className="border-2 border-dashed border-slate-300 rounded-2xl py-4 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
                         + Create Unit
                       </button>
                     )}
 
                     {sortedUnits.length === 0 && (
-                      <p className="text-center text-gray-500 py-8">Chưa có unit nào</p>
+                      <p className="text-center text-slate-500 py-8">Chưa có unit nào</p>
                     )}
                   </div>
                 );

@@ -92,7 +92,11 @@ const Layout = () => {
 
   const isTestPage = location.pathname.startsWith('/study/test-runner')
   const isAdminPage = location.pathname.startsWith('/admin')
-  const isFullWidthPage = location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/listening-dictation')
+  // Widening an exercise page: Layout wraps study pages in a `max-w-7xl` (1280px) container (see the
+  // wrapper div below), so an exercise's own width classes can't exceed it. To let an exercise type
+  // go wider, add its path here (e.g. '/study/multiple-choice'), then set the width in the exercise itself.
+  // Exercises opened from a session (isSessionPage) are already uncapped.
+  const isFullWidthPage =location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/multiple-choice') || location.pathname.startsWith('/study/listening-dictation')
 
   const hideBottomNav = exercisePaths.some(p => location.pathname.startsWith(p)) || isSessionPage || isTestPage
   const isLiveBattle = location.pathname.startsWith('/teacher/live-battle')

@@ -15,36 +15,8 @@ import { useFeedback } from '../../hooks/useFeedback'
 import ExerciseHeader from '../ui/ExerciseHeader'
 import { usePermissions } from '../../hooks/usePermissions'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
-import { assetUrl } from '../../hooks/useBranding'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-
-const themeSideImages = {
-  blue: {
-    left: assetUrl('/image/theme_question/ice_left.png'),
-    right: assetUrl('/image/theme_question/ice_right.png'),
-  },
-  green: {
-    left: assetUrl('/image/theme_question/forest_left.png'),
-    right: assetUrl('/image/theme_question/forest_right.png')
-  },
-  purple: {
-    left: assetUrl('/image/theme_question/pirate.png'),
-    right: assetUrl('/image/theme_question/pirate.png')
-  },
-  orange: {
-    left: assetUrl('/image/theme_question/ninja_left.png'),
-    right: assetUrl('/image/theme_question/ninja_right.png')
-  },
-  red: {
-    left: assetUrl('/image/theme_question/dino_left.png'),
-    right: assetUrl('/image/theme_question/dino_right.png')
-  },
-  yellow: {
-    left: assetUrl('/image/theme_question/desert_left.png'),
-    right: assetUrl('/image/theme_question/desert_right.png')
-  }
-}
 
 // Memoized so it never re-renders when answer state changes
 const PassagePDFRenderer = React.memo(({ url, pageNumber, width, onLoadSuccess }) => (
@@ -777,8 +749,6 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
     )
   }
 
-  const sideImages = themeSideImages[colorTheme] || themeSideImages.blue
-
   // Full-screen split view for reading passage + questions
   if (isSplitView) {
     return (
@@ -903,14 +873,6 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
 
   return (
     <>
-      {/* Side decorations */}
-      <div className="hidden md:block fixed left-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img src={sideImages.left} alt="" className="w-full h-auto object-contain" style={{ maxHeight: '80vh' }} />
-      </div>
-      <div className="hidden md:block fixed right-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img src={sideImages.right} alt="" className="w-full h-auto object-contain" style={{ maxHeight: '80vh' }} />
-      </div>
-
       <div className="relative px-0 sm:px-2 md:pt-2 pb-12">
         <div className="max-w-4xl mx-auto space-y-6 relative z-20">
           {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}

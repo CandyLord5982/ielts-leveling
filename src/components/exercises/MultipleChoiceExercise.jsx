@@ -22,39 +22,6 @@ import { FEATURES } from '../../config/features'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 import SelectionHighlighter from '../ui/SelectionHighlighter'
 
-import { assetUrl } from '../../hooks/useBranding';
-// Theme-based side decoration images for PC
-const themeSideImages = {
-  blue: {
-    left: assetUrl('/image/theme_question/ice_left.png'),
-    right: assetUrl('/image/theme_question/ice_right.png'),
-  },
-  green: {
-    left: assetUrl('/image/theme_question/forest_left.png'),
-    right: assetUrl('/image/theme_question/forest_right.png')
-  },
-  purple: {
-    left: assetUrl('/image/theme_question/pirate.png'),
-    right: assetUrl('/image/theme_question/pirate.png')
-  },
-  orange: {
-    left: assetUrl('/image/theme_question/ninja_left.png'),
-    right: assetUrl('/image/theme_question/ninja_right.png')
-  },
-  red: {
-    left: assetUrl('/image/theme_question/dino_left.png'),
-    right: assetUrl('/image/theme_question/dino_right.png')
-  },
-  yellow: {
-    left: assetUrl('/image/theme_question/desert_left.png'),
-    right: assetUrl('/image/theme_question/desert_right.png')
-  }
-}
-
-const getThemeSideImages = (theme) => {
-  return themeSideImages[theme] || themeSideImages.blue
-}
-
 const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -965,32 +932,10 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     )
   }
 
-  const sideImages = getThemeSideImages(colorTheme)
-
   return (
     <>
-      {/* Left side image - only visible on desktop (md and up) - Fixed to viewport */}
-      <div className="hidden md:block fixed left-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img
-          src={sideImages.left}
-          alt="Theme decoration left"
-          className="w-full h-auto object-contain"
-          style={{ maxHeight: '80vh' }}
-        />
-      </div>
-
-      {/* Right side image - only visible on desktop (md and up) - Fixed to viewport */}
-      <div className="hidden md:block fixed right-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img
-          src={sideImages.right}
-          alt="Theme decoration right"
-          className="w-full h-auto object-contain"
-          style={{ maxHeight: '80vh' }}
-        />
-      </div>
-
       <SelectionHighlighter className="relative px-2 md:pt-2 pb-12">
-        <div className={`${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} mx-auto space-y-6 relative z-20`}>
+        <div className={`${splitLayout ? 'w-[90%] max-w-none' : 'max-w-4xl'} mx-auto space-y-6 relative z-20`}>
           {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}
 
           {/* Teacher Do mode banner */}
@@ -1067,7 +1012,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
           {/* Global Intro (exercise.content.settings/intros) - hide on celebration screen */}
           {!isQuizComplete && exercise?.content?.intro && String(exercise.content.intro).trim() && (
-            <div className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200`}>
+            <div className={`w-full ${splitLayout ? 'max-w-none' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200`}>
               <RichTextWithAudio content={exercise.content.intro} allowImages={true} allowLinks={false} />
             </div>
           )}
@@ -1089,7 +1034,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           <>
             {/* One-by-one mode */}
             {viewMode === 'one-by-one' && (
-              <div className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg`}>
+              <div className={`w-full ${splitLayout ? 'max-w-none' : 'max-w-4xl'} min-w-0 mx-auto mt-6 bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)] relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-full before:bg-gradient-to-b before:from-gray-50 before:to-transparent before:opacity-30 before:pointer-events-none before:rounded-lg`}>
 
                 {/* Colored circles on top right */}
                 <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
@@ -1133,7 +1078,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                     </div>
 
                     {/* Options - responsive grid */}
-                    <div className="space-y-3 md:space-y-0">
+                    {/* In split layout the options sit under the decorative dots (top-right), so push them down */}
+                    <div className={`space-y-3 md:space-y-0 ${splitLayout ? 'md:pt-4' : ''}`}>
                       <div className={`grid grid-cols-1 ${splitLayout ? '' : 'md:grid-cols-2'} gap-3 md:gap-4`}>
                         {currentQuestion.options.map((option, index) => {
                           let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
@@ -1327,7 +1273,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
             {viewMode === 'all-at-once' && (
               <div className="space-y-6">
                 {questions.map((question, questionIndex) => (
-                  <div key={questionIndex} className={`w-full ${splitLayout ? 'max-w-6xl' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200`}>
+                  <div key={questionIndex} className={`w-full ${splitLayout ? 'max-w-none' : 'max-w-4xl'} min-w-0 mx-auto rounded-lg p-4 md:p-8 bg-white shadow-md border border-gray-200`}>
                     <div className={splitLayout ? 'space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-6 md:items-start' : 'space-y-4 md:space-y-6'}>
 
                       {/* Question */}

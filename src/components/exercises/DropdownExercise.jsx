@@ -13,7 +13,6 @@ import ExerciseHeader from '../ui/ExerciseHeader'
 import CelebrationScreen from '../ui/CelebrationScreen'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 
-import { assetUrl } from '../../hooks/useBranding';
 
 // Shuffle array (Fisher-Yates)
 const shuffleArray = (arr) => {
@@ -24,38 +23,6 @@ const shuffleArray = (arr) => {
   }
   return a
 }
-// Theme-based side decoration images for PC
-const themeSideImages = {
-  blue: {
-    left: assetUrl('/image/theme_question/ice_left.png'),
-    right: assetUrl('/image/theme_question/ice_right.png'),
-  },
-  green: {
-    left: assetUrl('/image/theme_question/forest_left.png'),
-    right: assetUrl('/image/theme_question/forest_right.png')
-  },
-  purple: {
-    left: assetUrl('/image/theme_question/pirate.png'),
-    right: assetUrl('/image/theme_question/pirate.png')
-  },
-  orange: {
-    left: assetUrl('/image/theme_question/ninja_left.png'),
-    right: assetUrl('/image/theme_question/ninja_right.png')
-  },
-  red: {
-    left: assetUrl('/image/theme_question/dino_left.png'),
-    right: assetUrl('/image/theme_question/dino_right.png')
-  },
-  yellow: {
-    left: assetUrl('/image/theme_question/desert_left.png'),
-    right: assetUrl('/image/theme_question/desert_right.png')
-  }
-}
-
-const getThemeSideImages = (theme) => {
-  return themeSideImages[theme] || themeSideImages.blue
-}
-
 const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersCollected = null, initialAnswers = null }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -792,30 +759,8 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     })
   }
 
-  const sideImages = getThemeSideImages(colorTheme)
-
   return (
     <>
-      {/* Left side image - only visible on desktop (md and up) - Fixed to viewport */}
-      <div className="hidden md:block fixed left-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img
-          src={sideImages.left}
-          alt="Theme decoration left"
-          className="w-full h-auto object-contain"
-          style={{ maxHeight: '80vh' }}
-        />
-      </div>
-
-      {/* Right side image - only visible on desktop (md and up) - Fixed to viewport */}
-      <div className="hidden md:block fixed right-0 bottom-[0%] w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img
-          src={sideImages.right}
-          alt="Theme decoration right"
-          className="w-full h-auto object-contain"
-          style={{ maxHeight: '80vh' }}
-        />
-      </div>
-
       <div className="relative px-4 pt-6 pb-12">
         <div className="max-w-4xl mx-auto space-y-6 relative z-20">
       {isTeacherView && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}

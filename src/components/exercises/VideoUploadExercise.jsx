@@ -8,19 +8,8 @@ import { saveRecentExercise } from '../../utils/recentExercise'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import RichTextRenderer from '../ui/RichTextRenderer'
 import { Upload, ArrowRight, ArrowLeft, Star, RefreshCw, CheckCircle, Video, X, Clock, Lock, Play } from 'lucide-react'
-import { assetUrl } from '../../hooks/useBranding'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 import { LEVELS, scoreSpeechWithLLM } from './SpeakingAssessmentExercise'
-
-const themeSideImages = {
-  blue: { left: assetUrl('/image/theme_question/ice_left.png'), right: assetUrl('/image/theme_question/ice_right.png') },
-  green: { left: assetUrl('/image/theme_question/forest_left.png'), right: assetUrl('/image/theme_question/forest_right.png') },
-  purple: { left: assetUrl('/image/theme_question/pirate.png'), right: assetUrl('/image/theme_question/pirate.png') },
-  orange: { left: assetUrl('/image/theme_question/ninja_left.png'), right: assetUrl('/image/theme_question/ninja_right.png') },
-  red: { left: assetUrl('/image/theme_question/dino_left.png'), right: assetUrl('/image/theme_question/dino_right.png') },
-  yellow: { left: assetUrl('/image/theme_question/desert_left.png'), right: assetUrl('/image/theme_question/desert_right.png') },
-}
-const getThemeSideImages = (theme) => themeSideImages[theme] || themeSideImages.blue
 
 const getLevelConfig = (value) => LEVELS.find(l => l.value === value) || LEVELS[2]
 
@@ -528,17 +517,8 @@ const VideoUploadExercise = () => {
   // ── Student view ───────────────────────────────────────────────────────────
   const currentQuestion = questions[currentQuestionIndex]
   const totalQuestions = questions.length
-  const sideImages = getThemeSideImages(colorTheme)
-
   return (
     <>
-      <div className="hidden md:block fixed left-0 bottom-0 w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img src={sideImages.left} alt="" className="w-full h-auto object-contain" style={{ maxHeight: '80vh' }} />
-      </div>
-      <div className="hidden md:block fixed right-0 bottom-0 w-48 lg:w-64 xl:w-80 pointer-events-none z-10">
-        <img src={sideImages.right} alt="" className="w-full h-auto object-contain" style={{ maxHeight: '80vh' }} />
-      </div>
-
       <div className="relative px-4">
         <div className="max-w-4xl mx-auto space-y-6 relative z-20">
           {isAdmin && sessionId && <TeacherExerciseNav sessionId={sessionId} currentExerciseId={exerciseId} />}

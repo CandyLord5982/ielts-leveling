@@ -10,6 +10,12 @@
   body {
     @apply bg-gray-50 text-gray-900;
   }
+
+  /* Browsers draw <u> as a hairline that is easy to miss in exercise text; make it clearly visible */
+  u {
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+  }
 }
 
 @layer components {

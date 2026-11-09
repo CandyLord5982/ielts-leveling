@@ -12,6 +12,7 @@ import LoadingSpinner from './ui/LoadingSpinner'
 import OnlineUsers from './navigation/OnlineUsers'
 import PvPIncomingBanner from './pvp/PvPIncomingBanner'
 import ReportModal from './reports/ReportModal'
+import WordLookupPopup from './ui/WordLookupPopup'
 import { FEATURES } from '../config/features'
 
 const Layout = () => {
@@ -148,6 +149,9 @@ const Layout = () => {
 
       {/* Report Modal */}
       <ReportModal isOpen={showReportModal} onClose={() => setShowReportModal(false)} />
+
+      {/* Double-click any English word to see its definition */}
+      <WordLookupPopup />
     </div>
   )
 }

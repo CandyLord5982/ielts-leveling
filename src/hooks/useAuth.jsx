@@ -84,9 +84,8 @@ export const AuthProvider = ({ children }) => {
         console.error('❌ Error details:', JSON.stringify(userResult.error))
         // Don't set profile to null - keep existing profile data
       } else {
-        const merged = { ...userResult.data, ...(equipResult.data || {}) }
-        console.log('✅ Profile fetched:', merged)
-        setProfile(merged)
+        // Frozen so it can't be edited in place from the devtools console.
+        setProfile(Object.freeze({ ...userResult.data, ...(equipResult.data || {}) }))
       }
     } catch (error) {
       console.error('❌ Error in fetchUserProfile:', error)
@@ -284,7 +283,7 @@ export const AuthProvider = ({ children }) => {
       const [userResult, equipResult] = await Promise.all(promises)
       if (userResult.error) throw userResult.error
 
-      const merged = { ...userResult.data, ...(equipResult.data || {}) }
+      const merged = Object.freeze({ ...userResult.data, ...(equipResult.data || {}) })
       setProfile(merged)
       return { data: merged, error: null }
     } catch (error) {
@@ -293,8 +292,9 @@ export const AuthProvider = ({ children }) => {
   }
 
   const isAdmin = () => {
-    // Check both profile role and user metadata as fallback
-    return profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
+    // profile.role is the only trustworthy source - it's RLS/trigger-protected server-side.
+    // user_metadata is client-settable via supabase.auth.updateUser() and must never be trusted.
+    return profile?.role === 'admin'
   }
 
   const isTeacher = () => {

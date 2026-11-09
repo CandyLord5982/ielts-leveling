@@ -72,19 +72,21 @@ function App() {
                     <AdminDashboard />
                   </ProtectedRoute>
                 } />
-                <Route path="teacher" element={<TeacherDashboard />} />
-                <Route path="teacher/overview" element={<TeacherCourseOverview />} />
-                <Route path="teacher/student-history/:courseId/:studentId" element={<StudentLessonHistory />} />
-                <Route path="teacher/exercise-bank" element={<TeacherExerciseBank />} />
-                <Route path="teacher/live-battle/:courseId" element={<LiveBattlePage />} />
-                <Route path="teacher/course-report/:courseId" element={<CourseReport />} />
-                <Route path="teacher/unit-report/:courseId" element={<UnitReportPage />} />
-                <Route path="teacher/weakness-analysis" element={<WeaknessAnalysis />} />
-                <Route path="teacher/class-reports" element={
-                  <TeacherCourseProvider>
-                    <TeacherClassReports />
-                  </TeacherCourseProvider>
-                } />
+                <Route element={<ProtectedRoute requireStaff><Outlet /></ProtectedRoute>}>
+                  <Route path="teacher" element={<TeacherDashboard />} />
+                  <Route path="teacher/overview" element={<TeacherCourseOverview />} />
+                  <Route path="teacher/student-history/:courseId/:studentId" element={<StudentLessonHistory />} />
+                  <Route path="teacher/exercise-bank" element={<TeacherExerciseBank />} />
+                  <Route path="teacher/live-battle/:courseId" element={<LiveBattlePage />} />
+                  <Route path="teacher/course-report/:courseId" element={<CourseReport />} />
+                  <Route path="teacher/unit-report/:courseId" element={<UnitReportPage />} />
+                  <Route path="teacher/weakness-analysis" element={<WeaknessAnalysis />} />
+                  <Route path="teacher/class-reports" element={
+                    <TeacherCourseProvider>
+                      <TeacherClassReports />
+                    </TeacherCourseProvider>
+                  } />
+                </Route>
               </Route>
             </Routes>
           </Router>

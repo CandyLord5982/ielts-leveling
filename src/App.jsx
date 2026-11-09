@@ -35,6 +35,7 @@ import UnitReportPage from './components/teacher/reports/UnitReportPage'
 import WeaknessAnalysis from './components/teacher/WeaknessAnalysis'
 import ReviewQueue from './components/review/ReviewQueue'
 import VocabReview from './components/review/VocabReview'
+import SavedWords from './components/review/SavedWords'
 import { FEATURES } from './config/features'
 
 function App() {
@@ -63,6 +64,7 @@ function App() {
                 <Route path="progress" element={<Progress />} />
                 <Route path="review" element={<ReviewQueue />} />
                 <Route path="review/vocab" element={<VocabReview />} />
+                <Route path="review/vocab/words" element={<SavedWords />} />
                 <Route path="profile" element={<Profile />} />
                 {FEATURES.shop && <Route path="shop" element={<Shop />} />}
                 {FEATURES.inventory && <Route path="inventory" element={<Inventory />} />}

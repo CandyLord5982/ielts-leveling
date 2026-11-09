@@ -148,11 +148,16 @@ const VocabReview = () => {
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
         <ArrowLeft className="w-4 h-4" /> Trang chủ
       </button>
-      {words.length > 0 && phase !== 'done' && (
-        <span className="text-sm text-gray-500">
-          {phase === 'choice' ? 'Chọn từ' : 'Gõ từ'} · {index + 1} / {words.length}
-        </span>
-      )}
+      <div className="flex items-center gap-4">
+        {words.length > 0 && phase !== 'done' && (
+          <span className="text-sm text-gray-500">
+            {phase === 'choice' ? 'Chọn từ' : 'Gõ từ'} · {index + 1} / {words.length}
+          </span>
+        )}
+        <button onClick={() => navigate('/review/vocab/words')} className="text-sm text-blue-600 hover:text-blue-800">
+          Danh sách từ
+        </button>
+      </div>
     </div>
   )
 

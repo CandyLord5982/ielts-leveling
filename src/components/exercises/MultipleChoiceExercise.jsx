@@ -124,7 +124,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     <button
       // In Do mode jump to the question on screen; Review mode has per-question buttons instead.
       onClick={() => openEditor(teacherMode === 'do' ? questions[currentQuestionIndex]?.id : null)}
-      className="flex items-center gap-2 px-4 py-2 text-blue-700 hover:text-blue-900 border border-blue-200 rounded-lg"
+      className="flex items-center gap-2 h-9 px-3 text-sm font-medium text-blue-700 hover:text-blue-900 bg-white border border-blue-200 rounded-lg"
     >
       <Pencil className="w-4 h-4" /> Edit
     </button>
@@ -655,6 +655,17 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   }
 
 
+  // Teacher Do mode: jump to any question (answer state is shown fresh)
+  const jumpToQuestion = (index) => {
+    if (index < 0 || index >= questions.length) return
+    setCurrentQuestionIndex(index)
+    setSelectedAnswer(null)
+    setShowExplanation(false)
+    setStartTime(Date.now())
+    setShowPetTutor(false)
+    setPetTutorMessage('')
+  }
+
   const markExerciseCompleted = async () => {
     if (!user || !exerciseId || isTeacherView) return
 
@@ -984,22 +995,54 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
 
           {/* Teacher Do mode banner */}
           {isTeacherView && teacherMode === 'do' && (
-            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
               <span className="text-sm text-amber-800 font-medium">Teacher Preview — No XP will be awarded</span>
-              {editExerciseButton}
-              {editExerciseModal}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setTeacherMode('review')}
-                  className="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
-                >
-                  Review
-                </button>
-                <button
-                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow text-blue-700"
-                >
-                  Do
-                </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {viewMode === 'one-by-one' && !isQuizComplete && questions.length > 1 && (
+                  <div className="flex items-center h-9 bg-white border border-amber-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => jumpToQuestion(currentQuestionIndex - 1)}
+                      disabled={currentQuestionIndex === 0}
+                      className="h-full px-3 text-amber-800 hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                      aria-label="Previous question"
+                    >
+                      ‹
+                    </button>
+                    <select
+                      value={currentQuestionIndex}
+                      onChange={(e) => jumpToQuestion(Number(e.target.value))}
+                      className="h-full px-2 text-sm font-medium text-amber-800 bg-transparent border-x border-amber-200 focus:outline-none"
+                      aria-label="Jump to question"
+                    >
+                      {questions.map((_, i) => (
+                        <option key={i} value={i}>Q {i + 1} / {questions.length}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => jumpToQuestion(currentQuestionIndex + 1)}
+                      disabled={currentQuestionIndex >= questions.length - 1}
+                      className="h-full px-3 text-amber-800 hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                      aria-label="Next question"
+                    >
+                      ›
+                    </button>
+                  </div>
+                )}
+                {editExerciseButton}
+                {editExerciseModal}
+                <div className="flex items-center h-9 bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setTeacherMode('review')}
+                    className="h-full px-3 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800"
+                  >
+                    Review
+                  </button>
+                  <button
+                    className="h-full px-3 text-sm font-medium rounded-md bg-white shadow text-blue-700"
+                  >
+                    Do
+                  </button>
+                </div>
               </div>
             </div>
           )}

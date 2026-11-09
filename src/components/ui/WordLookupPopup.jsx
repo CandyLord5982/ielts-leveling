@@ -54,6 +54,24 @@ const WordLookupPopup = () => {
     setSaveState(error ? 'error' : 'saved')
   }
 
+  // setState is stable, so this is safe to call from the mount-only listener effect below.
+  const runLookup = (word) => {
+    lookupWord(word)
+      .then((entry) => {
+        setState((s) => (s && s.word === word ? { ...s, status: 'done', entry } : s))
+      })
+      .catch((err) => {
+        const notFound = err.message === 'NOT_FOUND'
+        const error = notFound ? 'Không tìm thấy từ này.' : 'Không thể tải định nghĩa.'
+        setState((s) => (s && s.word === word ? { ...s, status: 'error', error, retryable: !notFound } : s))
+      })
+  }
+
+  const retry = () => {
+    setState((s) => (s ? { ...s, status: 'loading', error: null, retryable: false } : s))
+    runLookup(state.word)
+  }
+
   useEffect(() => {
     const handleDblClick = (e) => {
       const target = e.target
@@ -63,16 +81,8 @@ const WordLookupPopup = () => {
       const word = selection?.toString().trim()
       if (!word || !WORD_RE.test(word)) return
 
-      setState({ word, x: e.clientX, y: e.clientY, status: 'loading', entry: null, error: null })
-
-      lookupWord(word)
-        .then((entry) => {
-          setState((s) => (s && s.word === word ? { ...s, status: 'done', entry } : s))
-        })
-        .catch((err) => {
-          const error = err.message === 'NOT_FOUND' ? 'Không tìm thấy từ này.' : 'Không thể tải định nghĩa.'
-          setState((s) => (s && s.word === word ? { ...s, status: 'error', error } : s))
-        })
+      setState({ word, x: e.clientX, y: e.clientY, status: 'loading', entry: null, error: null, retryable: false })
+      runLookup(word)
     }
 
     const handlePointerDown = (e) => {
@@ -127,7 +137,16 @@ const WordLookupPopup = () => {
         </div>
       )}
 
-      {status === 'error' && <p className="text-gray-500 py-1">{error}</p>}
+      {status === 'error' && (
+        <div className="py-1">
+          <p className="text-gray-500">{error}</p>
+          {state.retryable && (
+            <button onClick={retry} className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium">
+              Thử lại
+            </button>
+          )}
+        </div>
+      )}
 
       {status === 'done' && entry && (
         <div className="space-y-3">

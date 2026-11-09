@@ -9,8 +9,21 @@ const cache = new Map()
 const htmlToText = (html) =>
   new DOMParser().parseFromString(html || '', 'text/html').body.textContent.trim()
 
+// dictionaryapi.dev is a free hobby service: it sometimes hangs, rate-limits or 5xx's.
+// Time out instead of waiting forever so we can fall through to the next source.
+const FETCH_TIMEOUT_MS = 6000
+async function timedFetch(url) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function fromDictionaryApi(word) {
-  const res = await fetch(`${DICTIONARY_API}/${encodeURIComponent(word)}`)
+  const res = await timedFetch(`${DICTIONARY_API}/${encodeURIComponent(word)}`)
   if (res.status === 404) return null
   if (!res.ok) throw new Error('LOOKUP_FAILED')
   const [entry] = await res.json()
@@ -25,7 +38,7 @@ async function fromDictionaryApi(word) {
 }
 
 async function fromWiktionary(word) {
-  const res = await fetch(`${WIKTIONARY_API}/${encodeURIComponent(word)}`)
+  const res = await timedFetch(`${WIKTIONARY_API}/${encodeURIComponent(word)}`)
   if (res.status === 404) return null
   if (!res.ok) throw new Error('LOOKUP_FAILED')
   const data = await res.json()
@@ -51,13 +64,32 @@ const baseForms = (word) => {
   return [...new Set(forms)].filter((f) => f.length > 1)
 }
 
+// Run one source; a failure (timeout, 5xx, network) retries once, then is recorded rather than
+// thrown, so a flaky source can't stop the next one from being tried.
+async function trySource(source, word, state) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await source(word)
+    } catch {
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 300))
+    }
+  }
+  state.failed = true
+  return null
+}
+
 async function resolve(word) {
-  const direct = (await fromDictionaryApi(word)) || (await fromWiktionary(word))
+  const state = { failed: false }
+  const direct =
+    (await trySource(fromDictionaryApi, word, state)) || (await trySource(fromWiktionary, word, state))
   if (direct) return direct
   for (const form of baseForms(word)) {
-    const entry = await fromDictionaryApi(form)
+    const entry = await trySource(fromDictionaryApi, form, state)
     if (entry) return entry
   }
+  // Nothing found: only call it "not found" if no source actually errored out,
+  // otherwise report a failure so the popup offers a retry instead of a false "not found".
+  if (state.failed) throw new Error('LOOKUP_FAILED')
   return null
 }
 

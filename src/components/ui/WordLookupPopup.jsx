@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Volume2, X, Loader2 } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { lookupWord } from '../../utils/dictionaryApi'
 
 const WORD_RE = /^[a-zA-Z][a-zA-Z'-]*$/
@@ -23,8 +23,8 @@ const WordLookupPopup = () => {
       setState({ word, x: e.clientX, y: e.clientY, status: 'loading', entry: null, error: null })
 
       lookupWord(word)
-        .then((data) => {
-          setState((s) => (s && s.word === word ? { ...s, status: 'done', entry: data[0] } : s))
+        .then((entry) => {
+          setState((s) => (s && s.word === word ? { ...s, status: 'done', entry } : s))
         })
         .catch((err) => {
           const error = err.message === 'NOT_FOUND' ? 'Không tìm thấy từ này.' : 'Không thể tải định nghĩa.'
@@ -60,12 +60,7 @@ const WordLookupPopup = () => {
   const left = Math.min(Math.max(8, x - popupWidth / 2), window.innerWidth - popupWidth - 8)
   const top = Math.min(y + 16, window.innerHeight - 16)
 
-  const audioUrl = entry?.phonetics?.find((p) => p.audio)?.audio
-  const phoneticText = entry?.phonetic || entry?.phonetics?.find((p) => p.text)?.text
-
-  const playAudio = () => {
-    if (audioUrl) new Audio(audioUrl).play().catch(() => {})
-  }
+  const phoneticText = entry?.phonetic
 
   return createPortal(
     <div
@@ -77,11 +72,6 @@ const WordLookupPopup = () => {
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-900">{word}</span>
           {phoneticText && <span className="text-gray-400">{phoneticText}</span>}
-          {audioUrl && (
-            <button onClick={playAudio} className="text-blue-500 hover:text-blue-700" aria-label="Play pronunciation">
-              <Volume2 className="w-4 h-4" />
-            </button>
-          )}
         </div>
         <button onClick={() => setState(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
           <X className="w-4 h-4" />

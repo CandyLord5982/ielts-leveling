@@ -27,20 +27,9 @@ const QuestionModal = ({ exercise, onClose }) => {
     }
   }
 
-  const renderQuestion = () => {
-    switch (exerciseType) {
-      case 'multiple_choice':
-        return <MultipleChoiceQuestion q={q} showAnswer={showAnswer} />
-      case 'fill_blank':
-        return <FillBlankQuestion q={q} showAnswer={showAnswer} />
-      case 'dropdown':
-        return <DropdownQuestion q={q} showAnswer={showAnswer} />
-      case 'flashcard':
-        return <FlashcardQuestion q={q} showAnswer={showAnswer} />
-      default:
-        return <div className="text-gray-500 text-center">Unsupported question type</div>
-    }
-  }
+  const renderQuestion = () => (
+    <QuestionContent exerciseType={exerciseType} q={q} showAnswer={showAnswer} />
+  )
 
   // Minimized: floating bar at bottom
   if (minimized) {
@@ -59,7 +48,7 @@ const QuestionModal = ({ exercise, onClose }) => {
   // Expanded: floating panel (not blocking — no backdrop overlay)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col w-[80%] max-h-[85vh]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col w-[90%] max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50 rounded-t-2xl">
           <div className="flex items-center gap-2 min-w-0">
@@ -123,21 +112,68 @@ const QuestionModal = ({ exercise, onClose }) => {
 
 // === Question type renderers ===
 
+// Shared by QuestionModal and the Game Zone modes
+export const QUESTION_TYPES_SUPPORTED = ['multiple_choice', 'fill_blank', 'dropdown', 'flashcard']
+
+export const QuestionContent = ({ exerciseType, q, showAnswer }) => {
+  switch (exerciseType) {
+    case 'multiple_choice':
+      return <MultipleChoiceQuestion q={q} showAnswer={showAnswer} />
+    case 'fill_blank':
+      return <FillBlankQuestion q={q} showAnswer={showAnswer} />
+    case 'dropdown':
+      return <DropdownQuestion q={q} showAnswer={showAnswer} />
+    case 'flashcard':
+      return <FlashcardQuestion q={q} showAnswer={showAnswer} />
+    default:
+      return <div className="text-gray-500 text-center">Unsupported question type</div>
+  }
+}
+
+// Two columns: question (and image) on the left, options / answer on the right.
+// Stacks into one column on narrow screens.
+const TwoColumn = ({ left, right }) => (
+  <div className="grid gap-6 md:grid-cols-2 items-start">
+    <div className="space-y-4 md:sticky md:top-0">{left}</div>
+    <div className="space-y-4">{right}</div>
+  </div>
+)
+
+const QuestionText = ({ q, content }) => (
+  <>
+    <div className="text-xl font-semibold text-gray-800 leading-relaxed">
+      <RichTextRenderer content={content ?? q.question} />
+    </div>
+    {q.image_url && (
+      <div className="flex justify-center">
+        <img src={q.image_url} alt="" className="max-h-72 rounded-xl object-contain" />
+      </div>
+    )}
+  </>
+)
+
+const Explanation = ({ q, showAnswer }) => (
+  showAnswer && q.explanation ? (
+    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
+      <span className="font-bold">Explanation:</span> <RichTextRenderer content={q.explanation} />
+    </div>
+  ) : null
+)
+
+// Placeholder so the right column isn't empty before the answer is shown
+const HiddenAnswer = ({ label = 'Answer' }) => (
+  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400 font-semibold">
+    {label} hidden
+  </div>
+)
+
 const MultipleChoiceQuestion = ({ q, showAnswer }) => {
   const correctIndex = q.correct_answer
 
   return (
-    <div className="space-y-4">
-      <div className="text-lg font-semibold text-gray-800">
-        <RichTextRenderer content={q.question} />
-      </div>
-
-      {q.image_url && (
-        <div className="flex justify-center">
-          <img src={q.image_url} alt="" className="max-h-60 rounded-xl object-contain" />
-        </div>
-      )}
-
+    <TwoColumn
+      left={<QuestionText q={q} />}
+      right={<>
       <div className="grid gap-2">
         {(q.options || []).map((opt, idx) => {
           const isCorrect = idx === correctIndex
@@ -149,9 +185,9 @@ const MultipleChoiceQuestion = ({ q, showAnswer }) => {
           return (
             <div
               key={idx}
-              className={`px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${style}`}
+              className={`px-4 py-3 rounded-xl border-2 text-base font-medium transition-all ${style}`}
             >
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white border text-xs font-bold mr-3">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border text-sm font-bold mr-3">
                 {String.fromCharCode(65 + idx)}
               </span>
               <RichTextRenderer content={opt} />
@@ -159,60 +195,37 @@ const MultipleChoiceQuestion = ({ q, showAnswer }) => {
           )
         })}
       </div>
-
-      {showAnswer && q.explanation && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
-          <span className="font-bold">Explanation:</span> <RichTextRenderer content={q.explanation} />
-        </div>
-      )}
-    </div>
+      <Explanation q={q} showAnswer={showAnswer} />
+      </>}
+    />
   )
 }
 
 const FillBlankQuestion = ({ q, showAnswer }) => {
   return (
-    <div className="space-y-4">
-      <div className="text-lg font-semibold text-gray-800">
-        <RichTextRenderer content={q.question} />
-      </div>
-
-      {q.image_url && (
-        <div className="flex justify-center">
-          <img src={q.image_url} alt="" className="max-h-60 rounded-xl object-contain" />
-        </div>
-      )}
-
-      {showAnswer && (
+    <TwoColumn
+      left={<QuestionText q={q} />}
+      right={<>
+      {showAnswer ? (
         <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
           <div className="text-xs text-green-600 font-semibold mb-1 uppercase">Answer</div>
           <div className="text-lg font-bold text-green-800">
             {Array.isArray(q.answers) ? q.answers.join(' / ') : q.answer || q.correct_answer || '—'}
           </div>
         </div>
-      )}
-
-      {showAnswer && q.explanation && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
-          <span className="font-bold">Explanation:</span> <RichTextRenderer content={q.explanation} />
-        </div>
-      )}
-    </div>
+      ) : <HiddenAnswer />}
+      <Explanation q={q} showAnswer={showAnswer} />
+      </>}
+    />
   )
 }
 
 const DropdownQuestion = ({ q, showAnswer }) => {
   return (
-    <div className="space-y-4">
-      <div className="text-lg font-semibold text-gray-800">
-        <RichTextRenderer content={q.question} />
-      </div>
-
-      {q.image_url && (
-        <div className="flex justify-center">
-          <img src={q.image_url} alt="" className="max-h-60 rounded-xl object-contain" />
-        </div>
-      )}
-
+    <TwoColumn
+      left={<QuestionText q={q} />}
+      right={<>
+      {!showAnswer && <HiddenAnswer />}
       {showAnswer && (
         <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
           <div className="text-xs text-green-600 font-semibold mb-1 uppercase">Answer</div>
@@ -231,19 +244,16 @@ const DropdownQuestion = ({ q, showAnswer }) => {
           )}
         </div>
       )}
-
-      {showAnswer && q.explanation && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
-          <span className="font-bold">Explanation:</span> <RichTextRenderer content={q.explanation} />
-        </div>
-      )}
-    </div>
+      <Explanation q={q} showAnswer={showAnswer} />
+      </>}
+    />
   )
 }
 
 const FlashcardQuestion = ({ q, showAnswer }) => {
   return (
-    <div className="space-y-4">
+    <TwoColumn
+      left={
       <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 text-center">
         <div className="text-xs text-indigo-500 font-semibold mb-2 uppercase">Front</div>
         <div className="text-xl font-bold text-gray-800">
@@ -255,16 +265,16 @@ const FlashcardQuestion = ({ q, showAnswer }) => {
           </div>
         )}
       </div>
-
-      {showAnswer && (
+      }
+      right={showAnswer ? (
         <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-6 text-center">
           <div className="text-xs text-green-600 font-semibold mb-2 uppercase">Back</div>
           <div className="text-xl font-bold text-green-800">
             <RichTextRenderer content={q.back || q.answer} />
           </div>
         </div>
-      )}
-    </div>
+      ) : <HiddenAnswer label="Back" />}
+    />
   )
 }
 

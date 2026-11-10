@@ -24,6 +24,9 @@ const resolvePetImage = (userPet) => {
 
 export function useLiveBattle() {
   const [session, setSession] = useState(null)
+  // Latest session for callbacks whose closures would otherwise see a stale value
+  const sessionRef = useRef(null)
+  sessionRef.current = session
   const [participants, setParticipants] = useState([])
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(false)
@@ -109,8 +112,9 @@ export function useLiveBattle() {
   }, [])
 
   const createSession = useCallback(async (courseId, teacherId) => {
-    // Skip if we already have an active session for this course
-    if (session && session.course_id === courseId && ['setup', 'active', 'finished'].includes(session.status)) return session
+    // Skip if we already have a session for this course (read via ref — `session` here would be stale)
+    const current = sessionRef.current
+    if (current && current.course_id === courseId && ['setup', 'active', 'finished'].includes(current.status)) return current
 
     setLoading(true)
     setError(null)
@@ -181,6 +185,8 @@ export function useLiveBattle() {
         const enriched = await enrichParticipants(allParts)
 
         setSession(existing)
+        // Scores are auto-saved to the session row, so restore them on resume (e.g. after a page refresh)
+        setTeamScores({ a: existing.team_a_score || 0, b: existing.team_b_score || 0 })
         setParticipants(enriched)
         setEvents([])
         setActivePowerups({ a: [], b: [] })

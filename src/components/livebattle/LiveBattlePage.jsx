@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { assetUrl } from '../../hooks/useBranding'
-import { ArrowLeft, Play, Square, Shuffle, Trophy, Sparkles, BookOpen, RotateCcw, Flag, Timer, Swords } from 'lucide-react'
+import { ArrowLeft, Play, Square, Shuffle, Trophy, Sparkles, BookOpen, RotateCcw, Flag, Timer, Swords, Gamepad2 } from 'lucide-react'
+import GameZoneModal from './gamezone/GameZoneModal'
 import TimerModal from './TimerModal'
 import { useAuth } from '../../hooks/useAuth'
 import { useLiveBattle } from '../../hooks/useLiveBattle'
@@ -45,18 +46,23 @@ const LiveBattlePage = () => {
   const [showExercisePicker, setShowExercisePicker] = useState(false)
   const [activeExercise, setActiveExercise] = useState(null)
   const [showPetRace, setShowPetRace] = useState(false)
+  const [showGameZone, setShowGameZone] = useState(false)
   const [showTimer, setShowTimer] = useState(false)
   const [timerActive, setTimerActive] = useState(false)
   const [timerRemaining, setTimerRemaining] = useState(0)
 
+  // Depend on the ids, not the objects: Supabase re-fires SIGNED_IN when the tab regains
+  // focus and useAuth stores a fresh profile object, which used to reload the whole battle.
+  const userId = user?.id
+  const profileLoaded = !!profile
   useEffect(() => {
-    if (!user || !courseId || !profile) return
+    if (!userId || !courseId || !profileLoaded) return
     if (!isTeacher() && !isAdmin()) {
       navigate('/teacher')
       return
     }
-    createSession(courseId, user.id)
-  }, [user, courseId, profile])
+    createSession(courseId, userId)
+  }, [userId, courseId, profileLoaded])
 
   const handleStart = async () => {
     await startGame()
@@ -235,6 +241,13 @@ const LiveBattlePage = () => {
                   Pet Race
                 </button>
                 <button
+                  onClick={() => setShowGameZone(true)}
+                  className="flex items-center gap-1 px-4 py-1.5 bg-pink-600 hover:bg-pink-500 text-white rounded-lg text-sm font-bold transition-colors"
+                >
+                  <Gamepad2 className="w-3 h-3" />
+                  Game Zone
+                </button>
+                <button
                   onClick={() => setShowExercisePicker(true)}
                   className="flex items-center gap-1 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-colors"
                 >
@@ -375,6 +388,17 @@ const LiveBattlePage = () => {
         <DuckRaceTimer
           participants={participants}
           onClose={() => setShowPetRace(false)}
+        />
+      )}
+      {showGameZone && (
+        <GameZoneModal
+          participants={participants}
+          teamNames={{ a: session?.team_a_name || 'Team Alpha', b: session?.team_b_name || 'Team Beta' }}
+          teamScores={{ a: teamAScore, b: teamBScore }}
+          events={events}
+          onAddPoints={addTeamPoints}
+          onActivatePowerup={activatePowerup}
+          onClose={() => setShowGameZone(false)}
         />
       )}
       <TimerModal

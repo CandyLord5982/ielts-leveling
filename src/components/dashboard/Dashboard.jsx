@@ -1,5 +1,6 @@
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
+import { withFakePresence, loadFakeAvatarPool } from '../../utils/fakePresence'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getRecentExercise } from '../../utils/recentExercise'
@@ -274,8 +275,10 @@ const Dashboard = () => {
               offline.push(u)
             }
           })
-          setOnlineUsers(online)
-          setOfflineUsers(offline)
+          await loadFakeAvatarPool() // once per day per device, then from memory
+          const shown = withFakePresence(online, offline)
+          setOnlineUsers(shown.online)
+          setOfflineUsers(shown.offline)
         }
       } catch (err) {
         console.error('Error fetching online users:', err)
@@ -831,7 +834,7 @@ const Dashboard = () => {
             }).map((u) => (
               <button
                 key={u.id}
-                onClick={() => (u.id === profile?.id || profile?.is_banned || u.role === 'admin') ? navigate(`/profile/${u.id}`) : setChallengeTarget(u)}
+                onClick={() => (u.is_fake || u.id === profile?.id || profile?.is_banned || u.role === 'admin') ? navigate(`/profile/${u.id}`) : setChallengeTarget(u)}
                 className="flex flex-col items-center flex-shrink-0 w-16"
               >
                 <div className="relative">
@@ -865,7 +868,7 @@ const Dashboard = () => {
             }).map((u) => (
               <button
                 key={u.id}
-                onClick={() => (u.id === profile?.id || profile?.is_banned || u.role === 'admin') ? navigate(`/profile/${u.id}`) : setChallengeTarget(u)}
+                onClick={() => (u.is_fake || u.id === profile?.id || profile?.is_banned || u.role === 'admin') ? navigate(`/profile/${u.id}`) : setChallengeTarget(u)}
                 className="flex flex-col items-center flex-shrink-0 w-16 opacity-50"
               >
                 <div className="relative grayscale">

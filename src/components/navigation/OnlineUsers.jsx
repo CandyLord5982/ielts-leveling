@@ -6,6 +6,7 @@ import { supabase } from '../../supabase/client'
 import { useAuth } from '../../hooks/useAuth'
 import PvPChallengeModal from '../pvp/PvPChallengeModal'
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import { withFakePresence, loadFakeAvatarPool } from '../../utils/fakePresence'
 
 // Key lưu trạng thái collapsed
 const RIGHT_SIDEBAR_COLLAPSED_KEY = 'right_sidebar_collapsed'
@@ -44,6 +45,11 @@ const TooltipLeft = ({ label, children }) => {
     </div>
   )
 }
+
+// Link to a user's profile (made-up users from utils/fakePresence get a generated one)
+const ProfileLink = ({ user: u, className, children }) => (
+  <Link to={`/profile/${u.id}`} className={className}>{children}</Link>
+)
 
 const OnlineUsers = ({ onCollapsedChange }) => {
   const { user, profile } = useAuth()
@@ -94,8 +100,10 @@ const OnlineUsers = ({ onCollapsedChange }) => {
               offline.push(u)
             }
           })
-          setOnlineUsers(online)
-          setOfflineUsers(offline)
+          await loadFakeAvatarPool() // once per day per device, then from memory
+          const shown = withFakePresence(online, offline)
+          setOnlineUsers(shown.online)
+          setOfflineUsers(shown.offline)
         }
       } catch (err) {
         console.error('Error fetching online users:', err)
@@ -207,23 +215,23 @@ const OnlineUsers = ({ onCollapsedChange }) => {
                       if (collapsed) {
                         return (
                           <TooltipLeft key={u.id} label={`${u.full_name || 'Ẩn danh'} (Online)`}>
-                            <Link to={`/profile/${u.id}`} className="flex justify-center py-2 relative w-full">
+                            <ProfileLink user={u} className="flex justify-center py-2 relative w-full">
                               {avatarEl}
                               {pendingState === 'received' && (
                                 <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
                               )}
-                            </Link>
+                            </ProfileLink>
                           </TooltipLeft>
                         )
                       }
 
                       return (
                         <div key={u.id} className="flex items-center hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors group">
-                          <Link to={`/profile/${u.id}`} className="flex items-center space-x-2.5 flex-1 min-w-0">
+                          <ProfileLink user={u} className="flex items-center space-x-2.5 flex-1 min-w-0">
                             {avatarEl}
                             <span className="text-sm font-medium text-gray-700 truncate">{u.full_name || 'Ẩn danh'}</span>
-                          </Link>
-                          {u.id !== user?.id && !profile?.is_banned && u.role !== 'admin' && (
+                          </ProfileLink>
+                          {!u.is_fake && u.id !== user?.id && !profile?.is_banned && u.role !== 'admin' && (
                             <button
                               onClick={() => setChallengeTarget(u)}
                               className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${pendingState ? (pendingState === 'received' ? 'opacity-100 animate-pulse text-red-500 hover:bg-red-50' : 'opacity-100 text-gray-400 hover:bg-gray-100') : 'opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50'}`}
@@ -274,23 +282,23 @@ const OnlineUsers = ({ onCollapsedChange }) => {
                       if (collapsed) {
                         return (
                           <TooltipLeft key={u.id} label={`${u.full_name || 'Ẩn danh'} (Offline)`}>
-                            <Link to={`/profile/${u.id}`} className="flex justify-center py-2 relative w-full">
+                            <ProfileLink user={u} className="flex justify-center py-2 relative w-full">
                               {avatarEl}
                               {pendingState === 'received' && (
                                 <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
                               )}
-                            </Link>
+                            </ProfileLink>
                           </TooltipLeft>
                         )
                       }
 
                       return (
                         <div key={u.id} className="flex items-center hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors group">
-                          <Link to={`/profile/${u.id}`} className="flex items-center space-x-2.5 flex-1 min-w-0">
+                          <ProfileLink user={u} className="flex items-center space-x-2.5 flex-1 min-w-0">
                             {avatarEl}
                             <span className="text-sm text-gray-500 truncate">{u.full_name || 'Ẩn danh'}</span>
-                          </Link>
-                          {u.id !== user?.id && !profile?.is_banned && u.role !== 'admin' && pendingState && (
+                          </ProfileLink>
+                          {!u.is_fake && u.id !== user?.id && !profile?.is_banned && u.role !== 'admin' && pendingState && (
                             <button
                               onClick={() => setChallengeTarget(u)}
                               className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${pendingState === 'received' ? 'opacity-100 animate-pulse text-red-500 hover:bg-red-50' : 'opacity-100 text-gray-400 hover:bg-gray-100'}`}

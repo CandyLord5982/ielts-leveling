@@ -6,6 +6,7 @@ import { useStudentLevels } from '../../hooks/useStudentLevels'
 import { useAchievements } from '../../hooks/useAchievements'
 import { usePet } from '../../hooks/usePet'
 import { supabase } from '../../supabase/client'
+import { isFakeUserId, buildFakeProfile, pickFakePets, loadFakeAvatarPool } from '../../utils/fakePresence'
 import AvatarWithFrame from '../ui/AvatarWithFrame'
 import { assetUrl } from '../../hooks/useBranding';
 import {
@@ -141,6 +142,26 @@ const Profile = () => {
   const fetchOtherUserProfile = async () => {
     try {
       setLoading(true)
+
+      // A made-up user from the online list (utils/fakePresence): nothing is in the database,
+      // so show generated stats and a few pets picked from the real pet catalog
+      if (isFakeUserId(userId)) {
+        await loadFakeAvatarPool()
+        const fake = buildFakeProfile(userId)
+        if (!fake) {
+          navigate('/leaderboard')
+          return
+        }
+        setViewedUser(fake.userRow)
+        setViewedProfile(fake.userRow)
+        setSelectedAvatar(fake.userRow.avatar_url || '👤')
+        setStats(fake.stats)
+        await processBadges(fake.userRow.xp)
+        const { data: catalog } = await supabase.from('pets').select('*').eq('is_active', true)
+        setViewedUserPets(pickFakePets(userId, catalog))
+        setLoading(false)
+        return
+      }
 
       // Fetch the other user's profile
       const [{ data: userData, error: userError }, { data: equipData }] = await Promise.all([

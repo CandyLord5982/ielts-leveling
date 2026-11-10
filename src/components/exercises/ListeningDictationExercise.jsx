@@ -1367,7 +1367,7 @@ const ListeningDictationExercise = () => {
 
   // ── Main Student UI ──────────────────────────────────────────────────────
   return (
-    <div ref={containerRef} className={`min-h-screen bg-[#f0f2f8] flex flex-col ${isFullscreen ? 'overflow-y-auto' : ''}`} style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div ref={containerRef} className={`min-h-screen bg-[#f0f2f8] flex flex-col ${isFullscreen ? 'overflow-y-auto' : ''}`}>
       <audio
         ref={audioRef}
         src={exercise?.content?.audio_url}

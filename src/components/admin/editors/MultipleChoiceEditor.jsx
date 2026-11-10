@@ -8,11 +8,13 @@ import {
   ChevronDown,
   Check,
   HelpCircle,
+  Sparkles,
   X
 } from 'lucide-react'
 import { handleRichTextShortcut } from '../../../hooks/useRichTextShortcuts'
 import RichTextField from './shared/RichTextField'
 import AutoGrowTextarea from './shared/AutoGrowTextarea'
+import { formatMultipleChoiceWithAI } from '../../../utils/aiQuestionFormatter'
 
 const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettingsChange, intro, onIntroChange, folderPath, focusQuestionId, exerciseTitle = '', onCreateFromQuestions }) => {
   const normalizeQuestion = (q, idx = 0) => {
@@ -36,7 +38,8 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       reference_url: q?.reference_url || '',
       shuffle_options: q?.shuffle_options !== undefined ? q.shuffle_options : true,
       audio_url: q?.audio_url || '',
-      max_audio_plays: q?.max_audio_plays || 0
+      max_audio_plays: q?.max_audio_plays || 0,
+      ...(q?.ai_answer_guessed ? { ai_answer_guessed: true } : {})
     }
   }
 
@@ -47,6 +50,7 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
   const [bulkText, setBulkText] = useState('')
   const [lastBulkText, setLastBulkText] = useState('')
   const [stripComments, setStripComments] = useState(false)
+  const [aiFormatting, setAiFormatting] = useState(false)
 
   // Load lastBulkText from localStorage on mount
   useEffect(() => {
@@ -220,9 +224,13 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       }))
     }
 
-    const updatedQuestions = localQuestions.map((q, i) =>
-      i === index ? { ...q, [field]: value } : q
-    )
+    const updatedQuestions = localQuestions.map((q, i) => {
+      if (i !== index) return q
+      const next = { ...q, [field]: value }
+      // Teacher confirmed the answer: drop the "AI guessed" flag
+      if (field === 'correct_answer') delete next.ai_answer_guessed
+      return next
+    })
     setLocalQuestions(updatedQuestions)
     onQuestionsChange(updatedQuestions)
   }
@@ -540,6 +548,40 @@ const MultipleChoiceEditor = ({ questions, onQuestionsChange, settings, onSettin
       }
     } catch {
       alert('Error processing bulk import. Please check your format.')
+    }
+  }
+
+  // AI Format: let Groq restructure messy pasted text into questions (no content generation)
+  const processAIImport = async () => {
+    if (!bulkText.trim() || aiFormatting) return
+    setAiFormatting(true)
+    try {
+      const { intro: aiIntro, questions: aiQuestions } = await formatMultipleChoiceWithAI(bulkText)
+      if (aiQuestions.length === 0) {
+        alert('AI found no questions in the text.')
+        return
+      }
+      setLastBulkText(bulkText)
+      try { localStorage.setItem('xpclass_last_bulk_text', bulkText) } catch { /* ignore */ }
+      if (aiIntro && onIntroChange) {
+        const existing = intro || ''
+        onIntroChange(existing ? existing + '\n' + aiIntro : aiIntro)
+      }
+      const updatedQuestions = [
+        ...localQuestions,
+        ...aiQuestions.map((q, i) => normalizeQuestion({ ...q, original_text: bulkText }, localQuestions.length + i))
+      ]
+      setLocalQuestions(updatedQuestions)
+      onQuestionsChange(updatedQuestions)
+      const guessed = aiQuestions.filter(q => q.ai_answer_guessed).length
+      alert(
+        `AI imported ${aiQuestions.length} questions.` +
+        (guessed ? `\n\n⚠️ ${guessed} had no answer in the text — the AI guessed them. They're marked "AI guessed" — please check.` : '')
+      )
+    } catch (err) {
+      alert(`AI format failed: ${err.message}`)
+    } finally {
+      setAiFormatting(false)
     }
   }
 
@@ -871,8 +913,19 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
             </button>
             <button
               type="button"
+              onClick={processAIImport}
+              disabled={!bulkText.trim() || aiFormatting}
+              className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Let AI turn messy text into questions. It restructures only — doesn't write new content."
+            >
+              <Sparkles className="w-4 h-4" />
+              {aiFormatting ? 'AI formatting…' : 'AI Format'}
+            </button>
+            <button
+              type="button"
               onClick={processBulkImport}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              disabled={aiFormatting}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50"
             >
               Import Questions
             </button>
@@ -910,6 +963,14 @@ Good morning in Vietnamese is {1:MC:=Chào buổi sáng#Correct explanation~Chà
                 </button>
                 <span className="text-sm font-medium text-gray-700">
                   Question {index + 1}
+                  {question.ai_answer_guessed && (
+                    <span
+                      className="ml-2 px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300 rounded"
+                      title="No answer was in the pasted text, so the AI picked one. Click the correct option to confirm."
+                    >
+                      AI guessed answer
+                    </span>
+                  )}
                   {isCollapsed && question.question && (
                     <span className="ml-2 text-xs text-gray-500 truncate max-w-md inline-block">
                       - {question.question.substring(0, 50)}{question.question.length > 50 ? '...' : ''}

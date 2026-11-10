@@ -33,7 +33,7 @@ const ReportPreview = ({ data }) => {
   const hasComment = cmtObj.achievements || cmtObj.improvements || cmtObj.suggestions;
 
   return (
-    <div style={{ width: 480, fontFamily: "'Inter', 'Segoe UI', sans-serif" }} className="mx-auto rounded-[30px] overflow-hidden shadow-2xl bg-[#F4F7F9]">
+    <div style={{ width: 480 }} className="mx-auto rounded-[30px] overflow-hidden shadow-2xl bg-[#F4F7F9]">
 
       {/* ─ HEADER ─ */}
       <div className="text-white text-center relative" style={{ background: 'linear-gradient(180deg, #00AEEF 0%, #0081B1 100%)', padding: '36px 20px 56px' }}>

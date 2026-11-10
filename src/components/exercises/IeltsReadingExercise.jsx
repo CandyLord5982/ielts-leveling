@@ -379,7 +379,7 @@ const IeltsReadingExercise = () => {
             {passageHtml ? (
               <div
                 ref={passageRef}
-                className="text-gray-800 leading-relaxed text-base select-text cursor-text"
+                className="font-serif text-gray-800 leading-relaxed text-[1.0625rem] select-text cursor-text"
                 dangerouslySetInnerHTML={{ __html: passageHtml }}
               />
             ) : (

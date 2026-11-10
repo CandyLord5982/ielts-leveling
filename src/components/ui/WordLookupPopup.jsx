@@ -118,7 +118,18 @@ const WordLookupPopup = () => {
 
   const popupWidth = 320
   const left = Math.min(Math.max(8, x - popupWidth / 2), window.innerWidth - popupWidth - 8)
-  const top = Math.min(y + 16, window.innerHeight - 16)
+  // Open below the cursor unless there's more room above; anchor by `bottom`
+  // when flipped so the popup grows upward as content loads. Cap height to the
+  // space actually available so the save button is always reachable.
+  const gap = 16
+  const margin = 8
+  const spaceBelow = window.innerHeight - y - gap - margin
+  const spaceAbove = y - gap - margin
+  const placeBelow = spaceBelow >= 320 || spaceBelow >= spaceAbove
+  const maxHeight = Math.min(window.innerHeight * 0.6, placeBelow ? spaceBelow : spaceAbove)
+  const vertical = placeBelow
+    ? { top: y + gap }
+    : { bottom: window.innerHeight - y + gap }
 
   const phoneticText = entry?.phonetic
 
@@ -126,7 +137,7 @@ const WordLookupPopup = () => {
     <div
       ref={popupRef}
       className="fixed z-[9999] bg-white rounded-xl border border-gray-200 shadow-xl p-4 text-sm"
-      style={{ left, top, width: popupWidth, maxHeight: '60vh', overflowY: 'auto' }}
+      style={{ left, ...vertical, width: popupWidth, maxHeight, overflowY: 'auto' }}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">

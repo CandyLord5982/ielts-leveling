@@ -269,11 +269,8 @@
       pointer-events: none;
     }
     
-    /* Apply text outline only on desktop - with proper color */
     .question-text,
     .question-text * {
-      -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.3);
-      text-stroke: 0.5px rgba(0, 0, 0, 0.3);
       background: transparent;
       color: #1f2937;
     }

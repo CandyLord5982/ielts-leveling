@@ -900,11 +900,11 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                       <button
                         key={optionIndex}
                         onClick={() => handleAllAtOnceAnswerSelect(questionIndex, optionIndex)}
-                        className="w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium"
+                        className="w-full border-none rounded-lg transition-all duration-100 text-base md:text-lg font-normal"
                         style={{ padding: 0, borderRadius: '0.75em', backgroundColor: shadowColor }}
                       >
                         <div
-                          className={`w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium ${isSelected
+                          className={`w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-base md:text-lg font-normal ${isSelected
                               ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-sm'
                               : 'bg-white border-gray-200 cursor-pointer hover:shadow-sm'
                             }`}
@@ -1082,7 +1082,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                     <div className={`space-y-3 md:space-y-0 ${splitLayout ? 'md:pt-4' : ''}`}>
                       <div className={`grid grid-cols-1 ${splitLayout ? '' : 'md:grid-cols-2'} gap-3 md:gap-4`}>
                         {currentQuestion.options.map((option, index) => {
-                          let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
+                          let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-base md:text-lg font-normal "
 
                           if (selectedAnswer === null) {
                             buttonClass += `bg-white border-gray-200 cursor-pointer hover:shadow-sm`
@@ -1119,7 +1119,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                               // aria-disabled instead of disabled: browsers block text selection inside
                               // disabled buttons, which breaks the double-click dictionary lookup.
                               aria-disabled={selectedAnswer !== null}
-                              className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium ${selectedAnswer !== null ? 'cursor-default select-text' : ''}`}
+                              className={`w-full border-none rounded-lg transition-all duration-100 text-base md:text-lg font-normal ${selectedAnswer !== null ? 'cursor-default select-text' : ''}`}
                               style={{
                                 padding: 0,
                                 borderRadius: '0.75em',
@@ -1313,7 +1313,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                             const isSelected = allAnswers[questionIndex] === optionIndex
                             const isCorrect = optionIndex === question.correct_answer
 
-                            let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-sm md:text-base font-medium "
+                            let buttonClass = "w-full p-3 md:p-4 text-left border-2 rounded-lg transition-all duration-200 text-base md:text-lg font-normal "
 
                             if (showAllResults) {
                               if (isSelected && isCorrect) {
@@ -1358,7 +1358,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
                                 key={optionIndex}
                                 onClick={() => handleAllAtOnceAnswerSelect(questionIndex, optionIndex)}
                                 aria-disabled={showAllResults}
-                                className={`w-full border-none rounded-lg transition-all duration-100 text-sm md:text-base font-medium ${showAllResults ? 'cursor-default select-text' : ''}`}
+                                className={`w-full border-none rounded-lg transition-all duration-100 text-base md:text-lg font-normal ${showAllResults ? 'cursor-default select-text' : ''}`}
                                 style={{
                                   padding: 0,
                                   borderRadius: '0.75em',

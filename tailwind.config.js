@@ -33,7 +33,8 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['nunito', 'system-ui', 'sans-serif'],
+        sans: ['"Segoe UI"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        serif: ['"Source Serif 4"', 'Georgia', 'serif'],
       },
       keyframes: {
         shimmer: {

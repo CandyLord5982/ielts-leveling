@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, ChevronLeft, ChevronRight, Radio, Eye, LayoutDashboard } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, Radio, Eye, LayoutDashboard, Minimize2 } from 'lucide-react'
 import { supabase } from '../../supabase/client'
 import { QuestionContent } from '../livebattle/QuestionModal'
 import { TEAMS, teamName, optionLetter } from './onlineBattleShared'
@@ -9,11 +9,18 @@ import { TEAMS, teamName, optionLetter } from './onlineBattleShared'
 //
 // A team earns points_max x (members who answered correctly / members in the room),
 // so a bigger team has no advantage and everyone needs to answer.
+//
+// Hide (`hidden` / `onHide`): tucks this window away on the teacher's screen only, keeping
+// the exercise, the question number and the settings. It stays mounted while hidden, so an
+// open question keeps counting answers; the students' screens don't change.
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60, 90]
 const POINT_OPTIONS = [5, 10, 20, 50]
 
-const OnlineQuestionModal = ({ exercise, room, participants, answeredTick, saveRoom, awardPoints, onClose }) => {
+const OnlineQuestionModal = ({
+  exercise, room, participants, answeredTick, saveRoom, awardPoints, onClose,
+  hidden = false, onHide, onStatus,
+}) => {
   const questions = exercise?.content?.questions || []
   const roomId = room.id
   const [index, setIndex] = useState(0)
@@ -55,9 +62,15 @@ const OnlineQuestionModal = ({ exercise, room, participants, answeredTick, saveR
     if (!isOpen) return
     const questionId = live.id
     const tick = setInterval(() => setNowMs(Date.now()), 250)
-    const poll = setInterval(() => { loadAnswers(questionId).catch(() => {}) }, 2000)
+    // Backup only: each student's 'answered' ping already triggers a reload
+    const poll = setInterval(() => { loadAnswers(questionId).catch(() => {}) }, 5000)
     return () => { clearInterval(tick); clearInterval(poll) }
   }, [isOpen, live?.id, loadAnswers])
+
+  // Lets the teacher page label its "Resume" button (question number, still open?)
+  useEffect(() => {
+    onStatus?.({ index, total: questions.length, isOpen })
+  }, [index, questions.length, isOpen, onStatus])
 
   const remaining = isOpen
     ? Math.max(0, Math.ceil((new Date(live.closes_at).getTime() - (nowMs + serverOffsetRef.current)) / 1000))
@@ -191,7 +204,8 @@ const OnlineQuestionModal = ({ exercise, room, participants, answeredTick, saveR
   const optionCounts = (q?.options || []).map((_, i) => answers.filter(a => a.selected_option === i).length)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    // z-[57]: above the slides (z-50) and their drawing toolbar, below the chat (z-60)
+    <div className={`fixed inset-0 z-[57] items-center justify-center bg-black/40 ${hidden ? 'hidden' : 'flex'}`}>
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col w-[90%] max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50 rounded-t-2xl">
@@ -202,9 +216,21 @@ const OnlineQuestionModal = ({ exercise, room, participants, answeredTick, saveR
               {index + 1} / {questions.length}
             </span>
           </div>
-          <button onClick={handleClose} className="p-1.5 hover:bg-gray-200 rounded-lg flex-shrink-0" title="Close">
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {onHide && (
+              <button
+                onClick={onHide}
+                className="flex items-center gap-1 px-2.5 py-1.5 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-600"
+                title="Hide this window and keep your place. Students' screens don't change."
+              >
+                <Minimize2 className="w-4 h-4" />
+                Hide
+              </button>
+            )}
+            <button onClick={handleClose} className="p-1.5 hover:bg-gray-200 rounded-lg" title="Close (pick an exercise again next time)">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
         </div>
 
         {/* Question */}

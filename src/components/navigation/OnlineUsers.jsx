@@ -102,8 +102,14 @@ const OnlineUsers = ({ onCollapsedChange }) => {
       }
     }
     fetchUsers()
-    const interval = setInterval(fetchUsers, 60000)
-    return () => clearInterval(interval)
+    // Every request is logged by Supabase, so skip it while the tab is in the background
+    const refreshIfVisible = () => { if (document.visibilityState === 'visible') fetchUsers() }
+    const interval = setInterval(refreshIfVisible, 60000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [])
 
   useEffect(() => {
@@ -129,8 +135,14 @@ const OnlineUsers = ({ onCollapsedChange }) => {
       }
     }
     fetchPending()
-    const interval = setInterval(fetchPending, 30000)
-    return () => clearInterval(interval)
+    // Slow and only while the tab is on screen (every request is logged by Supabase)
+    const refreshIfVisible = () => { if (document.visibilityState === 'visible') fetchPending() }
+    const interval = setInterval(refreshIfVisible, 120000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [user?.id])
 
   const sidebarWidth = collapsed ? 'w-[60px]' : 'w-56'

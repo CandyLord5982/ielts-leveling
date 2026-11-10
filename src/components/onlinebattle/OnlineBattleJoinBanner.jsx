@@ -6,8 +6,10 @@ import { useAuth } from '../../hooks/useAuth'
 
 // Shown to students on a course page: a floating "Join" bar that appears while the
 // teacher has an Online Battle room open for that course.
-
-const CHECK_MS = 10000
+//
+// No repeating check (each one is a logged API request for every student on a course
+// page): it looks once when the page opens and again when the tab comes back into view.
+// Students who were already on the page when the room opened just reload.
 
 const OnlineBattleJoinBanner = ({ courseId }) => {
   const navigate = useNavigate()
@@ -33,11 +35,9 @@ const OnlineBattleJoinBanner = ({ courseId }) => {
     }
 
     check()
-    const timer = setInterval(check, CHECK_MS)
     document.addEventListener('visibilitychange', check)
     return () => {
       stopped = true
-      clearInterval(timer)
       document.removeEventListener('visibilitychange', check)
     }
   }, [isStudent, courseId])

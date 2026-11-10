@@ -282,8 +282,14 @@ const Dashboard = () => {
       }
     }
     fetchUsers()
-    const interval = setInterval(fetchUsers, 60000)
-    return () => clearInterval(interval)
+    // Every request is logged by Supabase, so skip it while the tab is in the background
+    const refreshIfVisible = () => { if (document.visibilityState === 'visible') fetchUsers() }
+    const interval = setInterval(refreshIfVisible, 60000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [])
 
   // Fetch pending PvP challenges
@@ -310,11 +316,18 @@ const Dashboard = () => {
       }
     }
     fetchPending()
-    const interval = setInterval(fetchPending, 30000)
-    return () => clearInterval(interval)
+    // Slow and only while the tab is on screen (every request is logged by Supabase)
+    const refreshIfVisible = () => { if (document.visibilityState === 'visible') fetchPending() }
+    const interval = setInterval(refreshIfVisible, 120000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [profile?.id])
 
-  // Fetch courses data
+  // Fetch courses data. Only when the user or role changes, not on every profile update
+  // (XP, gems, equipment...), which used to re-run all of these requests.
   useEffect(() => {
     if (profile) {
       fetchCourses()
@@ -325,7 +338,7 @@ const Dashboard = () => {
         setRecent(getRecentExercise())
       }
     }
-  }, [profile])
+  }, [profile?.id, profile?.role]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCourses = async () => {
     try {

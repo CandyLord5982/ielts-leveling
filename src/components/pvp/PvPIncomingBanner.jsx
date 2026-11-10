@@ -190,6 +190,14 @@ const TauntDisplay = ({ tauntJson }) => {
   }
 };
 
+// Challenges aren't urgent, so the server is asked on a fixed 15-minute schedule only:
+// not on tab switches, not when coming back from a course page (this banner is hidden
+// inside courses, so it remounts), not on dismiss. The last answer is kept here, outside
+// the component, so a remount shows it right away. New challenges / results / taunts
+// still arrive instantly through the realtime channel.
+const PVP_REFRESH_MS = 15 * 60 * 1000;
+const pvpCache = { userId: null, at: 0, challenges: [], results: [] };
+
 const PvPIncomingBanner = () => {
   const { user, profile } = useAuth();
   const [challenges, setChallenges] = useState([]);
@@ -256,8 +264,10 @@ const PvPIncomingBanner = () => {
         .order("created_at", { ascending: false })
         .limit(2);
 
+      // Dismissed ones are hidden when drawing (visibleChallenges)
       if (!error && data) {
-        setChallenges(data.filter((c) => !dismissed.has(c.id)));
+        pvpCache.challenges = data;
+        setChallenges(data);
       }
     };
 
@@ -317,17 +327,36 @@ const PvPIncomingBanner = () => {
         .order("created_at", { ascending: false })
         .limit(2);
 
+      // Dismissed ones are hidden when drawing (visibleResults)
       if (!error && data) {
-        setResults(data.filter((r) => !dismissedResults.has(r.id)));
+        pvpCache.results = data;
+        setResults(data);
       }
     };
 
-    fetchChallenges();
-    fetchResults();
-    const interval = setInterval(() => {
+    const refresh = () => {
+      pvpCache.userId = user.id;
+      pvpCache.at = Date.now();
       fetchChallenges();
       fetchResults();
-    }, 30000);
+    };
+
+    // Show what we already have; only ask now if the last answer is 2+ minutes old
+    if (pvpCache.userId === user.id) {
+      setChallenges(pvpCache.challenges);
+      setResults(pvpCache.results);
+    } else {
+      pvpCache.challenges = [];
+      pvpCache.results = [];
+    }
+    if (pvpCache.userId !== user.id || Date.now() - pvpCache.at >= PVP_REFRESH_MS) refresh();
+
+    // Fixed schedule. A hidden tab skips its turn (it would only be logged for nothing);
+    // the next turn after it's visible again catches up.
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - pvpCache.at >= PVP_REFRESH_MS) refresh();
+    }, 15000);
 
     const channel = supabase
       .channel("pvp-challenges")
@@ -405,7 +434,7 @@ const PvPIncomingBanner = () => {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [user?.id, dismissed, dismissedResults]);
+  }, [user?.id]); // not the dismissed lists: dismissing must not restart this (or ask the server)
 
   const handleAccept = (challenge) => {
     setAcceptedChallenge(challenge);

@@ -7,7 +7,9 @@ import { teamName, optionLetter } from './onlineBattleShared'
 // left, options on the right (stacked on phones). The first tap is the final answer;
 // it is graded on the server and the correct answer only arrives after the reveal.
 
-const OnlineQuestionView = ({ question, room, myTeam, serverOffsetMs, onAnswered, onRefresh, onClose, claimButton, powerUps }) => {
+// `overSlides`: the teacher's slides are open underneath, so sit above them (z-[57]) with a
+// lighter backdrop that lets the slide show through, dimmed.
+const OnlineQuestionView = ({ question, room, myTeam, serverOffsetMs, onAnswered, onRefresh, onClose, claimButton, powerUps, overSlides = false }) => {
   const [picked, setPicked] = useState(null) // { questionId, option } - shown before the server confirms
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState(null) // { questionId, text }
@@ -110,7 +112,7 @@ const OnlineQuestionView = ({ question, room, myTeam, serverOffsetMs, onAnswered
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-indigo-950/90 overflow-y-auto p-3">
+    <div className={`fixed inset-0 flex items-start sm:items-center justify-center overflow-y-auto p-3 ${overSlides ? 'z-[57] bg-black/50' : 'z-50 bg-indigo-950/90'}`}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1600px] my-auto overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-gray-900 text-white">
           <div className="flex items-center gap-2 min-w-0">

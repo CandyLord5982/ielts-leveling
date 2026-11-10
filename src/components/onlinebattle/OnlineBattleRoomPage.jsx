@@ -11,13 +11,14 @@ import ClaimPointButton from './ClaimPointButton'
 import PowerUpButton from './PowerUpButton'
 import OnlineBattleActivity from './OnlineBattleActivity'
 import OnlineBattleChat from './OnlineBattleChat'
+import OnlineBattleSlides from './OnlineBattleSlides'
 import { onlineBattleChannelName, createParticipantEnricher, teamName } from './onlineBattleShared'
 
 // Student's view of an Online Battle room. Opening this page joins the room. The screen
 // then follows the teacher: the dashboard with both teams by default, a live question
 // when the teacher shows one, and the result once the battle ends.
 
-const POLL_MS = 4000 // backup in case a realtime ping is missed
+const POLL_MS = 15000 // backup only, in case a realtime ping is missed (every request is logged)
 
 const JOIN_ERRORS = {
   not_found: 'This battle room does not exist.',
@@ -57,6 +58,7 @@ const OnlineBattleRoomPage = () => {
   const enrich = useMemo(() => createParticipantEnricher(), [])
   const serverOffsetRef = useRef(0) // server clock minus this device's clock
   const channelRef = useRef(null)
+  const inkHandlerRef = useRef(null) // set by SlideInk while slides are on screen
   const lastCourseIdRef = useRef(null)
 
   const refresh = useCallback(async () => {
@@ -114,6 +116,8 @@ const OnlineBattleRoomPage = () => {
       .on('broadcast', { event: 'claimed' }, () => { refresh() })
       // A chat message was sent (or deleted)
       .on('broadcast', { event: 'chat' }, () => { setChatTick(t => t + 1) })
+      // The teacher drew on the slides / moved the laser pointer
+      .on('broadcast', { event: 'ink' }, ({ payload }) => { inkHandlerRef.current?.(payload) })
       .subscribe((subscription) => {
         // Let the teacher's page show this student right away
         if (subscription === 'SUBSCRIBED') channel.send({ type: 'broadcast', event: 'joined', payload: {} })
@@ -172,6 +176,9 @@ const OnlineBattleRoomPage = () => {
   const isFinished = room.status === 'finished'
   const winner = room.winner_team
   const showQuestion = !isFinished && question && question.id !== dismissedQuestionId
+  // The teacher's slides fill the screen (unless paused). A live question opens on top of
+  // them, with the slide dimmed behind it, like on the teacher's screen.
+  const showSlides = !isFinished && !!room.slide_url && !room.slide_paused
   const isActive = room.status === 'active'
   const renderClaimButton = (inHeader) => (isActive ? (
     <ClaimPointButton
@@ -273,7 +280,20 @@ const OnlineBattleRoomPage = () => {
       </div>
 
       {/* A live question always takes over the screen; the review comes back after it */}
-      {showReview && !showQuestion && (
+      {showSlides && (
+        <OnlineBattleSlides
+          url={room.slide_url}
+          page={room.slide_page || 1}
+          ink={{ roomId: room.id, inkHandlerRef }}
+          header={(
+            <span className="ml-2 flex items-center gap-1.5 text-xs font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-red-500">{teamName(room, 'a')} {room.team_a_score}</span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-500">{teamName(room, 'b')} {room.team_b_score}</span>
+            </span>
+          )}
+        />
+      )}
+      {showReview && !showQuestion && !showSlides && (
         <OnlineBattleReview
           questions={Object.values(seenQuestions).sort((x, y) => new Date(x.opened_at) - new Date(y.opened_at))}
           onClose={() => setShowReview(false)}
@@ -290,6 +310,7 @@ const OnlineBattleRoomPage = () => {
           onClose={() => setDismissedQuestionId(question.id)}
           claimButton={renderClaimButton(false)}
           powerUps={renderPowerUps()}
+          overSlides={showSlides}
         />
       )}
       <OnlineBattleChat

@@ -10,7 +10,7 @@ import { supabase } from '../../supabase/client'
 // Rules (who sees what, who may post) are enforced by online_battle_send_message /
 // online_battle_messages in the database; this component only displays.
 
-const POLL_MS = 8000 // backup in case a realtime 'chat' ping is missed
+const POLL_MS = 30000 // backup only, in case a realtime 'chat' ping is missed (every request is logged)
 
 const SEND_ERRORS = {
   empty: 'Type a message first.',

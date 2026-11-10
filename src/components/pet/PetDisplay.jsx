@@ -310,9 +310,11 @@ const PetDisplay = () => {
     checkTrainingSchedule()
   }, [])
 
-  // Poll PvP matchmaking waiting count
+  // Poll PvP matchmaking waiting count (slowly, and only while the tab is on screen:
+  // every check is a logged API request)
   useEffect(() => {
     const fetchWaitingCount = async () => {
+      if (document.visibilityState !== 'visible') return
       const { count } = await supabase.from('pvp_matchmaking')
         .select('id', { count: 'exact', head: true })
         .eq('game_type', 'wordtype')
@@ -320,8 +322,12 @@ const PetDisplay = () => {
       setPvpWaitingCount(count || 0)
     }
     fetchWaitingCount()
-    const interval = setInterval(fetchWaitingCount, 10000)
-    return () => clearInterval(interval)
+    const interval = setInterval(fetchWaitingCount, 30000)
+    document.addEventListener('visibilitychange', fetchWaitingCount)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', fetchWaitingCount)
+    }
   }, [])
 
   // Scroll chat to bottom when new messages arrive (only inside chat container)

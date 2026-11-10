@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Play, Square, Shuffle, Radio, Download, Users } from 'lucide-react'
+import { ArrowLeft, Play, Square, Shuffle, Radio, Download, Users, Presentation, X } from 'lucide-react'
 import { supabase } from '../../supabase/client'
 import { assetUrl } from '../../hooks/useBranding'
 import { useAuth } from '../../hooks/useAuth'
@@ -9,6 +9,8 @@ import OnlineBattleBoard from './OnlineBattleBoard'
 import OnlineQuestionModal from './OnlineQuestionModal'
 import OnlineBattleActivity from './OnlineBattleActivity'
 import OnlineBattleChat from './OnlineBattleChat'
+import OnlineBattleSlides from './OnlineBattleSlides'
+import SlidePickerModal from './SlidePickerModal'
 import {
   onlineBattleChannelName, createParticipantEnricher, downloadAnswersCsv, teamName,
 } from './onlineBattleShared'
@@ -35,14 +37,21 @@ const OnlineBattleTeacherPage = () => {
   const [notice, setNotice] = useState('')
   const [showPicker, setShowPicker] = useState(false)
   const [liveExercise, setLiveExercise] = useState(null)
+  const [questionHidden, setQuestionHidden] = useState(false) // question window tucked away
+  const [questionStatus, setQuestionStatus] = useState(null) // { index, total, isOpen }
   const [answeredTick, setAnsweredTick] = useState(0)
   const [chatTick, setChatTick] = useState(0)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [ending, setEnding] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [showSlidePicker, setShowSlidePicker] = useState(false)
 
   const enrich = useMemo(() => createParticipantEnricher(), [])
   const channelRef = useRef(null)
+  // Slide drawing / laser go to the students over the room channel ('ink' event)
+  const sendInk = useCallback((payload) => {
+    channelRef.current?.send({ type: 'broadcast', event: 'ink', payload })
+  }, [])
   const initKeyRef = useRef(null)
 
   const roomId = room?.id || null
@@ -192,12 +201,15 @@ const OnlineBattleTeacherPage = () => {
     }
   }, [roomId, loadParticipants, loadEvents, refreshScores])
 
+  // Backup polling (realtime pings do the real work). Slow, and paused in a background tab,
+  // because every request is logged by Supabase.
   useEffect(() => {
     if (!roomId || status === 'finished') return
     const poll = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       loadParticipants()
       if (status === 'active') refreshScores()
-    }, 4000)
+    }, 10000)
     return () => clearInterval(poll)
   }, [roomId, status, loadParticipants, refreshScores])
 
@@ -297,6 +309,14 @@ const OnlineBattleTeacherPage = () => {
     }
   }
 
+  // ----- Slides -----
+  // Picked (or freshly uploaded) in SlidePickerModal. Saving slide_url switches every
+  // student's screen to it.
+  const showSlides = (url) => {
+    setShowSlidePicker(false)
+    saveRoomSafe({ slide_url: url, slide_page: 1, slide_paused: false })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -363,13 +383,54 @@ const OnlineBattleTeacherPage = () => {
                 </button>
               </>
             )}
-            {isActive && (
+            {!isFinished && room.slide_url && room.slide_paused && (
+              <span className="flex items-center rounded-lg overflow-hidden">
+                <button
+                  onClick={() => saveRoomSafe({ slide_paused: false })}
+                  className="flex items-center gap-1 px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-sm font-bold transition-colors"
+                  title="Show the paused slides again, on the same page"
+                >
+                  <Play className="w-3 h-3" />
+                  Resume Slides (p. {room.slide_page || 1})
+                </button>
+                <button
+                  onClick={() => saveRoomSafe({ slide_url: null, slide_page: 1, slide_paused: false })}
+                  className="px-2 py-1.5 bg-amber-600 hover:bg-red-600 text-white transition-colors"
+                  title="Stop showing these slides"
+                  aria-label="Stop showing slides"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {!isFinished && (
+              <button
+                onClick={() => setShowSlidePicker(true)}
+                className="flex items-center gap-1 px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-white rounded-lg text-sm font-bold transition-colors"
+                title="Pick or upload a PDF and show it on every student's screen"
+              >
+                <Presentation className="w-3 h-3" />
+                Show Slides
+              </button>
+            )}
+            {isActive && !liveExercise && (
               <button
                 onClick={() => setShowPicker(true)}
                 className="flex items-center gap-1 px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-bold transition-colors"
               >
                 <Radio className="w-3 h-3" />
                 Live Question
+              </button>
+            )}
+            {isActive && liveExercise && questionHidden && (
+              <button
+                onClick={() => setQuestionHidden(false)}
+                className={`flex items-center gap-1 px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-bold transition-colors ${questionStatus?.isOpen ? 'animate-pulse' : ''}`}
+                title={`Back to ${liveExercise.title}`}
+              >
+                <Radio className="w-3 h-3" />
+                {questionStatus?.isOpen ? 'Question live · ' : 'Resume Questions · '}
+                {questionStatus ? `${questionStatus.index + 1}/${questionStatus.total}` : ''}
               </button>
             )}
             {(isActive || isFinished) && (
@@ -468,6 +529,7 @@ const OnlineBattleTeacherPage = () => {
               return
             }
             setLiveExercise(ex)
+            setQuestionHidden(false)
             setShowPicker(false)
           }}
           onClose={() => setShowPicker(false)}
@@ -481,7 +543,42 @@ const OnlineBattleTeacherPage = () => {
           answeredTick={answeredTick}
           saveRoom={saveRoom}
           awardPoints={awardPoints}
-          onClose={() => setLiveExercise(null)}
+          onClose={() => { setLiveExercise(null); setQuestionHidden(false); setQuestionStatus(null) }}
+          hidden={questionHidden}
+          onHide={() => setQuestionHidden(true)}
+          onStatus={setQuestionStatus}
+        />
+      )}
+      {showSlidePicker && (
+        <SlidePickerModal
+          userId={userId}
+          currentUrl={room.slide_url}
+          onPick={showSlides}
+          onClose={() => setShowSlidePicker(false)}
+        />
+      )}
+      {/* The question window opens on top of the slides; the exercise picker needs them out of the way */}
+      {room.slide_url && !room.slide_paused && !isFinished && !showPicker && (
+        <OnlineBattleSlides
+          url={room.slide_url}
+          page={room.slide_page || 1}
+          onPageChange={(p) => saveRoomSafe({ slide_page: p })}
+          keyboard={!(liveExercise && !questionHidden)} // arrow keys don't flip slides behind the question window
+          ink={{ roomId, sendInk }}
+          header={isActive && (
+            <button
+              onClick={() => { if (liveExercise) setQuestionHidden(false); else setShowPicker(true) }}
+              className={`ml-2 flex items-center gap-1 px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-bold ${questionStatus?.isOpen ? 'animate-pulse' : ''}`}
+              title="Open the question window. Students keep seeing the slides until you press Go Live."
+            >
+              <Radio className="w-3 h-3" />
+              {!liveExercise ? 'Live Question'
+                : questionStatus?.isOpen ? `Question live · ${questionStatus.index + 1}/${questionStatus.total}`
+                  : `Questions · ${(questionStatus?.index ?? 0) + 1}/${questionStatus?.total ?? ''}`}
+            </button>
+          )}
+          onPause={() => saveRoomSafe({ slide_paused: true })}
+          onClose={() => saveRoomSafe({ slide_url: null, slide_page: 1, slide_paused: false })}
         />
       )}
       <OnlineBattleChat

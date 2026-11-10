@@ -156,22 +156,25 @@ const ExerciseBank = ({ readOnly = false, allowedTypes = null }) => {
   useEffect(() => {
     if (!foldersLoaded || !dataReady || !scope.canAccess) return
     let cancelled = false
+    // One request for all counts: read just the folder_id of every bank exercise and count
+    // here (it used to be one request per folder, each logged by Supabase). Paged in 1000s,
+    // the most Supabase returns at once.
     const loadCounts = async () => {
       try {
-        let totalQuery = supabase.from('exercises').select('id', { count: 'exact', head: true }).eq('is_in_bank', true).eq('is_active', true)
-        if (scope.folderIds !== null) totalQuery = totalQuery.in('folder_id', scope.folderIds)
-        const { count, error } = await totalQuery
-        if (error) throw error
-        const counts = { all: count || 0 }
-        const countableFolders = scope.folders.filter(folder => scope.folderIds === null || scope.folderIds.includes(folder.id))
-        for (let i = 0; i < countableFolders.length && !cancelled; i += 5) {
-          const results = await Promise.all(countableFolders.slice(i, i + 5).map(async folder => {
-            const { count, error } = await supabase.from('exercises').select('id', { count: 'exact', head: true }).eq('is_in_bank', true).eq('is_active', true).eq('folder_id', folder.id)
-            if (error) throw error
-            return [folder.id, count || 0]
-          }))
-          Object.assign(counts, Object.fromEntries(results))
+        const folderIdsOfExercises = []
+        for (let from = 0; !cancelled; from += 1000) {
+          let query = supabase.from('exercises').select('folder_id').eq('is_in_bank', true).eq('is_active', true)
+          if (scope.folderIds !== null) query = query.in('folder_id', scope.folderIds)
+          const { data, error } = await query.order('id').range(from, from + 999)
+          if (error) throw error
+          ;(data || []).forEach(row => folderIdsOfExercises.push(row.folder_id))
+          if (!data || data.length < 1000) break
         }
+        const counts = { all: folderIdsOfExercises.length }
+        scope.folders
+          .filter(folder => scope.folderIds === null || scope.folderIds.includes(folder.id))
+          .forEach(folder => { counts[folder.id] = 0 })
+        folderIdsOfExercises.forEach(id => { if (id in counts) counts[id] += 1 })
         if (!cancelled) setFolderCounts(counts)
       } catch (error) {
         if (!cancelled) setLoadError(error.message || 'Could not load exercise counts.')

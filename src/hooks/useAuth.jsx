@@ -22,6 +22,10 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  // When the profile was last loaded, and for whom. supabase-js fires SIGNED_IN again every
+  // time the tab regains focus; refetching on each of those (plus the last_seen_at update)
+  // was a big share of the API requests Supabase logs.
+  const lastProfileLoadRef = useRef({ userId: null, at: 0 })
 
   useEffect(() => {
     // Events after which the profile row should be (re)loaded:
@@ -40,6 +44,7 @@ export const AuthProvider = ({ children }) => {
         console.log('🔐 Auth event:', event)
 
         if (!session?.user) {
+          lastProfileLoadRef.current = { userId: null, at: 0 } // next sign-in loads the profile
           setUser(null)
           setProfile(null)
           setLoading(false)
@@ -55,6 +60,14 @@ export const AuthProvider = ({ children }) => {
         }
 
         const userId = session.user.id
+        // A repeated SIGNED_IN for the same user (tab refocus) doesn't need a fresh profile
+        const last = lastProfileLoadRef.current
+        if (event === 'SIGNED_IN' && last.userId === userId && Date.now() - last.at < 10 * 60 * 1000) {
+          setLoading(false)
+          return
+        }
+        lastProfileLoadRef.current = { userId, at: Date.now() }
+
         setTimeout(async () => {
           try {
             await fetchUserProfile(userId)
@@ -103,8 +116,11 @@ export const AuthProvider = ({ children }) => {
         console.error('❌ Error details:', JSON.stringify(userResult.error))
         // Don't set profile to null - keep existing profile data
       } else {
-        // Frozen so it can't be edited in place from the devtools console.
-        setProfile(Object.freeze({ ...userResult.data, ...(equipResult.data || {}) }))
+        // Frozen so it can't be edited in place from the devtools console. Keep the old
+        // object when nothing changed, so pages that reload data when the profile changes
+        // (e.g. the dashboard) don't refetch everything for an identical profile.
+        const next = Object.freeze({ ...userResult.data, ...(equipResult.data || {}) })
+        setProfile(prev => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
       }
     } catch (error) {
       console.error('❌ Error in fetchUserProfile:', error)

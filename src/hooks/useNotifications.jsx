@@ -2,6 +2,35 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase/client'
 import { useAuth } from './useAuth'
 
+// Notifications are rare and not urgent, so the server is asked at most once an hour per tab
+// (and on a full page reload). Several components use this hook at once (sidebar, bell,
+// bottom bar...); they share one request and its result, and switching pages or tabs reuses
+// it instead of asking again. Marking read / deleting clears it.
+const NOTIFICATIONS_REFRESH_MS = 60 * 60 * 1000
+const SHARED_FRESH_MS = NOTIFICATIONS_REFRESH_MS
+const shared = { userId: null, at: 0, data: null, promise: null }
+
+const loadSharedNotifications = async (userId) => {
+  if (shared.userId === userId && shared.data && Date.now() - shared.at < SHARED_FRESH_MS) return shared.data
+  if (shared.userId === userId && shared.promise) return shared.promise
+  shared.userId = userId
+  const promise = supabase.rpc('get_notifications', { p_user_id: userId }).then(({ data, error }) => {
+    if (error) throw error
+    if (shared.promise === promise) {
+      shared.data = data || []
+      shared.at = Date.now()
+    }
+    return data || []
+  }).finally(() => {
+    if (shared.promise === promise) shared.promise = null
+  })
+  shared.promise = promise
+  return promise
+}
+
+// After marking read / deleting, the next load must ask the server again
+const forgetSharedNotifications = () => { shared.at = 0; shared.data = null }
+
 export const useNotifications = () => {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState([])
@@ -18,13 +47,7 @@ export const useNotifications = () => {
       // broadcast, and cohort-targeted notifications, resolves read status,
       // dedupes, filters mission_reward, and caps at 50 — replacing the
       // 3-4 round-trips this used to make every poll.
-      const { data, error } = await supabase.rpc('get_notifications', {
-        p_user_id: user.id,
-      })
-
-      if (error) throw error
-
-      const merged = data || []
+      const merged = await loadSharedNotifications(user.id)
       setNotifications(merged)
       setUnreadCount(merged.filter(n => !n.is_read).length)
     } catch (err) {
@@ -55,6 +78,7 @@ export const useNotifications = () => {
           .upsert({ notification_id: notificationId, user_id: user.id })
       }
 
+      forgetSharedNotifications()
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
       )
@@ -92,6 +116,7 @@ export const useNotifications = () => {
           .upsert(inserts)
       }
 
+      forgetSharedNotifications()
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
       setUnreadCount(0)
     } catch (err) {
@@ -116,6 +141,7 @@ export const useNotifications = () => {
         .single()
 
       if (error) throw error
+      forgetSharedNotifications()
       return data
     } catch (err) {
       console.error('Error creating announcement:', err)
@@ -150,6 +176,7 @@ export const useNotifications = () => {
         .eq('id', notificationId)
 
       if (error) throw error
+      forgetSharedNotifications()
       setNotifications(prev => prev.filter(n => n.id !== notificationId))
     } catch (err) {
       console.error('Error deleting notification:', err)
@@ -160,12 +187,9 @@ export const useNotifications = () => {
   useEffect(() => {
     if (!user) return
 
-    // Poll every 2 minutes, and only while the tab is actually visible.
-    // Idle/backgrounded tabs were firing 3-4 notification queries per minute
-    // each — a top source of PostgREST egress. Pausing on hidden tabs and
-    // halving the interval cuts that dramatically with no UX cost (we do an
-    // immediate catch-up fetch whenever the tab becomes visible again).
-    const POLL_MS = 120000
+    // Hourly, only while the tab is visible. The "catch-up" on becoming visible goes through
+    // the shared cache, so it only reaches the server once the last answer is an hour old.
+    const POLL_MS = NOTIFICATIONS_REFRESH_MS
 
     const startPolling = () => {
       if (pollInterval.current) clearInterval(pollInterval.current)

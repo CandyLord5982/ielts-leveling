@@ -98,8 +98,10 @@ const Layout = () => {
   // Exercises opened from a session (isSessionPage) are already uncapped.
   const isFullWidthPage =location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/multiple-choice') || location.pathname.startsWith('/study/listening-dictation')
 
-  const hideBottomNav = exercisePaths.some(p => location.pathname.startsWith(p)) || isSessionPage || isTestPage
-  const isLiveBattle = location.pathname.startsWith('/teacher/live-battle')
+  // Online Battle (teacher control page and student room) is laid out like Live Battle: full screen, no nav
+  const isOnlineBattle = location.pathname.startsWith('/teacher/online-battle') || location.pathname.startsWith('/online-battle')
+  const hideBottomNav = exercisePaths.some(p => location.pathname.startsWith(p)) || isSessionPage || isTestPage || isOnlineBattle
+  const isLiveBattle = location.pathname.startsWith('/teacher/live-battle') || isOnlineBattle
   const isStudyPage = location.pathname.startsWith('/study') || location.pathname.startsWith('/pets')
   const hideSidebar = exercisePaths.some(p => location.pathname.startsWith(p)) || isTestPage || isLiveBattle || isStudyPage
   const isInsideCourse = /\/study\/(course|level)\//.test(location.pathname) || exercisePaths.some(p => location.pathname.startsWith(p))

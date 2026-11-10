@@ -31,6 +31,8 @@ import { MissionsProvider } from './hooks/useMissions'
 import { REGISTER_PATH } from './config/registration'
 import MissionBoard from './components/missions/MissionBoard'
 import LiveBattlePage from './components/livebattle/LiveBattlePage'
+import OnlineBattleTeacherPage from './components/onlinebattle/OnlineBattleTeacherPage'
+import OnlineBattleRoomPage from './components/onlinebattle/OnlineBattleRoomPage'
 import UnitReportPage from './components/teacher/reports/UnitReportPage'
 import WeaknessAnalysis from './components/teacher/WeaknessAnalysis'
 import ReviewQueue from './components/review/ReviewQueue'
@@ -71,6 +73,7 @@ function App() {
                 {FEATURES.pets && <Route path="pets" element={<PetInventory />} />}
                 {FEATURES.missions && <Route path="missions" element={<MissionBoard />} />}
                 <Route path="profile/:userId" element={<Profile />} />
+                <Route path="online-battle/:roomId" element={<OnlineBattleRoomPage />} />
                 <Route path="admin/*" element={
                   <ProtectedRoute requireAdmin>
                     <AdminDashboard />
@@ -82,6 +85,7 @@ function App() {
                   <Route path="teacher/student-history/:courseId/:studentId" element={<StudentLessonHistory />} />
                   <Route path="teacher/exercise-bank" element={<TeacherExerciseBank />} />
                   <Route path="teacher/live-battle/:courseId" element={<LiveBattlePage />} />
+                  <Route path="teacher/online-battle/:courseId" element={<OnlineBattleTeacherPage />} />
                   <Route path="teacher/course-report/:courseId" element={<CourseReport />} />
                   <Route path="teacher/unit-report/:courseId" element={<UnitReportPage />} />
                   <Route path="teacher/weakness-analysis" element={<WeaknessAnalysis />} />

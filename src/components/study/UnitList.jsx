@@ -26,6 +26,7 @@ import {
   BarChart3,
   ClipboardList,
   Swords,
+  Radio,
   ChevronUp,
   ChevronDown,
   User,
@@ -43,6 +44,7 @@ import ClassWarBanner from "../classwar/ClassWarBanner";
 import ClassWarModal from "../classwar/ClassWarModal";
 import ClassWarSetupModal from "../classwar/ClassWarSetupModal";
 import { FEATURES } from "../../config/features";
+import OnlineBattleJoinBanner from "../onlinebattle/OnlineBattleJoinBanner";
 
 // Theme-based background images for unit cards
 const getThemeBackground = (colorTheme) => {
@@ -1155,6 +1157,8 @@ const UnitList = () => {
 
   return (
     <div className="flex bg-white -mx-4 -my-6">
+      {/* Students: floating Join bar while the teacher has an Online Battle room open */}
+      <OnlineBattleJoinBanner courseId={currentId} />
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Header */}
@@ -1210,6 +1214,15 @@ const UnitList = () => {
                 >
                   <Swords className="w-4 h-4" />
                   <span>Live Battle</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/teacher/online-battle/${currentId}`)}
+                  className="flex items-center space-x-2 bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
+                >
+                  <Radio className="w-4 h-4" />
+                  <span>Online Battle</span>
                 </Button>
                 {activeWar ? (
                   <Button

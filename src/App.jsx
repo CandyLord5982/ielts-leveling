@@ -17,7 +17,6 @@ import Progress from './components/progress/Progress'
 import Profile from './components/profile/Profile'
 import Shop from './components/shop/Shop'
 import Inventory from './components/inventory/Inventory'
-import PetInventory from './components/pet/PetInventory'
 import AdminDashboard from './components/admin/AdminDashboard'
 import TeacherDashboard from './components/teacher/TeacherDashboard'
 import TeacherExerciseBank from './components/teacher/TeacherExerciseBank'
@@ -70,7 +69,6 @@ function App() {
                 <Route path="profile" element={<Profile />} />
                 {FEATURES.shop && <Route path="shop" element={<Shop />} />}
                 {FEATURES.inventory && <Route path="inventory" element={<Inventory />} />}
-                {FEATURES.pets && <Route path="pets" element={<PetInventory />} />}
                 {FEATURES.missions && <Route path="missions" element={<MissionBoard />} />}
                 <Route path="profile/:userId" element={<Profile />} />
                 <Route path="online-battle/:roomId" element={<OnlineBattleRoomPage />} />

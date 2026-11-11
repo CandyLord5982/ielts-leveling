@@ -13,6 +13,8 @@ import {
   Send,
   X,
   Loader2,
+  Book,
+  Check,
 } from "lucide-react";
 import PetCatchGame from "./games/PetCatchGame";
 import PetFlappyGame from "./games/PetFlappyGame";
@@ -82,7 +84,11 @@ const PetDisplay = () => {
     rollWildAreaEncounter,
     pendingEncounter,
     clearEncounter,
+    userPets,
+    allPets,
   } = usePet();
+  const [showPetDex, setShowPetDex] = useState(false);
+  const dexOwnedIds = (userPets || []).map(up => up.pet?.id).filter(Boolean);
   const { inventory, fetchInventory } = useInventory();
   const { user, profile, isAdmin } = useAuth();
   const isStaff = () => isAdmin() || profile?.role === 'teacher';
@@ -1747,6 +1753,17 @@ const PetDisplay = () => {
               )}
             </div>
 
+            {/* Pet Dex Button - Above Wild Area */}
+            <div className="absolute bottom-52 left-2 z-10">
+              <button
+                onClick={() => setShowPetDex(true)}
+                className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 hover:from-blue-300 hover:to-indigo-500 shadow-lg hover:scale-110 transition-all flex items-center justify-center border-2 border-blue-300"
+                title="Pet Dex"
+              >
+                <Book className="w-6 h-6 text-white" />
+              </button>
+            </div>
+
             {/* Wild Area Button - Bottom Left */}
             <div className="absolute bottom-36 left-2 z-10">
               <button
@@ -2738,6 +2755,82 @@ const PetDisplay = () => {
           newStageName={evolutionOverlay.newStageName}
           onComplete={() => setEvolutionOverlay(null)}
         />
+      )}
+
+      {/* Pet Dex Modal - portaled to body to escape clipPath containing block */}
+      {showPetDex && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4" onClick={() => setShowPetDex(false)}>
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-blue-500 text-white p-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Book className="w-5 h-5" />
+                  Pet Dex
+                </h2>
+                <p className="text-blue-100 text-xs mt-0.5">
+                  {dexOwnedIds.length} / {allPets.length} discovered
+                </p>
+              </div>
+              <button onClick={() => setShowPetDex(false)} className="text-white hover:bg-white/20 rounded-full p-2 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-100px)]">
+              {['common', 'uncommon', 'rare', 'epic', 'legendary'].map(rarity => {
+                const petsOfRarity = allPets.filter(p => p.rarity === rarity)
+                if (petsOfRarity.length === 0) return null
+                return (
+                  <div key={rarity} className="mb-5">
+                    <h3 className="text-sm font-black mb-2 uppercase tracking-wider flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${getRarityColor(rarity)}`}>
+                        {getRarityStars(rarity)} {rarity}
+                      </span>
+                      <span className="text-[10px] font-normal text-gray-400">({petsOfRarity.length} pets)</span>
+                    </h3>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                      {petsOfRarity.map(pet => {
+                        const isOwned = dexOwnedIds.includes(pet.id)
+                        return (
+                          <div
+                            key={pet.id}
+                            className={`relative rounded-xl p-2 text-center transition-all border-2 ${
+                              isOwned ? 'border-green-400 bg-white' : 'border-gray-200 bg-gray-50'
+                            }`}
+                          >
+                            <div className="w-12 h-12 mx-auto mb-1 flex items-center justify-center">
+                              {pet.image_url ? (
+                                <img
+                                  src={pet.image_url}
+                                  alt={isOwned ? pet.name : '???'}
+                                  className="w-full h-full object-contain select-none pointer-events-none"
+                                  style={!isOwned ? { filter: 'brightness(0)' } : undefined}
+                                  onContextMenu={(e) => e.preventDefault()}
+                                  draggable="false"
+                                />
+                              ) : (
+                                <span className="text-2xl opacity-50">?</span>
+                              )}
+                            </div>
+                            <p className={`text-[10px] font-semibold truncate ${isOwned ? 'text-gray-800' : 'text-gray-400'}`}>
+                              {isOwned ? pet.name : '???'}
+                            </p>
+                            {isOwned && (
+                              <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-0.5">
+                                <Check className="w-2.5 h-2.5 text-white" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Wild Area Overlay - portaled to body to escape clipPath containing block */}

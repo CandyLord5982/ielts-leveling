@@ -106,7 +106,6 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
   const navItems = [
     { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: 'Trang chủ' },
     { path: '/leaderboard', imageSrc: assetUrl('/icon/navigation/leaderboard.svg'), label: 'Xếp hạng' },
-    FEATURES.pets && { path: '/pets', label: 'Thú cưng', imageSrc: assetUrl('/icon/navigation/pet.svg') },
     FEATURES.inventory && { path: '/inventory', imageSrc: assetUrl('/icon/navigation/inventory.svg'), label: 'Kho đồ', badge: newItemCount },
     FEATURES.missions && { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: 'Nhiệm vụ', badge: missionBadge },
     { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: 'Tiến độ' },

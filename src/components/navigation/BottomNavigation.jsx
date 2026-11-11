@@ -35,7 +35,6 @@ const BottomNavigation = ({ onOpenReport }) => {
 
   const mainItems = [
     { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: 'Home' },
-    { path: '/pets', imageSrc: assetUrl('/icon/navigation/pet.svg'), label: 'Pet' },
     { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: 'Missions', badge: missionBadge },
     { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: 'Progress' },
   ]

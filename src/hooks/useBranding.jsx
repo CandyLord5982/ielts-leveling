@@ -4,7 +4,7 @@ import { supabase } from '../supabase/client'
 const BRANDING_DEFAULTS = {
   branding_app_name: "IELTS Leveling",
   branding_description: "Web làm bài tập, gamification, sự kiện, thi đấu.",
-  branding_logo_url: "https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/image/Logo_Pinta.png",
+  branding_logo_url: "https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/branding/logo.png",
   branding_favicon_url: "https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/favicon.ico",
   branding_og_image_url: "https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/Asset%205.png",
   branding_base_asset_url: "https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets",

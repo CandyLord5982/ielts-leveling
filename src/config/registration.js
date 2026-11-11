@@ -3,7 +3,7 @@
 // Override per deployment with VITE_REGISTER_PATH once the secret leaks
 // (and it will leak — it only takes one teacher sharing their screen).
 
-const DEFAULT_REGISTER_PATH = '/dang-ky-pinta-x7k2'
+const DEFAULT_REGISTER_PATH = '/dang-ky-x7k2'
 
 const withLeadingSlash = (path) => (path.startsWith('/') ? path : `/${path}`)
 

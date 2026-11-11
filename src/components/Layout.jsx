@@ -96,13 +96,13 @@ const Layout = () => {
   // wrapper div below), so an exercise's own width classes can't exceed it. To let an exercise type
   // go wider, add its path here (e.g. '/study/multiple-choice'), then set the width in the exercise itself.
   // Exercises opened from a session (isSessionPage) are already uncapped.
-  const isFullWidthPage =location.pathname === '/teacher/exercise-bank' || location.pathname === '/pets' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/multiple-choice') || location.pathname.startsWith('/study/listening-dictation')
+  const isFullWidthPage =location.pathname === '/teacher/exercise-bank' || location.pathname.startsWith('/study/ielts-reading') || location.pathname.startsWith('/study/multiple-choice') || location.pathname.startsWith('/study/listening-dictation')
 
   // Online Battle (teacher control page and student room) is laid out like Live Battle: full screen, no nav
   const isOnlineBattle = location.pathname.startsWith('/teacher/online-battle') || location.pathname.startsWith('/online-battle')
   const hideBottomNav = exercisePaths.some(p => location.pathname.startsWith(p)) || isSessionPage || isTestPage || isOnlineBattle
   const isLiveBattle = location.pathname.startsWith('/teacher/live-battle') || isOnlineBattle
-  const isStudyPage = location.pathname.startsWith('/study') || location.pathname.startsWith('/pets')
+  const isStudyPage = location.pathname.startsWith('/study')
   const hideSidebar = exercisePaths.some(p => location.pathname.startsWith(p)) || isTestPage || isLiveBattle || isStudyPage
   const isInsideCourse = /\/study\/(course|level)\//.test(location.pathname) || exercisePaths.some(p => location.pathname.startsWith(p))
   const isCoursePage = /\/study\/(course|level)\/[^/]+$/.test(location.pathname)

@@ -1226,15 +1226,6 @@ const Profile = () => {
                   <span className="text-2xl">🐾</span>
                   <span>Pets ({allUserPets.length})</span>
                 </h3>
-                {isOwnProfile && (
-                  <button
-                    onClick={() => navigate('/pets')}
-                    className="flex items-center space-x-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                    style={{ clipPath: CLIP_BTN }}
-                  >
-                    <span>View All</span>
-                  </button>
-                )}
               </div>
               <div className="h-[2px] w-12 bg-gradient-to-r from-blue-400 to-transparent mt-1" />
             </div>

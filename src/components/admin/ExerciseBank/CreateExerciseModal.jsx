@@ -3,6 +3,7 @@ import PropTypes from 'prop-types'
 import { supabase } from '../../../supabase/client'
 import { BookOpen, Edit3, Mic, HelpCircle, Tag, Copy, Brain, ChevronDown, Image, FileText, Video, Plus, Headphones, Palette } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
+import TagPicker from './TagPicker'
 import FlashcardEditor from '../editors/FlashcardEditor'
 import MultipleChoiceEditor from '../editors/MultipleChoiceEditor'
 import FillBlankEditor from '../editors/FillBlankEditor'
@@ -300,25 +301,7 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
                 ))}
               </select>
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
-              <div className="flex flex-wrap gap-1">
-                {availableTags.map(tag => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleTag(tag)}
-                    className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                      formData.tags.includes(tag)
-                        ? 'bg-blue-100 border-blue-300 text-blue-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {formData.tags.includes(tag) && '✓ '}{tag}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <TagPicker availableTags={availableTags} selectedTags={formData.tags} onToggle={toggleTag} />
           </div>
 
           {/* Exercise Content Editors */}
@@ -429,7 +412,7 @@ const CreateExerciseModal = ({ folders, selectedFolder, onClose, onCreated, allo
             {formData.exercise_type === 'speaking_assessment' && (
               <SpeakingAssessmentEditor
                 questions={formData.content.questions || []}
-                level={formData.content.level || 'middle'}
+                level={formData.content.level || 'advanced'}
                 onQuestionsChange={(questions) => handleContentChange('questions', questions)}
                 onLevelChange={(level) => handleContentChange('level', level)}
                 folderPath={getFolderPath(formData.folder_id)}

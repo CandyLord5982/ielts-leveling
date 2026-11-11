@@ -7,16 +7,16 @@ import { supabase } from '../../supabase/client'
 import { saveRecentExercise } from '../../utils/recentExercise'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { RichTextWithAudio } from '../ui/RichTextRenderer'
-import { Mic, Square, ArrowRight, ArrowLeft, Star, RefreshCw, CheckCircle, XCircle, MessageSquare } from 'lucide-react'
+import { Mic, Square, ArrowRight, ArrowLeft, Star, RefreshCw, CheckCircle, MessageSquare } from 'lucide-react'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 
 const isMobileDevice = () =>
   /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
-// Send recorded audio blob to AssemblyAI via the /api/transcribe proxy
-const transcribeWithAssembly = async (audioBlob) => {
-  const response = await fetch('/api/transcribe', {
+// Send recorded audio blob to Groq Whisper via the /api/transcribe-whisper proxy
+const transcribeAudio = async (audioBlob) => {
+  const response = await fetch('/api/transcribe-whisper', {
     method: 'POST',
     headers: { 'Content-Type': audioBlob.type || 'audio/webm' },
     body: audioBlob,
@@ -72,6 +72,90 @@ export const LEVELS = [
 
 const getLevelConfig = (value) => LEVELS.find(l => l.value === value) || LEVELS[2]
 
+// Levels for IELTS speaking assessment. Unknown/old values fall back to Advanced.
+export const IELTS_LEVELS = [
+  {
+    value: 'beginner',
+    label: 'IELTS Beginner',
+    emoji: '🌱',
+    color: 'bg-green-100 text-green-700 border-green-200',
+    bandRange: 'Target band 3.5–5.0',
+    aiContext: `The student is an IELTS beginner (target band 3.5–5.0). Score honestly against the official IELTS band descriptors, but explain mistakes in simple, clear English. Focus feedback on the most basic errors first (tenses, word order, missing words, very limited vocabulary).`,
+  },
+  {
+    value: 'intermediate',
+    label: 'IELTS Intermediate',
+    emoji: '📘',
+    color: 'bg-blue-100 text-blue-700 border-blue-200',
+    bandRange: 'Target band 5.0–6.5',
+    aiContext: `The student is an IELTS intermediate learner (target band 5.0–6.5). Score against the official IELTS band descriptors. Point out grammar and word-choice errors, weak linking, and underdeveloped ideas, and show how to move up toward band 7.`,
+  },
+  {
+    value: 'advanced',
+    label: 'IELTS Advanced',
+    emoji: '🎓',
+    color: 'bg-purple-100 text-purple-700 border-purple-200',
+    bandRange: 'Target band 6.5–8.0+',
+    aiContext: `The student is an IELTS advanced learner (target band 6.5–8.0+). Score strictly like a real IELTS examiner. Point out even subtle errors, unnatural collocations, repetition, and lack of idiomatic or less common vocabulary needed for band 7–9.`,
+  },
+]
+
+export const DEFAULT_IELTS_LEVEL = 'advanced'
+
+export const getIeltsLevel = (value) =>
+  IELTS_LEVELS.find(l => l.value === value) || IELTS_LEVELS.find(l => l.value === DEFAULT_IELTS_LEVEL)
+
+// Rate an IELTS speaking answer and explain what's wrong / what to improve
+export const scoreIeltsSpeakingWithLLM = async (prompt, spokenText, level) => {
+  const levelConfig = getIeltsLevel(level)
+
+  const userPrompt = `Rate this IELTS speaking answer and give feedback on what's wrong and what to improve.
+
+Student level: ${levelConfig.label} (${levelConfig.bandRange})
+Guidance: ${levelConfig.aiContext}
+
+IELTS speaking question: "${prompt}"
+
+Student's answer (auto-transcribed from speech, so ignore punctuation and small transcription slips): "${spokenText}"
+
+Respond ONLY in valid JSON:
+{
+  "band_score": number from 0 to 9 in steps of 0.5 (estimated overall IELTS speaking band),
+  "overall_score": number 0-100 (band_score / 9 * 100, rounded),
+  "content_score": number 0-100 (task response: does it answer the question, are ideas developed),
+  "fluency_score": number 0-100 (Fluency & Coherence),
+  "vocabulary_score": number 0-100 (Lexical Resource),
+  "grammar_score": number 0-100 (Grammatical Range & Accuracy),
+  "strengths": "1-2 sentences on what the student did well",
+  "mistakes": "What's wrong: list the specific mistakes, quoting what the student said and giving the correction, e.g. \\"I go there yesterday\\" → \\"I went there yesterday\\". One per line, starting with '- '.",
+  "suggestions": "What to improve: 2-4 specific, actionable tips to reach a higher band. One per line, starting with '- '.",
+  "sample_improvement": "A short improved version of the student's answer (2-4 sentences) at about one band higher"
+}`
+
+  const response = await fetch('/api/pet-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [
+        { role: 'system', content: 'You are an experienced IELTS speaking examiner. You rate answers using the official IELTS band descriptors and give clear, specific feedback. Always respond in valid JSON.' },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: 1500,
+      temperature: 0.3,
+    }),
+  })
+
+  if (!response.ok) throw new Error('LLM request failed')
+  const data = await response.json()
+  const content = data.choices[0].message.content
+  const jsonMatch = content.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('No JSON in response')
+  const parsed = JSON.parse(jsonMatch[0])
+  if (parsed.overall_score === undefined && parsed.band_score === undefined) throw new Error('Invalid response shape')
+  if (parsed.overall_score === undefined) parsed.overall_score = Math.round((parsed.band_score / 9) * 100)
+  return parsed
+}
+
 // Call AI with level-aware scoring prompt (via Groq proxy)
 export const scoreSpeechWithLLM = async (prompt, spokenText, keyPoints, evaluationCriteria, level) => {
   const kp = keyPoints?.join(', ') || ''
@@ -123,68 +207,6 @@ Provide evaluation in JSON calibrated to the student's level:
   if (parsed.overall_score === undefined) throw new Error('Invalid response shape')
   return parsed
 }
-
-// Call AI to check a closed-ended answer against the teacher's accepted answers
-export const scoreClosedAnswerWithLLM = async (prompt, spokenText, expectedAnswers, level) => {
-  const levelConfig = getLevelConfig(level)
-  const accepted = (expectedAnswers || []).join(' | ')
-
-  const userPrompt = `You are checking a student's spoken answer to a closed-ended question (e.g. naming a picture).
-
-Student level: ${levelConfig.label} (${levelConfig.ageRange})
-Scoring guidance: ${levelConfig.aiContext}
-
-Question: "${prompt}"
-Accepted answers (any of these, or a close/equivalent variation, should count as correct): ${accepted}
-
-Student's spoken response (auto-transcribed, may contain transcription errors): "${spokenText}"
-
-Be LENIENT and student-friendly. Treat as correct when the student clearly says the right thing, including:
-- the answer with or without articles ("shirt", "a shirt", "it's a shirt")
-- full sentences vs single words
-- obvious synonyms or equivalent phrasings
-- minor transcription, spelling, or pronunciation slips
-
-Respond ONLY in valid JSON:
-{
-  "correct": true or false,
-  "overall_score": number 0-100 (100 = clearly correct; 40-70 if close but flawed; low if wrong),
-  "correct_answer": "the simplest accepted answer to show the student",
-  "feedback": "1-2 short, encouraging, age-appropriate sentences. Praise if correct; gently give the answer if not.",
-  "pronunciation_tip": "one short tip about pronunciation or phrasing, or an empty string"
-}`
-
-  const response = await fetch('/api/pet-chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: 'You check closed-ended spoken answers leniently and encourage young learners. Always respond in valid JSON.' },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 600,
-      temperature: 0.2,
-    }),
-  })
-
-  if (!response.ok) throw new Error('LLM request failed')
-  const data = await response.json()
-  const content = data.choices[0].message.content
-  const jsonMatch = content.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error('No JSON in response')
-  const parsed = JSON.parse(jsonMatch[0])
-  if (parsed.correct === undefined) throw new Error('Invalid response shape')
-  return { closed: true, ...parsed }
-}
-
-const closedFallbackResult = (msg = '') => ({
-  closed: true,
-  correct: false,
-  overall_score: 0,
-  correct_answer: '',
-  feedback: msg || 'AI analysis is temporarily unavailable. Please try again.',
-  pronunciation_tip: '',
-})
 
 const fallbackResult = (msg = '') => ({
   overall_score: 50,
@@ -454,7 +476,7 @@ const SpeakingAssessmentExercise = () => {
     return true
   }
 
-  // ── Mobile recording: MediaRecorder → AssemblyAI ──────────────────────────
+  // ── Mobile recording: MediaRecorder → Groq Whisper─────────────────────────
   const startMobileRecording = async () => {
     let stream
     try {
@@ -478,12 +500,12 @@ const SpeakingAssessmentExercise = () => {
       lastAudioBlobRef.current = blob
       setIsTranscribing(true)
       try {
-        const text = await transcribeWithAssembly(blob)
+        const text = await transcribeAudio(blob)
         setTranscription(text)
         if (text.trim()) analyzeWithAI(text.trim())
         else setError('No speech detected. Please try again.')
       } catch (err) {
-        console.error('AssemblyAI transcription error:', err)
+        console.error('Whisper transcription error:', err)
         setError('Transcription failed. Please try again.')
       } finally {
         setIsTranscribing(false)
@@ -536,17 +558,14 @@ const SpeakingAssessmentExercise = () => {
   const analyzeWithAI = async (spokenText) => {
     const q = questions[currentQuestionIndex]
     if (!spokenText || !q) return
-    const isClosed = q.answer_mode === 'closed' && (q.expected_answers?.length > 0)
     setIsAnalyzing(true)
     let aiScoreResult
     try {
-      aiScoreResult = isClosed
-        ? await scoreClosedAnswerWithLLM(q.prompt, spokenText, q.expected_answers, exercise?.content?.level)
-        : await scoreSpeechWithLLM(q.prompt, spokenText, q.key_points, q.evaluation_criteria, exercise?.content?.level)
+      aiScoreResult = await scoreIeltsSpeakingWithLLM(q.prompt, spokenText, exercise?.content?.level)
       setAiResult(aiScoreResult)
     } catch (err) {
       console.error('AI scoring error:', err)
-      aiScoreResult = isClosed ? closedFallbackResult() : fallbackResult()
+      aiScoreResult = fallbackResult()
       setAiResult(aiScoreResult)
     } finally {
       setIsAnalyzing(false)
@@ -625,9 +644,9 @@ const SpeakingAssessmentExercise = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">{exercise?.title || 'Speaking Assessment'}</h2>
-            {exercise?.content?.level && (() => { const lc = getLevelConfig(exercise.content.level); return (
+            {(() => { const lc = getIeltsLevel(exercise?.content?.level); return (
               <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium border ${lc.color}`}>
-                {lc.emoji} {lc.label} · {lc.ageRange}
+                {lc.emoji} {lc.label} · {lc.bandRange}
               </span>
             )})()}
           </div>
@@ -659,23 +678,6 @@ const SpeakingAssessmentExercise = () => {
                     <RichTextWithAudio content={q.prompt} allowImages={true} />
                   </div>
                   {q.instructions && <p className="text-sm text-gray-600 mb-2">{q.instructions}</p>}
-                  {q.answer_mode === 'closed' && q.expected_answers?.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-green-700 mb-1">Accepted answers:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {q.expected_answers.map((ans, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">{ans}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {q.answer_mode !== 'closed' && q.key_points?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {q.key_points.map((kp, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">{kp}</span>
-                      ))}
-                    </div>
-                  )}
                   {q.time_limit > 0 && <p className="text-xs text-gray-500 mt-2">Time limit: {q.time_limit}s</p>}
                 </div>
               </div>
@@ -709,7 +711,7 @@ const SpeakingAssessmentExercise = () => {
           <div className="bg-white rounded-lg shadow-sm p-4 md:p-5 border border-gray-200">
             <div className="flex items-center justify-between gap-2 mb-1">
               <p className="text-xs md:text-sm font-medium text-gray-500 truncate">{exercise?.title}</p>
-              {exercise?.content?.level && (() => { const lc = getLevelConfig(exercise.content.level); return (
+              {(() => { const lc = getIeltsLevel(exercise?.content?.level); return (
                 <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${lc.color}`}>
                   {lc.emoji} {lc.label}
                 </span>
@@ -785,9 +787,6 @@ const SpeakingAssessmentExercise = () => {
                   <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
                     Speaking Task {currentQuestionIndex + 1}
                   </span>
-                  {isMobile && (
-                    <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">AssemblyAI</span>
-                  )}
                 </div>
 
                 {/* Prompt */}
@@ -799,18 +798,6 @@ const SpeakingAssessmentExercise = () => {
                     <p className="text-sm text-gray-600 mt-2">{currentQuestion.instructions}</p>
                   )}
                 </div>
-
-                {/* Key points */}
-                {currentQuestion.key_points?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Points to cover:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {currentQuestion.key_points.map((kp, i) => (
-                        <span key={i} className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full">{kp}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Recording section */}
                 {!showResults && !isAnalyzing && !isTranscribing && (
@@ -860,7 +847,7 @@ const SpeakingAssessmentExercise = () => {
                   </div>
                 )}
 
-                {/* Transcribing (AssemblyAI) */}
+                {/* Transcribing (Groq Whisper) */}
                 {isTranscribing && (
                   <div className="flex flex-col items-center py-8 space-y-3">
                     <RefreshCw className="w-10 h-10 text-blue-500 animate-spin" />
@@ -876,65 +863,8 @@ const SpeakingAssessmentExercise = () => {
                   </div>
                 )}
 
-                {/* Closed-answer results */}
-                {showResults && aiResult && aiResult.closed && (
-                  <div className="space-y-4">
-                    {transcription && (
-                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                        <p className="text-xs font-semibold text-gray-500 mb-1">You said:</p>
-                        <p className="text-sm text-gray-800 italic">"{transcription}"</p>
-                      </div>
-                    )}
-
-                    <div className={`p-6 rounded-lg border text-center ${aiResult.correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                      <div className="flex justify-center mb-2">
-                        {aiResult.correct
-                          ? <CheckCircle className="w-14 h-14 text-green-500" />
-                          : <XCircle className="w-14 h-14 text-red-500" />}
-                      </div>
-                      <p className={`text-2xl font-bold ${aiResult.correct ? 'text-green-700' : 'text-red-700'}`}>
-                        {aiResult.correct ? 'Correct!' : 'Not quite'}
-                      </p>
-                      {aiResult.correct_answer && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Answer: <span className="font-semibold text-gray-800">{aiResult.correct_answer}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {aiResult.feedback && (
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm text-blue-700">{aiResult.feedback}</p>
-                      </div>
-                    )}
-                    {aiResult.pronunciation_tip && (
-                      <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                        <p className="text-sm font-semibold text-purple-800 mb-1">Pronunciation tip</p>
-                        <p className="text-sm text-purple-700">{aiResult.pronunciation_tip}</p>
-                      </div>
-                    )}
-
-                    <div className="flex gap-3 justify-between pt-2">
-                      <button
-                        onClick={() => { setTranscription(''); setAiResult(null); setShowResults(false); finalTranscriptRef.current = '' }}
-                        className="flex items-center gap-2 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-                      >
-                        <RefreshCw className="w-4 h-4" /> Try Again
-                      </button>
-                      <button
-                        onClick={handleNextQuestion}
-                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
-                      >
-                        {currentQuestionIndex < questions.length - 1
-                          ? <><span>Next</span><ArrowRight className="w-4 h-4" /></>
-                          : <span>Finish</span>}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Open-response results */}
-                {showResults && aiResult && !aiResult.closed && (
+                {/* Results */}
+                {showResults && aiResult && (
                   <div className="space-y-4">
                     {transcription && (
                       <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -958,8 +888,17 @@ const SpeakingAssessmentExercise = () => {
                           />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-3xl font-bold text-gray-900">{Math.round(aiResult.overall_score || 0)}</span>
-                          <span className="text-xs text-gray-500">Overall</span>
+                          {aiResult.band_score !== undefined ? (
+                            <>
+                              <span className="text-3xl font-bold text-gray-900">{Number(aiResult.band_score).toFixed(1)}</span>
+                              <span className="text-xs text-gray-500">IELTS band</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-3xl font-bold text-gray-900">{Math.round(aiResult.overall_score || 0)}</span>
+                              <span className="text-xs text-gray-500">Overall</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -967,10 +906,10 @@ const SpeakingAssessmentExercise = () => {
                     {/* Sub-scores */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {[
-                        { label: 'Content', score: aiResult.content_score },
-                        { label: 'Vocabulary', score: aiResult.vocabulary_score },
+                        { label: 'Task Response', score: aiResult.content_score },
+                        { label: 'Fluency & Coherence', score: aiResult.fluency_score },
+                        { label: 'Lexical Resource', score: aiResult.vocabulary_score },
                         { label: 'Grammar', score: aiResult.grammar_score },
-                        { label: 'Fluency', score: aiResult.fluency_score },
                       ].map(({ label, score }) => (
                         <div key={label} className={`p-3 rounded-lg border text-center ${getScoreBg(score || 0)}`}>
                           <div className={`text-xl font-bold ${getScoreColor(score || 0)}`}>{Math.round(score || 0)}</div>
@@ -985,15 +924,21 @@ const SpeakingAssessmentExercise = () => {
                         <p className="text-sm text-green-700">{aiResult.strengths}</p>
                       </div>
                     )}
+                    {aiResult.mistakes && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm font-semibold text-red-800 mb-1">{"What's wrong"}</p>
+                        <p className="text-sm text-red-700 whitespace-pre-line">{aiResult.mistakes}</p>
+                      </div>
+                    )}
                     {aiResult.suggestions && (
                       <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm font-semibold text-blue-800 mb-1">Suggestions</p>
-                        <p className="text-sm text-blue-700">{aiResult.suggestions}</p>
+                        <p className="text-sm font-semibold text-blue-800 mb-1">What to improve</p>
+                        <p className="text-sm text-blue-700 whitespace-pre-line">{aiResult.suggestions}</p>
                       </div>
                     )}
                     {aiResult.sample_improvement && (
                       <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                        <p className="text-sm font-semibold text-purple-800 mb-1">Example improvement</p>
+                        <p className="text-sm font-semibold text-purple-800 mb-1">Improved answer</p>
                         <p className="text-sm text-purple-700 italic">"{aiResult.sample_improvement}"</p>
                       </div>
                     )}

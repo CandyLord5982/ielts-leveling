@@ -1,25 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, X, Image as ImageIcon, Music, Upload } from 'lucide-react'
-import { LEVELS } from '../../exercises/SpeakingAssessmentExercise'
+import { IELTS_LEVELS, DEFAULT_IELTS_LEVEL } from '../../exercises/SpeakingAssessmentExercise'
 import { supabase } from '../../../supabase/client'
 
 const emptyQuestion = (idx = 0) => ({
   id: `q${Date.now()}_${idx}`,
   prompt: '',
   instructions: '',
-  answer_mode: 'open', // 'open' = AI sub-scores | 'closed' = match expected answer
-  expected_answers: [],
-  key_points: [],
   time_limit: 0,
-  evaluation_criteria: '',
 })
 
 const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevelChange, folderPath }) => {
   const [localQuestions, setLocalQuestions] = useState(
     (questions || []).length ? questions : [emptyQuestion(0)]
   )
-  const [tagInputs, setTagInputs] = useState({})
-  const [answerInputs, setAnswerInputs] = useState({})
   const [uploading, setUploading] = useState({})
   const [mediaModal, setMediaModal] = useState(null) // { idx, type } | null
   const [mediaUrl, setMediaUrl] = useState('')
@@ -41,6 +35,8 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
       setLocalQuestions(initial)
       onQuestionsChange(initial)
     }
+    // Save a valid IELTS level (old exercises may have kindergarten/primary/etc.)
+    if (!IELTS_LEVELS.some(l => l.value === level)) onLevelChange(DEFAULT_IELTS_LEVEL)
   }, [])
 
   const sync = (updated) => {
@@ -49,6 +45,22 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
   }
 
   const addQuestion = () => sync([...localQuestions, emptyQuestion(localQuestions.length)])
+
+  // Bulk import: each non-empty line becomes one question
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const bulkLines = bulkText.split('\n').map(l => l.trim()).filter(Boolean)
+
+  const importBulk = () => {
+    if (!bulkLines.length) return
+    const stamp = Date.now()
+    const imported = bulkLines.map((line, i) => ({ ...emptyQuestion(i), id: `q${stamp}_b${i}`, prompt: line }))
+    // Drop untouched blank questions so the import doesn't leave an empty one at the top
+    const kept = localQuestions.filter(q => (q.prompt || '').trim() || (q.instructions || '').trim())
+    sync([...kept, ...imported])
+    setBulkText('')
+    setBulkOpen(false)
+  }
   const removeQuestion = (idx) => sync(localQuestions.filter((_, i) => i !== idx))
 
   const moveUp = (idx) => {
@@ -67,29 +79,6 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
 
   const updateField = (idx, field, value) => {
     sync(localQuestions.map((q, i) => i === idx ? { ...q, [field]: value } : q))
-  }
-
-  const addKeyPoint = (idx) => {
-    const tag = (tagInputs[idx] || '').trim()
-    if (!tag || localQuestions[idx].key_points.includes(tag)) return
-    updateField(idx, 'key_points', [...localQuestions[idx].key_points, tag])
-    setTagInputs(prev => ({ ...prev, [idx]: '' }))
-  }
-
-  const removeKeyPoint = (idx, kpIdx) => {
-    updateField(idx, 'key_points', localQuestions[idx].key_points.filter((_, i) => i !== kpIdx))
-  }
-
-  const addExpectedAnswer = (idx) => {
-    const ans = (answerInputs[idx] || '').trim()
-    const existing = localQuestions[idx].expected_answers || []
-    if (!ans || existing.includes(ans)) return
-    updateField(idx, 'expected_answers', [...existing, ans])
-    setAnswerInputs(prev => ({ ...prev, [idx]: '' }))
-  }
-
-  const removeExpectedAnswer = (idx, aIdx) => {
-    updateField(idx, 'expected_answers', (localQuestions[idx].expected_answers || []).filter((_, i) => i !== aIdx))
   }
 
   // ── Media upload (inserts <img>/<audio> HTML into the prompt) ───────────────
@@ -200,7 +189,7 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
     closeMediaModal()
   }
 
-  const currentLevel = level || 'middle'
+  const currentLevel = IELTS_LEVELS.some(l => l.value === level) ? level : DEFAULT_IELTS_LEVEL
 
   return (
     <div className="space-y-6">
@@ -208,8 +197,8 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
       {/* Level picker */}
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-2">Student Level</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-          {LEVELS.map(l => (
+        <div className="grid grid-cols-3 gap-2">
+          {IELTS_LEVELS.map(l => (
             <button
               key={l.value}
               type="button"
@@ -222,12 +211,12 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
             >
               <span className="text-xl">{l.emoji}</span>
               <span className="text-xs leading-tight">{l.label}</span>
-              <span className="text-[10px] opacity-70 leading-tight">{l.ageRange}</span>
+              <span className="text-[10px] opacity-70 leading-tight">{l.bandRange}</span>
             </button>
           ))}
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          The AI will calibrate its scoring and feedback tone to match this level.
+          The AI rates each answer against IELTS band descriptors and tailors its feedback to this level.
         </p>
       </div>
 
@@ -236,14 +225,54 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
       {/* Questions */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Speaking Questions</h3>
-        <button
-          type="button"
-          onClick={addQuestion}
-          className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700"
-        >
-          <Plus className="w-4 h-4" /> Add Question
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setBulkOpen(o => !o)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" /> Bulk
+          </button>
+          <button
+            type="button"
+            onClick={addQuestion}
+            className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700"
+          >
+            <Plus className="w-4 h-4" /> Add Question
+          </button>
+        </div>
       </div>
+
+      {bulkOpen && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-medium text-blue-900 mb-1">Bulk Import Questions</h4>
+          <p className="text-sm text-blue-700 mb-2">One question per line. Empty lines are skipped.</p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            rows={8}
+            placeholder={`Do you work or are you a student?\nWhat do you like to do in your free time?\nDescribe a place you would like to visit.`}
+            className="w-full p-3 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => setBulkOpen(false)}
+              className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={importBulk}
+              disabled={!bulkLines.length}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50"
+            >
+              Import {bulkLines.length || ''} {bulkLines.length === 1 ? 'question' : 'questions'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {localQuestions.map((q, idx) => (
         <div key={q.id} className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
@@ -261,32 +290,6 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
                   <Trash2 className="w-4 h-4 text-red-500" />
                 </button>
               )}
-            </div>
-          </div>
-
-          {/* Answer mode */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Answer Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'open', title: 'Open response', desc: 'AI scores content, vocabulary, grammar & fluency.' },
-                { value: 'closed', title: 'Expected answer', desc: 'AI checks if the student says the right answer.' },
-              ].map(opt => {
-                const active = (q.answer_mode || 'open') === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => updateField(idx, 'answer_mode', opt.value)}
-                    className={`text-left p-3 rounded-lg border-2 transition-all ${
-                      active ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
-                  >
-                    <div className={`text-sm font-semibold ${active ? 'text-purple-700' : 'text-gray-700'}`}>{opt.title}</div>
-                    <div className="text-[11px] text-gray-500 leading-tight mt-0.5">{opt.desc}</div>
-                  </button>
-                )
-              })}
             </div>
           </div>
 
@@ -337,108 +340,24 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
               value={q.prompt}
               onChange={(e) => updateField(idx, 'prompt', e.target.value)}
               onPaste={(e) => handlePromptPaste(idx, e)}
-              rows={5}
-              placeholder="e.g. Describe a memorable trip you have taken."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y min-h-[80px]"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              Click Image or Audio to paste a link (and pick a size) or upload a file. You can also paste a copied image/audio straight into the box. Students see it above the recording button.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Instructions (optional)</label>
-            <input
-              value={q.instructions}
-              onChange={(e) => updateField(idx, 'instructions', e.target.value)}
-              placeholder="e.g. Speak for 1-2 minutes. Include specific details."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+              rows={2}
+              placeholder="e.g. Describe a memorable trip you have taken. You should say: where you went, who you went with, and why it was memorable."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y"
             />
           </div>
 
-          {q.answer_mode === 'closed' && (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Accepted Answers <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {(q.expected_answers || []).map((ans, aIdx) => (
-                  <span key={aIdx} className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
-                    {ans}
-                    <button type="button" onClick={() => removeExpectedAnswer(idx, aIdx)}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={answerInputs[idx] || ''}
-                  onChange={(e) => setAnswerInputs(prev => ({ ...prev, [idx]: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExpectedAnswer(idx) } }}
-                  placeholder="e.g. shirt — then a shirt, it's a shirt"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => addExpectedAnswer(idx)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
-                >
-                  Add
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-1">
-                Add the main answer plus any phrasings you will accept. The AI is lenient with articles, full sentences, synonyms, and minor mispronunciations.
-              </p>
-            </div>
-          )}
-
-          {q.answer_mode !== 'closed' && (
-          <>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Key Points to Cover (optional)</label>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {q.key_points.map((kp, kpIdx) => (
-                <span key={kpIdx} className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
-                  {kp}
-                  <button type="button" onClick={() => removeKeyPoint(idx, kpIdx)}>
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 min-w-0">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Instructions (optional)</label>
               <input
-                value={tagInputs[idx] || ''}
-                onChange={(e) => setTagInputs(prev => ({ ...prev, [idx]: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyPoint(idx) } }}
-                placeholder="Type a point and press Enter"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                value={q.instructions}
+                onChange={(e) => updateField(idx, 'instructions', e.target.value)}
+                placeholder="e.g. Speak for 1-2 minutes. Include specific details."
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
               />
-              <button
-                type="button"
-                onClick={() => addKeyPoint(idx)}
-                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
-              >
-                Add
-              </button>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Evaluation Criteria (optional)</label>
-            <input
-              value={q.evaluation_criteria}
-              onChange={(e) => updateField(idx, 'evaluation_criteria', e.target.value)}
-              placeholder="e.g. content relevance, vocabulary, grammar, fluency"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-          </>
-          )}
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Time Limit (seconds, 0 = none)</label>
+          <div className="flex-shrink-0">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Time limit (s, 0 = none)</label>
             <input
               type="number"
               min="0"
@@ -447,6 +366,7 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
               onChange={(e) => updateField(idx, 'time_limit', parseInt(e.target.value) || 0)}
               className="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
+          </div>
           </div>
         </div>
       ))}

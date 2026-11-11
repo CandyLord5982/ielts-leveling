@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../../supabase/client'
 import { Save, AlertCircle, Tag } from 'lucide-react'
 import { EXERCISE_CATEGORIES, EXERCISE_TAGS, ALL_TAGS } from '../../../constants/exerciseTags'
+import TagPicker from './TagPicker'
 import FlashcardEditor from '../editors/FlashcardEditor'
 import MultipleChoiceEditor from '../editors/MultipleChoiceEditor'
 import FillBlankEditor from '../editors/FillBlankEditor'
@@ -295,7 +296,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
         return (
           <SpeakingAssessmentEditor
             questions={content.questions || []}
-            level={content.level || 'middle'}
+            level={content.level || 'advanced'}
             onQuestionsChange={(questions) => handleContentChange({ ...content, questions })}
             onLevelChange={(level) => handleContentChange({ ...content, level })}
             folderPath={getFolderPath(formData.folder_id)}
@@ -480,25 +481,7 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
                   ))}
                 </select>
               </div>
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
-                <div className="flex flex-wrap gap-1">
-                  {availableTags.map(tag => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleTag(tag)}
-                      className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                        formData.tags.includes(tag)
-                          ? 'bg-blue-100 border-blue-300 text-blue-700'
-                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {formData.tags.includes(tag) && '✓ '}{tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <TagPicker availableTags={availableTags} selectedTags={formData.tags} onToggle={toggleTag} />
             </div>
 
             {/* Content Editor */}

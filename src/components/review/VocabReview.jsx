@@ -102,6 +102,20 @@ const VocabReview = () => {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // Enter = "Tiếp theo" once the answer is shown. A window listener instead of autoFocus:
+  // the Next button replaces "Trả lời" in the same spot, so React reuses that node and
+  // autoFocus never fires in the typing phase.
+  useEffect(() => {
+    if (!revealed || phase === 'done') return
+    const onKey = (e) => {
+      if (e.key !== 'Enter' || e.repeat) return
+      e.preventDefault()
+      handleNext()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const saveResult = async (word, ok) => {
     const rating = ratingFromCorrectness(ok)
     const next = nextSchedule(
@@ -253,7 +267,12 @@ const VocabReview = () => {
     )
   }
 
-  const lastCorrect = revealed && phase === 'type' ? results[current.id]?.type : null
+  // Judge what's on screen by this attempt's answer. `results` holds the first attempt
+  // (hint-adjusted) for SRS, so using it here marked hinted or retried correct answers as wrong.
+  const lastCorrect = revealed && phase === 'type'
+    ? typed.trim().toLowerCase() === current.word.toLowerCase()
+    : null
+  const usedHint = hintCount > 0
   const wasCorrect = !revealed ? null : phase === 'choice' ? selected === current.id : lastCorrect
   const progress = ((mastered + (wasCorrect ? 1 : 0)) / words.length) * 100
   const isRetry = queue.indexOf(current) < index // same word appeared earlier this phase
@@ -333,20 +352,36 @@ const VocabReview = () => {
               <div className="flex justify-center gap-1.5 mb-4 flex-wrap" aria-hidden>
                 {current.word.split('').map((ch, i) => {
                   const hinted = !revealed && i < hintCount
+                  // Ghost: what the student has typed so far, shown faintly in the blanks.
+                  // Only hinted positions are checked, so the ghost never gives the answer away.
+                  const ghost = !revealed ? typed[i] : undefined
+                  const ghostClash = hinted && ghost && ghost.toLowerCase() !== ch.toLowerCase()
+                  const isCursor = !revealed && i === typed.length
+                  let style = 'border-gray-300 text-transparent'
+                  let shown = '·'
+                  if (ch === ' ') {
+                    style = 'border-transparent'
+                  } else if (revealed) {
+                    style = 'border-green-500 text-green-700'
+                    shown = ch
+                  } else if (ghostClash) {
+                    style = 'border-red-400 text-red-500'
+                    shown = ghost
+                  } else if (hinted) {
+                    style = 'border-amber-400 text-amber-600'
+                    shown = ch
+                  } else if (ghost) {
+                    style = 'border-blue-300 text-gray-400'
+                    shown = ghost
+                  } else if (isCursor) {
+                    style = 'border-blue-500 text-transparent'
+                  }
                   return (
                     <span
                       key={i}
-                      className={`w-7 h-9 flex items-end justify-center pb-1 border-b-2 text-lg font-semibold ${
-                        ch === ' '
-                          ? 'border-transparent'
-                          : revealed
-                            ? 'border-green-500 text-green-700'
-                            : hinted
-                              ? 'border-amber-400 text-amber-600'
-                              : 'border-gray-300 text-transparent'
-                      }`}
+                      className={`w-7 h-9 flex items-end justify-center pb-1 border-b-2 text-lg font-semibold transition-colors ${style}`}
                     >
-                      {revealed || hinted ? ch : '·'}
+                      {shown}
                     </span>
                   )
                 })}
@@ -377,7 +412,7 @@ const VocabReview = () => {
             >
               <p className={`flex items-center gap-2 font-semibold ${wasCorrect ? 'text-green-700' : 'text-red-700'}`}>
                 {wasCorrect ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                {wasCorrect ? 'Chính xác!' : <>Chưa đúng — đáp án là <span className="underline">{current.word}</span></>}
+                {wasCorrect ? (usedHint && phase === 'type' ? 'Chính xác! (có dùng gợi ý)' : 'Chính xác!') : <>Chưa đúng — đáp án là <span className="underline">{current.word}</span></>}
               </p>
               {current.example && (
                 <p className="mt-1.5 text-sm text-gray-600 italic">&ldquo;{current.example}&rdquo;</p>
@@ -408,13 +443,12 @@ const VocabReview = () => {
               )
             ) : (
               <button
-                autoFocus
                 onClick={handleNext}
                 className={`px-6 py-2.5 text-white rounded-xl font-medium transition-colors ${
                   wasCorrect ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Tiếp theo
+                Tiếp theo <span className="ml-1 text-xs opacity-70">↵</span>
               </button>
             )}
           </div>

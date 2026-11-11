@@ -9,14 +9,20 @@ import {
   CheckCircle, XCircle, X, SkipForward, Headphones, Star,
   FileText, Settings, Volume2, Maximize2,
   ChevronDown, Mic, Check, Download,
-  Gauge, Repeat, Languages, MoreVertical
+  Gauge, Repeat, Languages
 } from 'lucide-react'
 import { Slider } from '../../components/ui/slider'
 
 
 // ─── Diff Engine ─────────────────────────────────────────────────────────────
+// Punctuation is optional: it's stripped before comparing, so "Hello?" == "hello".
+// Apostrophes stay (it's / its differ); curly ones are straightened first.
 const normalizeForCompare = (str) => {
-  let s = str.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()"""]/g, '').trim()
+  let s = str
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[.,/#!?$%^&*;:{}=\-_`~()"“”…[\]<>]/g, '')
+    .trim()
   const EQUIVALENTS = {
     'colour': 'color', 'centre': 'center', 'programme': 'program',
     'theatre': 'theater', 'travelled': 'traveled', 'marvellous': 'marvelous',
@@ -26,52 +32,128 @@ const normalizeForCompare = (str) => {
   return EQUIVALENTS[s] || s
 }
 
+// Words split on spaces. Hyphenated words and spelled codes ("self-drive", "F-S-S-W-G")
+// stay ONE word, and hyphens are ignored when comparing, so "fsswg" == "f-s-s-w-g".
+// start/end = position in the text (end stops before trailing punctuation), used for the cursor.
 const getTokens = (text) => {
   if (!text) return []
-  return text.trim().split(/\s+/).filter(Boolean).map(w => ({
-    original: w,
-    norm: normalizeForCompare(w)
-  }))
+  const tokens = []
+  for (const m of text.matchAll(/\S+/g)) {
+    const norm = normalizeForCompare(m[0])
+    if (!norm) continue // a lone "?" / "-" / "..." isn't a word to type
+    tokens.push({
+      original: m[0],
+      norm,
+      start: m.index,
+      end: m.index + m[0].replace(/[^\p{L}\p{N}']+$/u, '').length,
+    })
+  }
+  return tokens
+}
+
+// Let the student type a hyphenated answer word in pieces with spaces:
+// "self drive" -> self-drive, "f s s w g" -> F-S-S-W-G. Only joins pieces that exactly
+// spell a hyphenated word in the answer, so normal words are never glued together.
+const MAX_PIECES = 12
+const joinSplitWords = (inputTokens, ansTokens) => {
+  const hyphenated = new Set(ansTokens.filter(t => /[-‐-–]/.test(t.original)).map(t => t.norm))
+  if (hyphenated.size === 0) return inputTokens
+  // A spelled code = hyphenated word made only of single letters/digits (F-S-S-W-G, 4-B)
+  // Spelled code = hyphenated word with 2+ single-letter pieces (F-S-S-W-G, A-R-D-L-E-I-G-H-ROAD)
+  const hasSpelledCode = ansTokens.some(t =>
+    t.original.split(/[-‐-–]/).filter(p => /^[\p{L}\p{N}][^\p{L}\p{N}]*$/u.test(p)).length >= 2)
+  const out = []
+  for (let i = 0; i < inputTokens.length; ) {
+    let joined = null
+    for (let k = Math.min(MAX_PIECES, inputTokens.length - i); k >= 2; k--) {
+      const parts = inputTokens.slice(i, i + k)
+      const norm = parts.map(p => p.norm).join('')
+      if (hyphenated.has(norm)) {
+        joined = { original: parts.map(p => p.original).join(' '), norm, start: parts[0].start, end: parts[k - 1].end, size: k }
+        break
+      }
+    }
+    // Unfinished/misspelled spelled code ("f s s w" for F-S-S-W-G): keep the run of single
+    // letters together so it's marked as ONE wrong word (and the cursor lands after it).
+    if (!joined && hasSpelledCode) {
+      let k = 0
+      while (i + k < inputTokens.length && inputTokens[i + k].norm.length === 1) k++
+      if (k >= 2) {
+        const parts = inputTokens.slice(i, i + k)
+        joined = { original: parts.map(p => p.original).join(' '), norm: parts.map(p => p.norm).join(''), start: parts[0].start, end: parts[k - 1].end, size: k }
+      }
+    }
+    if (joined) { out.push(joined); i += joined.size } else { out.push(inputTokens[i]); i++ }
+  }
+  return out
 }
 
 const diffWords = (input, answer) => {
-  const inputTokens = getTokens(input)
   const ansTokens = getTokens(answer)
+  const inputTokens = joinSplitWords(getTokens(input), ansTokens)
 
-  const dp = Array(inputTokens.length + 1).fill(null).map(() => Array(ansTokens.length + 1).fill(0))
-  for (let i = 1; i <= inputTokens.length; i++) {
-    for (let j = 1; j <= ansTokens.length; j++) {
-      if (inputTokens[i - 1].norm === ansTokens[j - 1].norm) {
-        dp[i][j] = dp[i - 1][j - 1] + 1
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
-      }
+  // LCS over suffixes, walked forward from the start so each typed word matches the
+  // EARLIEST possible answer word. (Walking back from the end matched "...a couple of"
+  // to the later "places of interest", marking the words in between as missing.)
+  const n = inputTokens.length, m = ansTokens.length
+  const dp = Array(n + 1).fill(null).map(() => Array(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = inputTokens[i].norm === ansTokens[j].norm
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1])
     }
   }
 
-  let i = inputTokens.length, j = ansTokens.length
+  let i = 0, j = 0
   const result = []
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && inputTokens[i - 1].norm === ansTokens[j - 1].norm) {
-      result.unshift({ type: 'correct', text: inputTokens[i - 1].original })
-      i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      result.unshift({ type: 'missing', text: ansTokens[j - 1].original })
-      j--;
+  while (i < n || j < m) {
+    if (i < n && j < m && inputTokens[i].norm === ansTokens[j].norm) {
+      result.push({ type: 'correct', text: inputTokens[i].original, start: inputTokens[i].start, end: inputTokens[i].end })
+      i++; j++;
+    } else if (i < n && (j === m || dp[i + 1][j] >= dp[i][j + 1])) {
+      // extra before missing on ties, so a misspelling pairs up as 'wrong' below
+      result.push({ type: 'extra', text: inputTokens[i].original, norm: inputTokens[i].norm, start: inputTokens[i].start, end: inputTokens[i].end })
+      i++;
     } else {
-      result.unshift({ type: 'extra', text: inputTokens[i - 1].original })
-      i--;
+      result.push({ type: 'missing', text: ansTokens[j].original, norm: ansTokens[j].norm })
+      j++;
     }
   }
 
   for (let k = 0; k < result.length - 1; k++) {
     if (result[k].type === 'extra' && result[k + 1].type === 'missing') {
-      result[k] = { type: 'wrong', studentText: result[k].text, correctText: result[k + 1].text }
+      const typed = result[k].norm || ''
+      const target = result[k + 1].norm || ''
+      // Typed a correct start of the word ("ard" for A-R-D-L-E-I-G-H-ROAD): hint the next letter
+      const prefixHint = typed && target.length > typed.length && target.startsWith(typed)
+        ? { typed, next: target[typed.length], rest: target.length - typed.length - 1 }
+        : null
+      result[k] = { type: 'wrong', studentText: result[k].text, correctText: result[k + 1].text, prefixHint, start: result[k].start, end: result[k].end }
       result.splice(k + 1, 1)
     }
   }
 
   return result
+}
+
+// Where to put the cursor after a wrong check: end of the first wrong/extra word, or
+// (for a missing word) right after the word before the gap. Typed words carry their
+// start/end from diffWords; missing words don't.
+const caretForFirstError = (input, diffResult) => {
+  const diff = diffResult || []
+  let lastEnd = null
+  for (let k = 0; k < diff.length; k++) {
+    const t = diff[k]
+    if (t.type === 'correct') { lastEnd = t.end; continue }
+    if (t.type === 'missing') {
+      const nextTyped = diff.slice(k).find(x => x.end != null)
+      if (!nextTyped) return input.length // everything typed is right, just keep going
+      return lastEnd ?? nextTyped.start
+    }
+    return t.end ?? input.length // 'wrong' or 'extra'
+  }
+  return input.length
 }
 
 const calcErrors = (diffResult) => {
@@ -93,7 +175,18 @@ const formatTime = (sec) => {
   return `${m}:${s}`
 }
 
-const SpellCheckWord = ({ studentText = '', correctText = '', type }) => {
+const SpellCheckWord = ({ studentText = '', correctText = '', type, prefixHint }) => {
+  // Correct start of a word: typed part in green, next letter revealed, rest hidden
+  if (type === 'wrong' && prefixHint) {
+    return (
+      <span className="inline-flex items-end mx-[3px]" title="Gợi ý chữ cái tiếp theo">
+        <span className="font-bold text-[#0B7A42]">{prefixHint.typed}</span>
+        <span className="font-bold text-amber-600 border-b-[2px] border-amber-500 leading-none pb-[1px]">{prefixHint.next}</span>
+        {prefixHint.rest > 0 && <span className="text-gray-400 tracking-widest">{'*'.repeat(prefixHint.rest)}</span>}
+      </span>
+    )
+  }
+
   if (type === 'missing') {
     return (
       <span className="inline-block mx-[3px] text-gray-700 font-medium">
@@ -196,13 +289,15 @@ const DiffResult = ({ tokens }) => {
             )
           }
         } else {
-          consecutiveMissing = 0;
+          // After a letter hint, keep the following missing words hidden (one hint at a time)
+          consecutiveMissing = t.prefixHint ? 1 : 0;
           return (
-            <SpellCheckWord 
-              key={i} 
-              type={t.type} 
-              studentText={t.studentText || t.text} 
-              correctText={t.correctText || t.text} 
+            <SpellCheckWord
+              key={i}
+              type={t.type}
+              studentText={t.studentText || t.text}
+              correctText={t.correctText || t.text}
+              prefixHint={t.prefixHint}
             />
           )
         }
@@ -987,11 +1082,28 @@ const ListeningDictationExercise = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx, seg?.start_time, exercise])
 
+  // Put the cursor back in the box for each new sentence (it was disabled, so it lost focus)
+  useEffect(() => {
+    if (mode === 'dictation' && !checked) inputRef.current?.focus()
+  }, [checked, currentIdx, mode])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase() || ''
       const inInput = ['input', 'textarea', 'select'].includes(activeTag) || document.activeElement?.isContentEditable
+
+      // Once the sentence is done (correct or skipped), plain Enter = Next.
+      // defaultPrevented: the Enter that just submitted a correct answer from the textarea
+      // must not also skip ahead. Runs before the replay/play keys so Enter isn't double-used.
+      if (
+        e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !e.repeat && !e.defaultPrevented && checked && mode === 'dictation' && !inInput
+      ) {
+        e.preventDefault()
+        handleNext()
+        return
+      }
 
       if (e.key === 'Escape') {
         setShowSettings(false)
@@ -1115,8 +1227,10 @@ const ListeningDictationExercise = () => {
 
   const handleReplay = () => { if (!seg) return; if (audioRef.current) audioRef.current.playbackRate = speed; playSegment(seg.start_time, seg.end_time, speed, true) }
 
+  // An empty check is allowed on purpose: the diff then shows the first word and masks the
+  // rest (****), which works as a "give me the next word" hint, same as a partial answer.
   const handleCheck = () => {
-    if (!seg || !inputText.trim()) return
+    if (!seg) return
     const allAnswers = [seg.text_content, ...(seg.alt_answers || [])]
     let bestDiff = null, bestAccuracy = 0
     for (const ans of allAnswers) {
@@ -1132,8 +1246,16 @@ const ListeningDictationExercise = () => {
       { idx: currentIdx, accuracy: bestAccuracy, skipped: false, userAnswer: inputText, diffResult: bestDiff }]
       setSegmentResults(newResults)
     } else {
-      // Incorrect - keep checking false so they can continue typing
+      // Incorrect - keep checking false so they can continue typing,
+      // and jump the cursor to the first mistake so it's quick to fix
       setChecked(false)
+      const caret = caretForFirstError(inputText, bestDiff)
+      requestAnimationFrame(() => {
+        const el = inputRef.current
+        if (!el) return
+        el.focus()
+        el.setSelectionRange(caret, caret)
+      })
     }
   }
 
@@ -1668,7 +1790,7 @@ const ListeningDictationExercise = () => {
                                         <path d="M12 2L22 20H2L12 2Z" fill="#FBBF24"/>
                                         <path d="M11 10H13V15H11V10ZM11 17H13V19H11V17Z" fill="white"/>
                                       </svg>
-                                      Incorrect
+                                      {inputText.trim() ? 'Incorrect' : 'Gợi ý'}
                                     </div>
                                     <button onClick={handleSkip} className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-[14px] font-medium hover:bg-gray-50 transition-colors">
                                       Skip
@@ -1687,7 +1809,7 @@ const ListeningDictationExercise = () => {
                             <>
                               <button
                                 onClick={handleCheck}
-                                disabled={!inputText.trim()}
+                                title={!inputText.trim() ? 'Gợi ý từ đầu tiên' : undefined}
                                 className="px-3.5 h-[30px] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-blue-600 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5"
                               >
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Check
@@ -1706,6 +1828,7 @@ const ListeningDictationExercise = () => {
                                 className="px-3.5 h-[30px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5">
                                 {currentIdx < totalSegments - 1 ? 'Next' : 'Hoàn thành'}
                                 <ArrowRight className="w-3.5 h-3.5" />
+                                <span className="text-[11px] opacity-70">↵</span>
                               </button>
                             </>
                           )}
@@ -1797,73 +1920,29 @@ const ListeningDictationExercise = () => {
                 >
                   <div className="flex items-center gap-2.5 text-sm font-semibold text-gray-800">
                     <Play className="w-4 h-4 text-gray-600" />
-                    Full Audio & Plain Transcript
+                    Audio & Transcript (câu hiện tại)
                   </div>
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showFullAudio ? 'rotate-180' : ''}`} />
                 </button>
 
+                {/* Only the current sentence: the full transcript here gave away every sentence ahead.
+                    The whole recording is still available in the "Full transcript" tab. */}
                 {showFullAudio && (
                   <div className="p-6">
-                    {/* Minimal Audio Player Row */}
-                    <div className="flex items-center gap-3 bg-gray-100/70 w-fit px-4 py-1.5 rounded-full border border-gray-200 mb-6">
+                    <div className="flex items-center gap-3 bg-gray-100/70 w-fit px-4 py-1.5 rounded-full border border-gray-200 mb-4">
                       <button
-                        onClick={() => { if (!audioRef.current) return; if (isFullPlaying) audioRef.current.pause(); else audioRef.current.play() }}
+                        onClick={() => (playing ? pauseSegment() : handleReplay())}
                         className="text-gray-900 hover:text-black transition-colors"
+                        aria-label={playing ? 'Pause' : 'Play sentence'}
                       >
-                        {isFullPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                        {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
                       </button>
-
-                      <span className="text-xs font-medium text-gray-700 shrink-0 min-w-[70px]">
-                        {formatTime(globalTime)} / {formatTime(fullDuration)}
+                      <span className="text-xs font-medium text-gray-700 shrink-0">
+                        Câu {currentIdx + 1} / {totalSegments} · {formatTime(seg?.start_time)} – {formatTime(seg?.end_time)}
                       </span>
-
-                      <div className="w-32 flex items-center">
-                        <input
-                          type="range"
-                          min={0}
-                          max={fullDuration || 100}
-                          step={0.1}
-                          value={globalTime}
-                          onChange={(e) => {
-                            if (!audioRef.current || !fullDuration) return;
-                            const newTime = Number(e.target.value);
-                            audioRef.current.currentTime = newTime;
-                            setGlobalTime(newTime);
-                          }}
-                          className="w-full h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-gray-700"
-                        />
-                      </div>
-
-                      <button className="text-gray-700 hover:text-black ml-2">
-                        <Volume2 className="w-4 h-4" />
-                      </button>
-
-                      <button className="text-gray-700 hover:text-black ml-1">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
                     </div>
 
-                    {/* Plain Transcript Text */}
-                    <div ref={transcriptListRef} className="max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                      <div className="flex flex-col">
-                        {segments.map((segment, i) => {
-                          const isActive = activeSegmentIdx === i || (activeSegmentIdx === -1 && globalTime >= segment.start_time && globalTime < segment.end_time);
-                          return (
-                            <div
-                              key={i}
-                              ref={isActive ? activeRowRef : null}
-                              onClick={() => { if (audioRef.current) { audioRef.current.currentTime = segment.start_time; audioRef.current.play(); } }}
-                              className="cursor-pointer"
-                            >
-                              <span className={`text-[16px] leading-[1.65] transition-colors duration-200 ${isActive ? 'text-[#2563EB] font-semibold' : 'text-gray-800 font-normal hover:text-gray-900'
-                                }`}>
-                                {segment.text_content}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    <p className="text-[16px] leading-[1.65] text-gray-800">{seg?.text_content}</p>
                   </div>
                 )}
               </div>

@@ -99,10 +99,16 @@ const ReviewQueue = () => {
           exerciseTitle: ex.title,
           exerciseIntro: ex.content?.intro,
           questionId: a.question_id,
+          // Same layout setting as the original exercise: 'split' = question left, options right
+          splitLayout: ex.content?.settings?.layout === 'split',
           questionIntro: q.intro,
           question: q.question,
+          audioUrl: q.audio_url,
+          maxAudioPlays: q.max_audio_plays || 0,
           options: q.options || [],
           correctAnswer: q.correct_answer,
+          explanation: q.explanation,
+          optionExplanations: q.option_explanations,
           schedule: existing
             ? { repetitions: existing.repetitions, intervalDays: existing.interval_days, easeFactor: existing.ease_factor }
             : { repetitions: 0, intervalDays: 0, easeFactor: 2.5 },
@@ -181,6 +187,27 @@ const ReviewQueue = () => {
     setRevealed(false)
   }
 
+  // Keyboard: A-D / 1-4 pick an option, Enter submits, Enter again goes to the next question.
+  useEffect(() => {
+    if (!current || sessionDone) return
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
+      if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (revealed) handleNext()
+        else if (selected !== null) handleSubmit()
+        return
+      }
+      if (revealed) return
+      const k = e.key.toLowerCase()
+      const i = '1234'.includes(k) ? Number(k) - 1 : 'abcd'.indexOf(k)
+      if (i >= 0 && i < current.options.length) setSelected(i)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -234,73 +261,131 @@ const ReviewQueue = () => {
     )
   }
 
+  const split = current.splitLayout
+  const explanation = revealed
+    ? current.optionExplanations?.[selected] || current.explanation
+    : null
+
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
+    // Width follows the original exercise: split layouts get room for two columns
+    <div className={`${split ? 'max-w-6xl' : 'max-w-4xl'} mx-auto py-8 px-4`}>
       {header}
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <p className="text-xs text-gray-400 mb-2 truncate">{current.exerciseTitle}</p>
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 truncate">{current.exerciseTitle}</p>
 
-        {current.exerciseIntro && String(current.exerciseIntro).trim() && (
-          <div className="mb-4">
-            <RichTextWithAudio content={current.exerciseIntro} allowImages allowLinks={false} />
-          </div>
-        )}
+      {/* Passage / exercise intro in its own card, same as the original exercise */}
+      {current.exerciseIntro && String(current.exerciseIntro).trim() && (
+        <div className="mb-6 rounded-lg p-4 md:p-6 bg-white shadow-sm border border-gray-200">
+          <RichTextWithAudio content={current.exerciseIntro} allowImages allowLinks={false} />
+        </div>
+      )}
 
-        {current.questionIntro && String(current.questionIntro).trim() && (
-          <div className="mb-4">
-            <RichTextWithAudio content={current.questionIntro} allowImages allowLinks={false} />
-          </div>
-        )}
-
-        <div className="text-base font-medium text-gray-900 mb-5">
-          <RichTextRenderer content={current.question} allowImages allowLinks />
+      {/* Question card (same frame as MultipleChoiceExercise) */}
+      <div className="relative bg-white rounded-lg shadow-[0_2px_10px_rgba(0,0,0,0.1),0_10px_20px_rgba(0,0,0,0.05)]">
+        <div className="absolute top-4 right-6 md:right-10 flex gap-2 z-20">
+          <div className="w-3 h-3 rounded-full bg-blue-500" />
+          <div className="w-3 h-3 rounded-full bg-purple-500" />
+          <div className="w-3 h-3 rounded-full bg-pink-500" />
         </div>
 
-        <div className="space-y-2">
-          {current.options.map((option, optIndex) => {
-            const isSelected = selected === optIndex
-            const isAnswerCorrect = optIndex === current.correctAnswer
-            let style = 'border-gray-200 hover:border-gray-300'
-            if (revealed) {
-              if (isAnswerCorrect) style = 'border-green-400 bg-green-50'
-              else if (isSelected) style = 'border-red-400 bg-red-50'
-            } else if (isSelected) {
-              style = 'border-blue-500 bg-blue-50'
-            }
+        <div className="relative z-10 p-4 md:p-8 pt-8 border-l-4 border-blue-400 rounded-l-lg">
+          <div className={split ? 'space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-6 md:items-start' : 'space-y-4 md:space-y-6'}>
+            {/* Question */}
+            <div className="mb-2">
+              {current.questionIntro && String(current.questionIntro).trim() && (
+                <div className="mb-4">
+                  <RichTextWithAudio content={current.questionIntro} allowImages allowLinks={false} />
+                </div>
+              )}
+              <RichTextWithAudio
+                content={
+                  current.audioUrl
+                    ? `${current.question}<audio src="${current.audioUrl}" data-max-plays="${current.maxAudioPlays}"></audio>`
+                    : current.question
+                }
+                allowImages
+                allowLinks={false}
+                style={{ fontSize: '1.125rem', fontWeight: 400, color: '#1f2937', lineHeight: 1.75 }}
+              />
+            </div>
 
-            return (
-              <button
-                key={optIndex}
-                onClick={() => !revealed && setSelected(optIndex)}
-                disabled={revealed}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors flex items-center justify-between gap-3 ${style}`}
-              >
-                <RichTextRenderer content={option} allowImages allowLinks />
-                {revealed && isAnswerCorrect && <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />}
-                {revealed && isSelected && !isAnswerCorrect && <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />}
-              </button>
-            )
-          })}
-        </div>
+            {/* Options: stacked on the right in split layout, 2 columns under the question otherwise */}
+            <div className={split ? 'md:pt-4' : ''}>
+              <div className={`grid grid-cols-1 ${split ? '' : 'md:grid-cols-2'} gap-3 md:gap-4`}>
+                {current.options.map((option, optIndex) => {
+                  const isSelected = selected === optIndex
+                  const isAnswerCorrect = optIndex === current.correctAnswer
+                  let face = 'bg-white border-gray-200 text-gray-900'
+                  let base = '#e5e7eb'
+                  if (revealed) {
+                    if (isAnswerCorrect) { face = 'border-green-500 bg-green-50 text-green-900'; base = '#22c55e' }
+                    else if (isSelected) { face = 'border-red-500 bg-red-50 text-red-900'; base = '#ef4444' }
+                    else face = 'border-gray-200 bg-gray-50 text-gray-500 opacity-60'
+                  } else if (isSelected) {
+                    face = 'border-blue-500 bg-blue-50 text-blue-900'
+                    base = '#3b82f6'
+                  }
 
-        <div className="mt-6 flex justify-end">
-          {!revealed ? (
-            <button
-              onClick={handleSubmit}
-              disabled={selected === null}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Trả lời
-            </button>
-          ) : (
-            <button
-              onClick={handleNext}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-            >
-              Tiếp theo
-            </button>
-          )}
+                  return (
+                    <button
+                      key={optIndex}
+                      onClick={() => !revealed && setSelected(optIndex)}
+                      // aria-disabled (not disabled) keeps text selectable for the double-click dictionary
+                      aria-disabled={revealed}
+                      className={`group w-full rounded-xl text-left ${revealed ? 'cursor-default select-text' : ''}`}
+                      style={{ backgroundColor: base, borderRadius: '0.75em' }}
+                    >
+                      <div
+                        className={`flex items-center gap-3 w-full border-2 rounded-xl px-5 py-3 md:py-4 text-base md:text-lg transition-transform duration-100 ${face} ${
+                          revealed ? '' : '-translate-y-[0.2em] group-hover:-translate-y-[0.33em] group-active:translate-y-0'
+                        }`}
+                      >
+                        <span className="flex-1">
+                          <RichTextWithAudio content={option} allowImages allowLinks={false} />
+                        </span>
+                        {revealed && isAnswerCorrect && <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />}
+                        {revealed && isSelected && !isAnswerCorrect && <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Explanation (from the exercise) + actions span both columns in split layout */}
+            <div className={`space-y-4 ${split ? 'md:col-span-2' : ''}`}>
+              {explanation && (
+                <div className="p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h3>
+                  <RichTextRenderer
+                    content={explanation}
+                    className="text-blue-800 text-sm md:text-base leading-relaxed"
+                    allowImages
+                    allowLinks={false}
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                {!revealed ? (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={selected === null}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Trả lời
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleNext}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Tiếp theo <span className="ml-1 text-xs opacity-70">↵</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

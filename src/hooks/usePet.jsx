@@ -424,11 +424,12 @@ export const PetProvider = ({ children }) => {
     }
   }
 
-  const rollWildAreaEncounter = async () => {
+  const rollWildAreaEncounter = async (zoneId = null) => {
     if (!user) return { encountered: false }
     try {
       const { data, error } = await supabase.rpc('roll_wild_area_encounter', {
-        p_user_id: user.id
+        p_user_id: user.id,
+        p_zone: zoneId
       })
       if (error) throw error
       if (data?.encountered) {

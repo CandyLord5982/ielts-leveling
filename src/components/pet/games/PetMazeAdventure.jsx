@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Heart, Zap } from 'lucide-react'
 import { assetUrl } from '../../../hooks/useBranding'
+import { getZone } from '../../../utils/wildZones'
 
 /* ---- Constants ---- */
 const RARITY_CONFIG = {
@@ -20,14 +21,8 @@ const RC = {
   legendary: { solid: '#FACC15', light: 'rgba(250,204,21,0.5)',  glow: 'rgba(250,204,21,0.25)',  gradient: 'from-yellow-300 to-amber-500', trail: '#713f12' },
 }
 
-const BIOMES = [
-  { name: 'Enchanted Forest',  bg: 'from-emerald-950 via-green-950 to-slate-950', emoji: '🌿', accent: '#22c55e', bgMobile: assetUrl('/adventure/forest-mb.jpg'), bgDesktop: assetUrl('/adventure/forest.jpg') },
-  { name: 'Crystal Caves',     bg: 'from-blue-950 via-indigo-950 to-slate-950',   emoji: '💎', accent: '#6366f1', bgMobile: assetUrl('/adventure/cave-mb.jpg'), bgDesktop: assetUrl('/adventure/cave.jpg') },
-  { name: 'Volcanic Ridge',    bg: 'from-red-950 via-orange-950 to-slate-950',    emoji: '🌋', accent: '#ef4444', bgMobile: assetUrl('/adventure/volcano-mb.jpg'), bgDesktop: assetUrl('/adventure/volcano.jpg') },
-  { name: 'Mystic Swamp',      bg: 'from-teal-950 via-emerald-950 to-slate-950',  emoji: '🍄', accent: '#14b8a6', bgMobile: assetUrl('/adventure/swamp-mb.jpg'), bgDesktop: assetUrl('/adventure/swamp.jpg') },
-  { name: 'Frozen Peaks',      bg: 'from-cyan-950 via-sky-950 to-slate-950',      emoji: '❄️', accent: '#22d3ee', bgMobile: assetUrl('/adventure/frozen-mb.jpg'), bgDesktop: assetUrl('/adventure/frozen.jpg') },
-  { name: 'Shadow Ruins',      bg: 'from-violet-950 via-purple-950 to-slate-950', emoji: '🏚️', accent: '#a78bfa', bgMobile: assetUrl('/adventure/shadow-mb.jpg'), bgDesktop: assetUrl('/adventure/shadown%20ruin.jpg') },
-]
+// Biomes are the Wild Area zones (src/utils/wildZones.js), in the original cycling order
+const BIOMES = ['forest', 'caves', 'volcano', 'swamp', 'frozen', 'ruins'].map(getZone)
 
 const MONSTER_IMAGES = [
   assetUrl('/pet-game/astro/alien1.png'),
@@ -196,10 +191,11 @@ function pickChallengesForStop(wordBank, questionBank, stopIndex) {
 }
 
 /* ---- Generate adventure path ---- */
-function buildAdventure(stopCount) {
+// With a zone, every stop is themed to that zone; otherwise cycle through all biomes.
+function buildAdventure(stopCount, zone = null) {
   const stops = []
   for (let i = 0; i < stopCount; i++) {
-    const biome = BIOMES[i % BIOMES.length]
+    const biome = zone || BIOMES[i % BIOMES.length]
     const bossIdx = Math.floor(Math.random() * BOSS_IMAGES.length)
     stops.push({
       id: i,
@@ -220,6 +216,7 @@ const PetMazeAdventure = ({
   mode = 'standalone',
   encounterPet = null,
   rarity = 'common',
+  zoneId = null,
   activePet,
   wordBank,
   questionBank,
@@ -232,9 +229,11 @@ const PetMazeAdventure = ({
 }) => {
   const config = RARITY_CONFIG[rarity] || RARITY_CONFIG.common
   const rc = RC[rarity] || RC.common
+  const zone = getZone(zoneId)
+  const petMaxHp = zone?.petHp ?? PET_MAX_HP
 
   // Build adventure once
-  const [stops, setStops] = useState(() => buildAdventure(config.stops))
+  const [stops, setStops] = useState(() => buildAdventure(config.stops, zone))
   const [currentStop, setCurrentStop] = useState(0)
   const [phase, setPhase] = useState('entrance') // entrance | map | playing | victory | complete | failed
   const [entranceStep, setEntranceStep] = useState(0)
@@ -247,7 +246,7 @@ const PetMazeAdventure = ({
   const [battleChallenges, setBattleChallenges] = useState([])
   const [challengeIndex, setChallengeIndex] = useState(0)
   const [bossHp, setBossHp] = useState(0)
-  const [petHp, setPetHp] = useState(PET_MAX_HP)
+  const [petHp, setPetHp] = useState(petMaxHp)
   const [streak, setStreak] = useState(0)
   const [stopScore, setStopScore] = useState(0)
   const [selectedChoice, setSelectedChoice] = useState(null)
@@ -612,7 +611,7 @@ const PetMazeAdventure = ({
     setBattleChallenges(challenges)
     setChallengeIndex(0)
     setBossHp(stop.bossHp)
-    setPetHp(PET_MAX_HP)
+    setPetHp(petMaxHp)
     setStreak(0)
     streakRef.current = 0
     setStopScore(0)
@@ -631,7 +630,7 @@ const PetMazeAdventure = ({
     setPhase('playing')
     startQTimer()
     if (challenges[0]) initChallengeMode(challenges[0])
-  }, [currentStop, stops, wordBank, questionBank, startQTimer, initChallengeMode])
+  }, [currentStop, stops, wordBank, questionBank, startQTimer, initChallengeMode, petMaxHp])
 
   const handleAnswer = useCallback((choiceIndex) => {
     if (phase !== 'playing' || feedback || selectedChoice !== null) return
@@ -1274,7 +1273,7 @@ const PetMazeAdventure = ({
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-white/60">{petName}</span>
                 <div className="flex gap-0.5">
-                  {Array.from({ length: PET_MAX_HP }).map((_, i) => (
+                  {Array.from({ length: petMaxHp }).map((_, i) => (
                     <Heart key={i} className={`w-4 h-4 transition-all ${i < petHp ? 'text-red-400 fill-red-400' : 'text-gray-600/40'}`} />
                   ))}
                 </div>
@@ -1575,7 +1574,7 @@ const PetMazeAdventure = ({
             </div>
             <p className="text-white text-sm font-bold mt-1">{petName}</p>
             <div className="flex gap-0.5 mt-1">
-              {Array.from({ length: PET_MAX_HP }).map((_, i) => (
+              {Array.from({ length: petMaxHp }).map((_, i) => (
                 <Heart key={i} className={`w-4 h-4 transition-all ${i < petHp ? 'text-red-400 fill-red-400' : 'text-gray-600/40'}`} />
               ))}
             </div>

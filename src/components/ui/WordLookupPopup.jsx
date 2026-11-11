@@ -23,6 +23,12 @@ const WordLookupPopup = () => {
     setChoice(firstChoice(entry?.meanings))
   }, [entry])
 
+  // Editable copy of the picked definition — refilled whenever a different meaning is picked.
+  const [customDef, setCustomDef] = useState('')
+  useEffect(() => {
+    setCustomDef(resolveChoice(entry?.meanings, choice)?.def.definition || '')
+  }, [entry, choice])
+
   // Reset / pre-check whether the looked-up word is already saved.
   const entryWord = entry?.word?.toLowerCase()
   useEffect(() => {
@@ -52,7 +58,7 @@ const WordLookupPopup = () => {
         word: entry.word.toLowerCase(),
         phonetic: entry.phonetic || null,
         part_of_speech: meaning.partOfSpeech || null,
-        definition: def.definition,
+        definition: customDef.trim() || def.definition,
         example: def.example || null,
       },
       { onConflict: 'user_id,word', ignoreDuplicates: true },
@@ -177,6 +183,17 @@ const WordLookupPopup = () => {
             onSelect={setChoice}
             limit={3}
           />
+          {user && saveState !== 'saved' && (
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Nghĩa sẽ lưu (có thể sửa):</label>
+              <textarea
+                value={customDef}
+                onChange={(e) => setCustomDef(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-800 resize-none outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          )}
           {user && (
             <button
               onClick={handleSave}

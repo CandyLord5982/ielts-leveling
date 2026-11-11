@@ -13,6 +13,7 @@ import {
   Send,
   X,
   Loader2,
+  Heart,
   Book,
   Check,
 } from "lucide-react";
@@ -38,38 +39,14 @@ import { assetUrl } from '../../hooks/useBranding';
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule';
 import { getSettings, getSetting } from '../../utils/siteSettings';
 import { normalizeDashWords } from '../../utils/petDash';
-// Pet chat messages - replace with your own!
-const PET_MESSAGES = [
-  // English Idioms
-  "Practice makes perfect! Keep going! 💪",
-  "Every cloud has a silver lining! ☁️✨",
-  "Rome wasn't built in a day - be patient with yourself!",
-  "The early bird catches the worm! 🐦",
-  "When life gives you lemons, make lemonade! 🍋",
-  "Actions speak louder than words!",
-  "Don't put all your eggs in one basket! 🥚",
-  "Better late than never, right?",
-  // Fun Facts
-  "Did you know? Honey never spoils! 🍯",
-  "Fun fact: Octopuses have three hearts! 🐙",
-  "Did you know? Bananas are berries, but strawberries aren't! 🍌",
-  "Fun fact: A group of flamingos is called a 'flamboyance'! 🦩",
-  "Did you know? Sharks existed before trees! 🦈",
-  "Fun fact: Venus is the only planet that spins clockwise! 🪐",
-  "Did you know? Cows have best friends! 🐄💕",
-  "Fun fact: The shortest war in history lasted 38 minutes!",
-  "Good-bye is a contraction of God be with ye",
-  "The original name for a butterfly was flutterby",
-  "Uncopyrightable is the longest word in common use that contains no letter more than once.",
-  "Go! is the shortest, grammatically correct sentence.",
-  "Aegilops is the longest word with all letters in alphabetical order.",
-
-  // Encouragement
-  "You're doing great! Keep it up! ⭐",
-  "Learning is a journey, not a race! 🚀",
-  "Mistakes help us grow! Don't be afraid to try!",
-  "I believe in you! Let's learn together! 📚",
-];
+import { WILD_ZONES, DEFAULT_ZONE_ID, getZone, boostedRarities } from '../../utils/wildZones';
+const WILD_RARITY_CHIP = {
+  common: 'bg-gray-400 text-gray-900',
+  uncommon: 'bg-green-400 text-green-950',
+  rare: 'bg-blue-400 text-blue-950',
+  epic: 'bg-purple-400 text-purple-950',
+  legendary: 'bg-yellow-400 text-yellow-950',
+};
 
 const PetDisplay = () => {
   const {
@@ -133,6 +110,7 @@ const PetDisplay = () => {
   const [pvpWaitingCount, setPvpWaitingCount] = useState(0);
   const [showWildArea, setShowWildArea] = useState(false);
   const [wildAreaLoading, setWildAreaLoading] = useState(false);
+  const [selectedZoneId, setSelectedZoneId] = useState(DEFAULT_ZONE_ID);
   const [mazeAdventure, setMazeAdventure] = useState(null); // { mode: 'encounter'|'standalone', pet: object|null, rarity: string }
   const [encounterPetAfterMaze, setEncounterPetAfterMaze] = useState(null); // pet object to show WildEncounterModal after maze
   const [wildAreaCooldown, setWildAreaCooldown] = useState(0);
@@ -344,34 +322,6 @@ const PetDisplay = () => {
     }
   }, [chatMessages]);
 
-  // Show random chat bubble periodically (disabled temporarily)
-  useEffect(() => {
-    return; // disabled temporarily
-    if (!activePet) return;
-
-    const showRandomMessage = () => {
-      const randomMsg =
-        PET_MESSAGES[Math.floor(Math.random() * PET_MESSAGES.length)];
-      setChatBubble(randomMsg);
-      // Hide after 4 seconds
-      setTimeout(() => setChatBubble(null), 8000);
-    };
-
-    // Show first message after 2 seconds
-    const initialTimeout = setTimeout(showRandomMessage, 2000);
-
-    // Then show messages every 15-30 seconds randomly
-    const interval = setInterval(() => {
-      const randomDelay = Math.random() * 15000 + 30000; // 15-30 seconds
-      setTimeout(showRandomMessage, randomDelay);
-    }, 30000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [activePet]);
-
   // Handle sending chat message
   const handleSendChat = async () => {
     if (!chatInput.trim() || chatLoading || !activePet) return;
@@ -453,8 +403,9 @@ const PetDisplay = () => {
       return
     }
 
+    const zoneId = selectedZoneId
     setWildAreaLoading(true)
-    const result = await rollWildAreaEncounter()
+    const result = await rollWildAreaEncounter(zoneId)
     setWildAreaLoading(false)
     if (result?.error === 'no_ticket') {
       setMessage({ type: 'error', text: 'You need an Adventure Ticket to enter the Wild Area!' })
@@ -475,7 +426,7 @@ const PetDisplay = () => {
       setShowWildArea(false)
       await fetchWordBank()
       await fetchQuestionBank()
-      setMazeAdventure({ mode: 'encounter', pet: result.pet, rarity: result.pet.rarity })
+      setMazeAdventure({ mode: 'encounter', pet: result.pet, rarity: result.pet.rarity, zoneId })
     } else if (!result?.cooldown_remaining) {
       setMessage({ type: 'info', text: 'No wild pets found... try again later!' })
     }
@@ -1757,10 +1708,15 @@ const PetDisplay = () => {
             <div className="absolute bottom-52 left-2 z-10">
               <button
                 onClick={() => setShowPetDex(true)}
-                className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 hover:from-blue-300 hover:to-indigo-500 shadow-lg hover:scale-110 transition-all flex items-center justify-center border-2 border-blue-300"
+                className="w-12 h-12 hover:scale-110 transition-all flex items-center justify-center"
                 title="Pet Dex"
               >
-                <Book className="w-6 h-6 text-white" />
+                <img
+                  src="https://tezpffaiydfmuyuparfw.supabase.co/storage/v1/object/public/ui-assets/image/dashboard/dex.png"
+                  alt="Pet Dex"
+                  className="w-12 h-12 object-contain drop-shadow-lg"
+                  draggable={false}
+                />
               </button>
             </div>
 
@@ -2836,27 +2792,68 @@ const PetDisplay = () => {
       {/* Wild Area Overlay - portaled to body to escape clipPath containing block */}
       {showWildArea && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
-          <div className="relative bg-gradient-to-b from-emerald-900 to-green-950 rounded-2xl max-w-sm w-full p-6 border border-emerald-700 shadow-2xl">
+          <div className="relative bg-gradient-to-b from-slate-900 to-slate-950 rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 border border-slate-700 shadow-2xl">
             {/* Close button */}
             <button
               onClick={() => setShowWildArea(false)}
-              className="absolute top-3 right-3 text-emerald-300 hover:text-white transition-colors"
+              className="absolute top-3 right-3 text-slate-300 hover:text-white transition-colors z-10"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="text-center">
-              <span className="text-4xl mb-2 block">🌿</span>
-              <h2 className="text-emerald-100 text-xl font-bold">Wild Area</h2>
-              <p className="text-emerald-300/70 text-sm mt-1">Search for wild pets hiding in the wild!</p>
+              <h2 className="text-white text-xl font-bold">🧭 Wild Area</h2>
+              <p className="text-slate-400 text-sm mt-1">Choose where to explore. Dangerous lands hide rarer pets.</p>
 
               {/* Ticket count */}
-              <div className="mt-3 flex items-center justify-center gap-1.5 text-emerald-300">
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-amber-300">
                 <span className="text-lg">🎟️</span>
                 <span className="text-sm font-medium">{isAdmin() ? '∞' : adventureTicketCount} ticket{adventureTicketCount !== 1 ? 's' : ''}</span>
               </div>
 
-              <div className="mt-4">
+              {/* Zone map */}
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-left">
+                {WILD_ZONES.map((zone) => {
+                  const selected = zone.id === selectedZoneId
+                  return (
+                    <button
+                      key={zone.id}
+                      type="button"
+                      onClick={() => setSelectedZoneId(zone.id)}
+                      className={`relative h-32 sm:h-36 rounded-xl overflow-hidden border-2 transition-all ${selected ? 'scale-[1.03] shadow-lg' : 'border-transparent opacity-75 hover:opacity-100'}`}
+                      style={selected ? { borderColor: zone.accent, boxShadow: `0 0 18px ${zone.accent}66` } : undefined}
+                    >
+                      <img src={zone.bgMobile} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
+                      <div className="relative h-full flex flex-col justify-between p-2">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] tracking-tight" title={`Danger ${zone.danger}/5`}>
+                            {'💀'.repeat(zone.danger)}
+                          </span>
+                          {zone.petHp < 3 && (
+                            <span className="flex items-center gap-0.5 bg-red-600/80 rounded px-1 text-[10px] text-white font-bold">
+                              <Heart className="w-2.5 h-2.5 fill-white" />{zone.petHp}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-white font-bold text-sm leading-tight">{zone.emoji} {zone.name}</p>
+                          <p className="text-white/60 text-[10px] leading-tight mt-0.5 line-clamp-2">{zone.tagline}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {boostedRarities(zone).map((r) => (
+                              <span key={r} className={`text-[9px] font-bold uppercase px-1 rounded ${WILD_RARITY_CHIP[r] || 'bg-gray-500 text-white'}`}>
+                                {r} ↑
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-5">
                 {mazeBlocked && !isAdmin() ? (
                   <div>
                     <p className="text-red-400 text-sm font-medium">{mazeBlockedReason}</p>
@@ -2885,7 +2882,7 @@ const PetDisplay = () => {
                         Searching...
                       </span>
                     ) : (
-                      <span className="flex items-center gap-2">🎟️ Search for Wild Pet</span>
+                      <span className="flex items-center gap-2">🎟️ Explore {getZone(selectedZoneId)?.name}</span>
                     )}
                   </button>
                 )}
@@ -2896,7 +2893,7 @@ const PetDisplay = () => {
                 <button
                   onClick={async () => {
                     setWildAreaLoading(true)
-                    const result = await rollWildAreaEncounter()
+                    const result = await rollWildAreaEncounter(selectedZoneId)
                     setWildAreaLoading(false)
                     if (result?.encountered) {
                       fetchInventory()
@@ -2924,6 +2921,7 @@ const PetDisplay = () => {
           mode={mazeAdventure.mode}
           encounterPet={mazeAdventure.pet}
           rarity={mazeAdventure.rarity}
+          zoneId={mazeAdventure.zoneId}
           activePet={activePet}
           wordBank={wordBank}
           questionBank={questionBank}

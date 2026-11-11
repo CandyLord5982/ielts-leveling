@@ -26,7 +26,8 @@ import {
   Target,
   MessageSquarePlus,
   Swords,
-  GitMerge
+  GitMerge,
+  HardDrive
 } from 'lucide-react';
 import { supabase } from '../../supabase/client';
 import { useAuth } from '../../hooks/useAuth';
@@ -56,6 +57,7 @@ import MissionManagement from './MissionManagement';
 import ReportManagement from './ReportManagement';
 import ClassWarManagement from './ClassWarManagement';
 import TournamentManagement from './TournamentManagement';
+import StorageBrowser from './StorageBrowser';
 import { useCohorts } from '../../hooks/useCohorts';
 import { FEATURES } from '../../config/features';
 
@@ -248,6 +250,7 @@ const AdminDashboard = () => {
     FEATURES.classwar && { id: 'class-war', label: 'Class War', icon: Swords },
     FEATURES.tournaments && { id: 'tournaments', label: 'Tournaments', icon: GitMerge },
     { id: 'avatar-approval', label: 'Avatar Approval', icon: ImagePlus },
+    { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'branding', label: 'Branding', icon: Palette }
   ].filter(Boolean);
@@ -358,6 +361,7 @@ const AdminDashboard = () => {
                   {activeTab === 'analytics' && 'Platform analytics and insights'}
                   {activeTab === 'avatar-approval' && 'Review and approve user-uploaded avatars'}
                   {activeTab === 'branding' && 'Customize site branding and asset URLs'}
+                  {activeTab === 'storage' && 'Browse, upload and manage files in Supabase Storage'}
                 </p>
               </div>
             </div>
@@ -424,6 +428,7 @@ const AdminDashboard = () => {
               {FEATURES.classwar && <Route path="class-war" element={<ClassWarManagement />} />}
               {FEATURES.tournaments && <Route path="tournaments" element={<TournamentManagement />} />}
               <Route path="avatar-approval" element={<AvatarApproval />} />
+              <Route path="storage" element={<StorageBrowser />} />
               <Route path="analytics" element={<AnalyticsView stats={stats} />} />
               <Route path="branding" element={<BrandingSettings />} />
             </Routes>

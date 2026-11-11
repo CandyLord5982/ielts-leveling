@@ -42,7 +42,8 @@ const EditUnitModal = ({ unit, onClose, onUpdated, sessionCount = 0 }) => {
     color_theme: 'blue',
     estimated_duration: 60,
     thumbnail_url: '',
-    unit_number: 1
+    unit_number: 1,
+    is_free: false
   })
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -75,7 +76,8 @@ const EditUnitModal = ({ unit, onClose, onUpdated, sessionCount = 0 }) => {
         color_theme: unit.color_theme || 'blue',
         estimated_duration: unit.estimated_duration || 60,
         thumbnail_url: unit.thumbnail_url || '',
-        unit_number: unit.unit_number || 1
+        unit_number: unit.unit_number || 1,
+        is_free: !!unit.is_free
       })
     }
   }, [unit])
@@ -130,7 +132,9 @@ const EditUnitModal = ({ unit, onClose, onUpdated, sessionCount = 0 }) => {
           color_theme: formData.color_theme,
           estimated_duration: formData.estimated_duration,
           thumbnail_url: formData.thumbnail_url || null,
-          unit_number: formData.unit_number
+          unit_number: formData.unit_number,
+          // Only send is_free once the column exists (migration applied), so editing never breaks before that
+          ...('is_free' in unit ? { is_free: formData.is_free } : {})
         })
         .eq('id', unit.id)
         .select()
@@ -208,6 +212,25 @@ const EditUnitModal = ({ unit, onClose, onUpdated, sessionCount = 0 }) => {
               className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
+          {/* Free preview */}
+          {'is_free' in unit && (
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_free}
+                onChange={(e) => handleChange('is_free', e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-emerald-600"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-800">Free preview</span>
+                <span className="block text-xs text-gray-500">
+                  In a public course, students who aren&apos;t enrolled can open this unit. Once any unit is marked free,
+                  the other units are locked for them.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Color Theme */}
           <div>

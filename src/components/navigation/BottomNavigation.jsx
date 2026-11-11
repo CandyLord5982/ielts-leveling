@@ -60,7 +60,7 @@ const BottomNavigation = ({ onOpenReport }) => {
     location.pathname === path || (path !== '/' && location.pathname.startsWith(path + '/'))
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200">
+    <div data-tour="nav" className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200">
       {/* Notification Panel */}
       {showNotifPanel && (
         <div ref={notifRef} className="absolute bottom-full left-0 right-0 mb-0">

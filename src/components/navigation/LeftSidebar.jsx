@@ -214,6 +214,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
     <>
       {/* Sidebar - Desktop only */}
       <aside
+        data-tour="nav"
         className={`hidden lg:flex flex-col fixed top-0 left-0 h-full ${sidebarWidth} bg-white border-r border-gray-200 z-40 transition-all duration-300 ease-in-out overflow-hidden`}
       >
         {/* Header: Logo + Toggle button */}

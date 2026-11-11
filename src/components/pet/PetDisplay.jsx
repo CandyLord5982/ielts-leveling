@@ -16,7 +16,22 @@ import {
   Heart,
   Book,
   Check,
+  HelpCircle,
 } from "lucide-react";
+import OnboardingTour from "../ui/OnboardingTour";
+
+// Pet walkthrough. Runs once automatically right after a newcomer finishes the
+// dashboard welcome tour, and any time from the "?" button on the pet card.
+const PET_TOUR_STEPS = [
+  { target: "pet-image", title: "Thú cưng của bạn", body: "Thú cưng giúp bạn nhận thêm XP khi học. Trong giao diện làm bài, thú cưng sẽ giúp bạn giải thích câu hỏi." },
+  { target: "pet-energy", title: "Năng lượng", body: "Huấn luyện, hỏi bài thú cưng tiêu tốn năng lượng. Năng lượng tự hồi +100 mỗi ngày." },
+  { target: "pet-train", title: "Huấn luyện", body: "Chọn một mini game để chơi cùng thú cưng. Chơi càng tốt, thú cưng càng nhận nhiều XP để lên cấp." },
+  { target: "pet-bowl", title: "Bát ăn", body: "Cho thú cưng ăn để hồi năng lượng ngay lập tức. Kiếm thức ăn bằng cách mở rương hoặc làm bài tập." },
+  { target: "pet-dex", title: "Pet Dex", body: "Bộ sưu tập thú cưng: xem các loài bạn đã có và những loài còn chờ bạn khám phá. Bấm vào một thú cưng bạn sở hữu để đổi sang dùng nó." },
+  { target: "pet-wild", title: "Vùng hoang dã", body: "Dùng vé phiêu lưu 🎟️ để khám phá các vùng đất và bắt thú cưng hoang dã. Vùng càng nguy hiểm, thú càng hiếm." },
+  { target: "pet-level", title: "Cấp độ và tiến hóa", body: "Thú cưng lên cấp khi nhận XP. Đủ XP, thú cưng sẽ tiến hóa sang hình dạng mới và cho bạn thêm phần thưởng XP." },
+];
+const petTourDoneKey = (userId) => `pet_tour_done_${userId}`;
 import PetCatchGame from "./games/PetCatchGame";
 import PetFlappyGame from "./games/PetFlappyGame";
 import PetWordScramble from "./games/PetWordScramble";
@@ -63,9 +78,32 @@ const PetDisplay = () => {
     clearEncounter,
     userPets,
     allPets,
+    setActivePetById,
   } = usePet();
   const [showPetDex, setShowPetDex] = useState(false);
   const dexOwnedIds = (userPets || []).map(up => up.pet?.id).filter(Boolean);
+  const [switchingPetId, setSwitchingPetId] = useState(null);
+
+  // Pet Dex doubles as the pet switcher: tap an owned species to make it the active pet.
+  // If several of the same species are owned, the highest-XP one is used.
+  const ownedOfSpecies = (speciesId) =>
+    (userPets || []).filter((up) => up.pet?.id === speciesId).sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  const isActiveSpecies = (speciesId) => ownedOfSpecies(speciesId).some((up) => up.is_active);
+
+  const handleSwitchPet = async (speciesId) => {
+    const target = ownedOfSpecies(speciesId)[0];
+    if (!target || target.is_active || switchingPetId) return;
+    setSwitchingPetId(speciesId);
+    const result = await setActivePetById(target.id);
+    setSwitchingPetId(null);
+    if (result?.success) {
+      setShowPetDex(false);
+      setMessage({ type: 'success', text: `${target.nickname || target.pet?.name} là thú cưng của bạn bây giờ! 🐾` });
+    } else {
+      setMessage({ type: 'error', text: 'Không thể đổi thú cưng. Thử lại nhé.' });
+    }
+    setTimeout(() => setMessage(null), 3000);
+  };
   const { inventory, fetchInventory } = useInventory();
   const { user, profile, isAdmin } = useAuth();
   const isStaff = () => isAdmin() || profile?.role === 'teacher';
@@ -74,6 +112,30 @@ const PetDisplay = () => {
   const [message, setMessage] = useState(null);
   const [chatBubble, setChatBubble] = useState(null);
   const [showPetInfo, setShowPetInfo] = useState(false);
+  const [showPetTour, setShowPetTour] = useState(false);
+
+  // Auto-start the pet tour once, only for students who've done the dashboard welcome
+  // tour (i.e. newcomers). Checked on mount and when the dashboard tour closes.
+  const hasActivePet = !!activePet;
+  useEffect(() => {
+    if (!hasActivePet || !user?.id) return;
+    const maybeStart = () => {
+      try {
+        if (
+          localStorage.getItem(`onboarding_done_${user.id}`) === "1" &&
+          localStorage.getItem(petTourDoneKey(user.id)) !== "1"
+        ) setShowPetTour(true);
+      } catch { /* storage blocked */ }
+    };
+    maybeStart();
+    window.addEventListener("onboarding:dashboard-done", maybeStart);
+    return () => window.removeEventListener("onboarding:dashboard-done", maybeStart);
+  }, [hasActivePet, user?.id]);
+
+  const closePetTour = () => {
+    setShowPetTour(false);
+    try { localStorage.setItem(petTourDoneKey(user.id), "1"); } catch { /* storage blocked */ }
+  };
   const [showBonuses, setShowBonuses] = useState(false);
   const [itemBonuses, setItemBonuses] = useState({ total: 0, items: [] });
   const [isEating, setIsEating] = useState(false);
@@ -1066,6 +1128,7 @@ const PetDisplay = () => {
         clipPath: 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)',
       }}
     >
+      {showPetTour && <OnboardingTour steps={PET_TOUR_STEPS} onClose={closePetTour} />}
       {/* Corner brackets */}
       <div className="absolute top-0 left-[12px] w-5 h-[1px] bg-gradient-to-r from-blue-300/40 to-transparent z-10" />
       <div className="absolute top-0 left-[12px] w-[1px] h-5 bg-gradient-to-b from-blue-300/40 to-transparent z-10" />
@@ -1226,7 +1289,17 @@ const PetDisplay = () => {
             {/* Pet Status - top left */}
 
             
-            {!(playAnimation && trainingVideoLoaded) && <div className="absolute top-2 left-2 z-20 space-y-1 w-32">
+            {/* Pet walkthrough */}
+            <button
+              onClick={() => setShowPetTour(true)}
+              className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors"
+              title="Hướng dẫn thú cưng"
+              aria-label="Hướng dẫn thú cưng"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
+            {!(playAnimation && trainingVideoLoaded) && <div data-tour="pet-energy" className="absolute top-2 left-2 z-20 space-y-1 w-32">
               <div className="flex items-center">
                 {/* Icon overlapping the bar */}
                 <img src={assetUrl('/image/dashboard/energy.svg')} alt="energy"
@@ -1315,7 +1388,7 @@ const PetDisplay = () => {
 
             {/* Chat Bubble - absolute positioned */}
             {chatBubble && !(playAnimation && trainingVideoLoaded) && (
-              <div className="absolute top-2 right-2 z-10">
+              <div className="absolute top-2 right-11 z-10">
                 <div
                   className="relative bg-white rounded-[20px] px-4 py-2 shadow-lg max-w-[200px]"
                   style={{
@@ -1451,6 +1524,7 @@ const PetDisplay = () => {
             {/* Pet Image */}
             <div
               ref={petContainerRef}
+              data-tour="pet-image"
               className="w-48 h-48 mx-auto mb-4 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform relative"
               style={{ animation: 'petBob 2.5s ease-in-out infinite' }}
               onClick={() => setShowPetInfo(true)}
@@ -1598,7 +1672,7 @@ const PetDisplay = () => {
             */}
 
             {/* Train Button - Above Food Bowl */}
-            {!profile?.is_banned && <div className="absolute bottom-52 right-2 z-10">
+            {!profile?.is_banned && <div data-tour="pet-train" className="absolute bottom-52 right-2 z-10">
               <button
                 onClick={handlePlay}
                 disabled={playDisabled}
@@ -1637,7 +1711,7 @@ const PetDisplay = () => {
             </div>}
 
             {/* Food Bowl - Bottom Right */}
-            <div className="absolute bottom-36 right-2 z-10">
+            <div data-tour="pet-bowl" className="absolute bottom-36 right-2 z-10">
               <div
                 className="w-12 h-12 transition-all cursor-pointer hover:scale-110"
                 title="Food bowl"
@@ -1705,7 +1779,7 @@ const PetDisplay = () => {
             </div>
 
             {/* Pet Dex Button - Above Wild Area */}
-            <div className="absolute bottom-52 left-2 z-10">
+            <div data-tour="pet-dex" className="absolute bottom-52 left-2 z-10">
               <button
                 onClick={() => setShowPetDex(true)}
                 className="w-12 h-12 hover:scale-110 transition-all flex items-center justify-center"
@@ -1721,7 +1795,7 @@ const PetDisplay = () => {
             </div>
 
             {/* Wild Area Button - Bottom Left */}
-            <div className="absolute bottom-36 left-2 z-10">
+            <div data-tour="pet-wild" className="absolute bottom-36 left-2 z-10">
               <button
                 onClick={() => setShowWildArea(true)}
                 className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-green-600 hover:from-emerald-300 hover:to-green-500 shadow-lg hover:scale-110 transition-all flex items-center justify-center border-2 border-emerald-300"
@@ -1766,7 +1840,7 @@ const PetDisplay = () => {
             </div>
 
             {/* XP Progress */}
-            <div className="space-y-2">
+            <div data-tour="pet-level" className="space-y-2">
               {(() => {
                 const petLvl = getPetLevelFromXp(activePet.xp);
                 return (
@@ -2724,7 +2798,7 @@ const PetDisplay = () => {
                   Pet Dex
                 </h2>
                 <p className="text-blue-100 text-xs mt-0.5">
-                  {dexOwnedIds.length} / {allPets.length} discovered
+                  {dexOwnedIds.length} / {allPets.length} discovered · Bấm vào thú cưng của bạn để chọn làm thú cưng chính
                 </p>
               </div>
               <button onClick={() => setShowPetDex(false)} className="text-white hover:bg-white/20 rounded-full p-2 transition-colors">
@@ -2747,12 +2821,21 @@ const PetDisplay = () => {
                     <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
                       {petsOfRarity.map(pet => {
                         const isOwned = dexOwnedIds.includes(pet.id)
+                        const isCurrent = isOwned && isActiveSpecies(pet.id)
+                        const isSwitching = switchingPetId === pet.id
                         return (
                           <div
                             key={pet.id}
+                            role={isOwned && !isCurrent ? 'button' : undefined}
+                            onClick={isOwned && !isCurrent ? () => handleSwitchPet(pet.id) : undefined}
+                            title={isCurrent ? 'Thú cưng đang dùng' : isOwned ? 'Bấm để chọn làm thú cưng' : undefined}
                             className={`relative rounded-xl p-2 text-center transition-all border-2 ${
-                              isOwned ? 'border-green-400 bg-white' : 'border-gray-200 bg-gray-50'
-                            }`}
+                              isCurrent
+                                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                                : isOwned
+                                  ? 'border-green-400 bg-white cursor-pointer hover:border-blue-400 hover:-translate-y-0.5 hover:shadow-md'
+                                  : 'border-gray-200 bg-gray-50'
+                            } ${isSwitching ? 'opacity-60 animate-pulse' : ''}`}
                           >
                             <div className="w-12 h-12 mx-auto mb-1 flex items-center justify-center">
                               {pet.image_url ? (
@@ -2771,7 +2854,11 @@ const PetDisplay = () => {
                             <p className={`text-[10px] font-semibold truncate ${isOwned ? 'text-gray-800' : 'text-gray-400'}`}>
                               {isOwned ? pet.name : '???'}
                             </p>
-                            {isOwned && (
+                            {isCurrent ? (
+                              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
+                                Đang dùng
+                              </div>
+                            ) : isOwned && (
                               <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-0.5">
                                 <Check className="w-2.5 h-2.5 text-white" />
                               </div>

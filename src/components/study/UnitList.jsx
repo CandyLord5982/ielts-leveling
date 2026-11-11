@@ -123,6 +123,13 @@ const UnitList = () => {
   const [bulkPasteStudents, setBulkPasteStudents] = useState([]);
   const [bulkPasteSelected, setBulkPasteSelected] = useState(new Set());
   const [bulkPasteLoading, setBulkPasteLoading] = useState(false);
+  const [lockedUnitIds, setLockedUnitIds] = useState(new Set()); // non-free units in free-preview mode
+  const [showEnrollNotice, setShowEnrollNotice] = useState(false);
+  useEffect(() => {
+    if (!showEnrollNotice) return;
+    const t = setTimeout(() => setShowEnrollNotice(false), 2500);
+    return () => clearTimeout(t);
+  }, [showEnrollNotice]);
 
   // Class War
   const { war: activeWar, teamA, teamB, teamAXP, teamBXP, userTeam, rewards: warRewards, refresh: refreshWar } = useClassWar(currentId);
@@ -196,20 +203,22 @@ const UnitList = () => {
       if (levelError) throw levelError;
 
       // For students, verify they are enrolled - unless the course is public
-      if (profile?.role === "user" && !levelData?.is_public) {
+      // (public courses may still lock some units for non-enrolled students, see below)
+      let isEnrolled = false;
+      if (profile?.role === "user") {
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from("course_enrollments")
           .select("id")
           .eq("student_id", user.id)
           .eq("course_id", currentId)
           .eq("is_active", true)
-          .single();
+          .maybeSingle();
+        isEnrolled = !enrollmentError && !!enrollmentData;
+      }
 
-        if (enrollmentError || !enrollmentData) {
-          console.error(
-            "Student not enrolled in this course:",
-            enrollmentError
-          );
+      if (profile?.role === "user" && !levelData?.is_public) {
+        if (!isEnrolled) {
+          console.error("Student not enrolled in this course");
           setError("Bạn chưa được ghi danh vào khóa học này");
           navigate("/study");
           return;
@@ -246,6 +255,22 @@ const UnitList = () => {
       const unitsData = profile?.role === "user"
         ? (rawUnitsData || []).filter(u => !u.assigned_student_id || u.assigned_student_id === user.id)
         : rawUnitsData || [];
+
+      // Free preview: in a public course with at least one unit marked free,
+      // non-enrolled students can only open the free units (+ their own personal ones).
+      // A public course with no free units stays fully open, as before.
+      const previewOnly =
+        profile?.role === "user" &&
+        levelData?.is_public &&
+        !isEnrolled &&
+        unitsData.some((u) => u.is_free);
+      setLockedUnitIds(
+        new Set(
+          previewOnly
+            ? unitsData.filter((u) => !u.is_free && u.assigned_student_id !== user.id).map((u) => u.id)
+            : []
+        )
+      );
 
       // Fetch sessions for these units to calculate progress
       const { data: rawSessionsData, error: sessionsError } = await supabase
@@ -906,6 +931,11 @@ const UnitList = () => {
     const progress = sessionProgress[session.id];
     const now = new Date();
 
+    // Unit not included in the free preview
+    if (lockedUnitIds.has(session.unit_id)) {
+      return { status: "locked", canAccess: false };
+    }
+
     // Check open/close dates for students
     if (profile?.role === 'user') {
       if (session.open_date && new Date(session.open_date) > now) {
@@ -974,7 +1004,7 @@ const UnitList = () => {
     return (
       <div
         key={session.id}
-        onClick={() => !isLocked && handleSessionClick(session)}
+        onClick={() => (status === "locked" ? setShowEnrollNotice(true) : !isLocked && handleSessionClick(session))}
         onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, session.unit_id) : undefined}
         className={`block ${isLocked ? "cursor-not-allowed" : "cursor-pointer"
           } w-full`}
@@ -1157,6 +1187,20 @@ const UnitList = () => {
 
   return (
     <div className="flex bg-white -mx-4 -my-6">
+      {/* Shown when a student taps a session outside the free preview */}
+      {showEnrollNotice && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4"
+          onClick={() => setShowEnrollNotice(false)}
+        >
+          <div className="bg-white rounded-2xl shadow-xl px-6 py-5 max-w-xs w-full text-center">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-gray-100 flex items-center justify-center">
+              <Lock className="w-7 h-7 text-gray-600" />
+            </div>
+            <p className="font-bold text-gray-900">Ghi danh khóa học để mở khóa</p>
+          </div>
+        </div>
+      )}
       {/* Students: floating Join bar while the teacher has an Online Battle room open */}
       <OnlineBattleJoinBanner courseId={currentId} />
       {/* Main Content */}
@@ -1383,6 +1427,25 @@ const UnitList = () => {
                       </div>
                     )}
 
+                    {/* Free-preview badges: "free" tag (teachers always, students only while previewing), lock note on locked units */}
+                    {unit.is_free && (canCreateContent() || lockedUnitIds.size > 0) && !unit.assigned_student_id && (
+                      <div className="absolute top-1 right-1 z-30">
+                        <div className="bg-emerald-500 rounded-full px-2.5 py-1 shadow-sm">
+                          <span className="text-white text-[10px] font-bold">
+                            {canCreateContent() ? 'FREE PREVIEW' : 'HỌC THỬ MIỄN PHÍ'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {lockedUnitIds.has(unit.id) && (
+                      <div className="absolute top-1 right-1 z-30">
+                        <div className="bg-gray-800/80 rounded-full px-2.5 py-1 flex items-center gap-1 shadow-sm">
+                          <Lock className="w-3 h-3 text-white" />
+                          <span className="text-white text-[10px] font-bold">Ghi danh để mở khóa</span>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="relative mb-3 mt-6 flex items-center justify-end">
 
                       <div className="flex items-center space-x-2">
@@ -1565,6 +1628,7 @@ const UnitList = () => {
                     return { text: `Opens ${new Date(session.open_date).toLocaleDateString()}`, cls: '' };
                   }
                   if (status === 'closed') return { text: 'Closed', cls: '' };
+                  if (status === 'locked') return { text: 'Enroll to unlock', cls: '' };
                   if (pct > 0) return { text: `In progress ${pct}%`, cls: 'text-amber-600 font-medium' };
                   return { text: 'Not started', cls: '' };
                 };
@@ -1687,7 +1751,7 @@ const UnitList = () => {
                           {unitSessions.length > 0 ? (
                             <div className="px-3 pb-3 md:px-4">
                               {unitSessions.map((session, i) => {
-                                const { canAccess } = getSessionStatus(session);
+                                const { status, canAccess } = getSessionStatus(session);
                                 const isLocked = !canAccess;
                                 const isDone = isSessionDone(session);
                                 const isNext = !canCreateContent() && nextSession?.id === session.id;
@@ -1719,7 +1783,7 @@ const UnitList = () => {
                                     <HudPanel
                                       tone="default"
                                       accentBar={isNext}
-                                      onClick={() => !isLocked && handleSessionClick(session)}
+                                      onClick={() => (status === "locked" ? setShowEnrollNotice(true) : !isLocked && handleSessionClick(session))}
                                       onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
                                       className={isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
                                     >

@@ -4,8 +4,6 @@ import { withFakePresence, loadFakeAvatarPool } from '../../utils/fakePresence'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getRecentExercise } from '../../utils/recentExercise'
-import RecentActivities from './RecentActivities'
-import TournamentWidget from './TournamentWidget'
 import AvatarWithFrame from '../ui/AvatarWithFrame'
 import PetDisplay from '../pet/PetDisplay'
 import PvPChallengeModal from '../pvp/PvPChallengeModal'
@@ -14,7 +12,21 @@ import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule'
 
 import { assetUrl, useBranding } from '../../hooks/useBranding';
 import { usePermissions } from '../../hooks/usePermissions';
-import { CheckCircle, Clock, XCircle, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, ChevronDown, ChevronRight, RotateCcw, BookOpen, HelpCircle } from 'lucide-react';
+import OnboardingTour from '../ui/OnboardingTour';
+
+// Welcome tour for new students. Steps whose target isn't on the page show as centered cards.
+const TOUR_STEPS = [
+  { emoji: '👋', title: 'Chào mừng bạn!', body: 'Cùng xem nhanh trang chủ để bắt đầu học nhé.' },
+  { target: 'stats', title: 'Chuỗi ngày, XP và Gems', body: 'Học mỗi ngày để giữ chuỗi 🔥. Làm bài để nhận XP và Gems, dùng để lên hạng và mua vật phẩm.' },
+  { target: 'courses', title: 'Khóa học của bạn', body: 'Đây là các khóa học bạn có thể học. Liên hệ admin để mở khóa content advanced.' },
+  { target: 'review', title: 'Ôn tập', body: 'Ôn lại các câu bạn từng làm sai và các từ vựng bạn đã lưu theo thuật toán spaced repetition.' },
+  { target: 'pet', title: 'Thú cưng', body: 'Chăm sóc thú cưng và chơi mini game ôn từ vựng. Thú cưng sẽ là trợ thủ giải thích câu hỏi.' },
+  { target: 'nav', title: 'Thanh điều hướng', body: 'Chuyển nhanh giữa trang chủ, bảng xếp hạng, hồ sơ và các mục khác ở đây.' },
+  { emoji: '📖', title: 'Mẹo: tra từ nhanh', body: 'Nhấp đúp vào bất kỳ từ tiếng Anh nào để xem nghĩa và lưu lại để ôn tập.' },
+];
+const TOUR_DONE_KEY = (userId) => `onboarding_done_${userId}`;
+const NEWCOMER_MAX_XP = 50;
 
 // Collapsible student exercise stats for latest session — only fetches on first open
 const CourseStatsSection = ({ courseId }) => {
@@ -201,6 +213,22 @@ const Dashboard = () => {
   const [pendingChallengeUserIds, setPendingChallengeUserIds] = useState({})
   const [pvpAvailable, setPvpAvailable] = useState(true)
   const [courseCompletion, setCourseCompletion] = useState({})
+  const [showTour, setShowTour] = useState(false)
+
+  // Auto-start the welcome tour once for new students (low XP), after courses have rendered.
+  useEffect(() => {
+    if (loading || profile?.role !== 'user' || (profile?.xp || 0) >= NEWCOMER_MAX_XP) return
+    let seen = false
+    try { seen = localStorage.getItem(TOUR_DONE_KEY(profile.id)) === '1' } catch { /* storage blocked */ }
+    if (!seen) setShowTour(true)
+  }, [loading, profile?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closeTour = () => {
+    setShowTour(false)
+    try { localStorage.setItem(TOUR_DONE_KEY(profile.id), '1') } catch { /* storage blocked */ }
+    // Lets PetDisplay start its own walkthrough right after this one (first time only)
+    window.dispatchEvent(new Event('onboarding:dashboard-done'))
+  }
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
   )
@@ -749,6 +777,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8 md:pt-8">
+      {showTour && <OnboardingTour steps={TOUR_STEPS} onClose={closeTour} />}
       {/* Header with Blue Background */}
       <div className="relative -mx-4 md:-mx-6 lg:mx-0 -mt-6 md:-mt-6 lg:-mt-6 -mb-4 md:-mb-6 lg:mb-0">
         {/* Background Image */}
@@ -769,10 +798,22 @@ const Dashboard = () => {
           {/* Dark overlay for better text readability */}
           <div className="absolute inset-0 bg-black/30" />
 
+          {/* Replay the welcome tour */}
+          {profile?.role === 'user' && (
+            <button
+              onClick={() => setShowTour(true)}
+              className="absolute bottom-3 right-4 z-20 w-8 h-8 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-sm flex items-center justify-center text-white transition-colors"
+              title="Xem hướng dẫn"
+              aria-label="Xem hướng dẫn"
+            >
+              <HelpCircle className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Content overlay */}
           <div className="absolute inset-0 flex flex-col justify-between p-6">
             {/* XP and Streak stats */}
-            <div className="flex justify-between">
+            <div data-tour="stats" className="flex justify-between">
               <div className="bg-white/90 backdrop-blur-sm px-4 py-1 flex items-center space-x-2"
                 style={{ clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }}
               >
@@ -953,76 +994,54 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Spaced-repetition review for previously missed questions */}
-      {profile?.role === 'user' && (
-        <button
-          onClick={() => navigate('/review')}
-          className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mt-4 hover:border-blue-300 hover:shadow-md transition-all text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-              <RotateCcw className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-800">Ôn tập câu sai</p>
-              <p className="text-xs text-gray-500">Ôn lại các câu bạn từng làm sai, đúng lúc trước khi bạn quên</p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
-        </button>
-      )}
+      {/* Review shortcuts: missed questions (left) + saved vocab (right). Same cut-corner style as "Bài gần nhất". */}
+      {profile && (
+        <div data-tour="review" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+          {[
+            { path: '/review', label: 'Ôn tập câu sai', desc: 'Ôn lại các câu bạn từng làm sai', icon: RotateCcw, tint: 'bg-indigo-100 text-indigo-600', accent: 'text-indigo-600' },
+            { path: '/review/vocab', label: 'Ôn tập từ vựng', desc: 'Ôn lại các từ bạn đã tra và lưu', icon: BookOpen, tint: 'bg-emerald-100 text-emerald-600', accent: 'text-emerald-600' },
+          ].map(({ path, label, desc, icon: Icon, tint, accent }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className="group relative w-full bg-white border border-gray-200 p-4 shadow-sm hover:shadow-md transition-all text-left overflow-hidden active:scale-[0.99]"
+              style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+            >
+              {/* Corner brackets */}
+              <div className="absolute top-0 left-[10px] w-5 h-[1px] bg-gradient-to-r from-blue-300/40 to-transparent" />
+              <div className="absolute top-0 left-[10px] w-[1px] h-5 bg-gradient-to-b from-blue-300/40 to-transparent" />
+              <div className="absolute bottom-0 right-[10px] w-5 h-[1px] bg-gradient-to-l from-blue-300/40 to-transparent" />
+              <div className="absolute bottom-0 right-[10px] w-[1px] h-5 bg-gradient-to-t from-blue-300/40 to-transparent" />
 
-      {/* Review of words saved from the dictionary popup */}
-      {profile?.role === 'user' && (
-        <button
-          onClick={() => navigate('/review/vocab')}
-          className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mt-3 hover:border-blue-300 hover:shadow-md transition-all text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <RotateCcw className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-800">Ôn tập từ vựng</p>
-              <p className="text-xs text-gray-500">Ôn lại các từ bạn đã tra và lưu</p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
-        </button>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div
+                    className={`w-12 h-12 flex items-center justify-center flex-shrink-0 ${tint}`}
+                    style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                  >
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-semibold uppercase tracking-wide ${accent}`}>{label}</div>
+                    <div className="text-sm font-medium text-gray-500 truncate">{desc}</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-400" />
+              </div>
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Pet Display - Full width */}
       {FEATURES.pets && profile && (
-        <div className="mb-6 mt-6">
+        <div data-tour="pet" className="mb-6 mt-6">
           <PetDisplay />
         </div>
       )}
 
-      {/* Tournament + Recent Activities - Side by side on PC */}
-      {(profile?.role === 'user' || profile?.role === 'admin' || profile?.role === 'teacher') && (
-        <div className={`grid grid-cols-1 ${FEATURES.tournaments ? 'lg:grid-cols-3' : ''} gap-6 mb-6 mt-10`}>
-          {FEATURES.tournaments && (
-            <div className="lg:col-span-2 overflow-visible">
-              <TournamentWidget />
-            </div>
-          )}
-          <div className="self-start">
-            <RecentActivities />
-          </div>
-        </div>
-      )}
-
-      {/* Non-student fallback: just Recent Activities */}
-      {profile?.role !== 'user' && profile?.role !== 'admin' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-1">
-            <RecentActivities />
-          </div>
-        </div>
-      )}
-
       {/* Courses List */}
-      <div>
+      <div data-tour="courses" className="mt-6">
           {loading ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

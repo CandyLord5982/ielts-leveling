@@ -466,23 +466,40 @@ const ExerciseList = () => {
       if (allUnitsResult.error) throw allUnitsResult.error;
 
       // For students, verify they are enrolled - unless the course is public
-      if (profile?.role === "user" && !courseResult.data?.is_public) {
+      if (profile?.role === "user") {
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from("course_enrollments")
           .select("id")
           .eq("student_id", user.id)
           .eq("course_id", courseResult.data.id)
           .eq("is_active", true)
-          .single();
+          .maybeSingle();
+        const isEnrolled = !enrollmentError && !!enrollmentData;
 
-        if (enrollmentError || !enrollmentData) {
-          console.error(
-            "Student not enrolled in this course:",
-            enrollmentError,
-          );
+        if (!isEnrolled && !courseResult.data?.is_public) {
+          console.error("Student not enrolled in this course");
           setError("Bạn chưa được ghi danh vào khóa học này");
           navigate("/study");
           return;
+        }
+
+        // Free preview (mirrors UnitList): a public course with any free unit only
+        // lets non-enrolled students into free units (or their own personal unit).
+        const thisUnit = unitResult.data;
+        if (!isEnrolled && !thisUnit?.is_free && thisUnit?.assigned_student_id !== user.id) {
+          const { data: freeUnits, error: freeErr } = await supabase
+            .from("units")
+            .select("id")
+            .eq("course_id", courseResult.data.id)
+            .eq("is_free", true)
+            .eq("is_active", true)
+            .limit(1);
+          // freeErr = column not migrated yet -> behave like before (course fully open)
+          if (!freeErr && freeUnits?.length > 0) {
+            setError("Phần này chỉ dành cho học viên đã ghi danh");
+            navigate(`/study/course/${courseResult.data.id}`);
+            return;
+          }
         }
       }
 

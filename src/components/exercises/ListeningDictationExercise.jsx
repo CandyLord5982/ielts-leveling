@@ -6,12 +6,17 @@ import { useProgress } from '../../hooks/useProgress'
 import { supabase } from '../../supabase/client'
 import {
   ArrowLeft, ArrowRight, Play, Pause, ChevronRight,
-  CheckCircle, XCircle, X, SkipForward, Headphones, Star,
+  CheckCircle, XCircle, X, SkipForward, Headphones,
   FileText, Settings, Volume2, Maximize2,
   ChevronDown, Mic, Check, Download,
   Gauge, Repeat, Languages
 } from 'lucide-react'
 import { Slider } from '../../components/ui/slider'
+// Shared exercise chrome, so dictation looks like the other exercise types
+import ExerciseHeader from '../ui/ExerciseHeader'
+import CelebrationScreen from '../ui/CelebrationScreen'
+import Button3D from '../ui/Button3D'
+import { useFeedback } from '../../hooks/useFeedback'
 
 
 // ─── Diff Engine ─────────────────────────────────────────────────────────────
@@ -961,6 +966,9 @@ const ListeningDictationExercise = () => {
   }, [])
 
   const [exercise, setExercise] = useState(null)
+  const [colorTheme, setColorTheme] = useState('blue') // unit theme -> header character
+  const [isBatmanMoving, setIsBatmanMoving] = useState(false)
+  const { passGif } = useFeedback()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [mode, setMode] = useState('dictation')
@@ -1031,8 +1039,28 @@ const ListeningDictationExercise = () => {
   const segments = useMemo(() => exercise?.content?.segments || [], [exercise?.content?.segments])
   const seg = segments[currentIdx]
   const totalSegments = segments.length
-  const answeredCount = segmentResults.length
-  const progressPct = totalSegments > 0 ? Math.round((answeredCount / totalSegments) * 100) : 0
+  // Header progress = sentences answered correctly (same meaning as other exercises' bar + stars)
+  const correctCount = segmentResults.filter(r => !r.skipped && r.accuracy >= 80).length
+  const correctPct = totalSegments > 0 ? (correctCount / totalSegments) * 100 : 0
+
+  // Header character runs for a moment each time a sentence is completed
+  useEffect(() => {
+    if (correctCount === 0) return
+    setIsBatmanMoving(true)
+    const t = setTimeout(() => setIsBatmanMoving(false), 3000)
+    return () => clearTimeout(t)
+  }, [correctCount])
+
+  // Unit color theme for the header character (same source as other exercises)
+  useEffect(() => {
+    if (!sessionId) return
+    supabase
+      .from('sessions')
+      .select('color_theme, units:unit_id(color_theme)')
+      .eq('id', sessionId)
+      .single()
+      .then(({ data }) => setColorTheme(data?.color_theme || data?.units?.color_theme || 'blue'))
+  }, [sessionId])
 
   // Load exercise
   useEffect(() => {
@@ -1304,7 +1332,7 @@ const ListeningDictationExercise = () => {
 
   // ── Loading / Error ──────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-[#f0f2f8]">
+    <div className="flex items-center justify-center h-screen">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         <p className="text-gray-500 text-sm">Đang tải bài học...</p>
@@ -1317,43 +1345,35 @@ const ListeningDictationExercise = () => {
 
 
   // ── Completion Screen ────────────────────────────────────────────────────
+  // Shared celebration screen, same as the other exercise types
   if (isComplete) {
-    const correct = segmentResults.filter(r => r.accuracy >= 80).length
-    const incorrect = segmentResults.filter(r => !r.skipped && r.accuracy < 80).length
-    const answered2 = segmentResults.filter(r => !r.skipped)
-    const avgAcc = answered2.length ? Math.round(answered2.reduce((s, r) => s + r.accuracy, 0) / answered2.length) : 0
+    const correct = segmentResults.filter(r => !r.skipped && r.accuracy >= 80).length
+    const missedIdx = segments.map((_, i) => i).filter(i => {
+      const r = segmentResults.find(x => x.idx === i)
+      return !r || r.skipped || r.accuracy < 80
+    })
+    const retryMissed = () => {
+      // Clear the missed/skipped sentences and jump to the first one; correct ones stay done
+      setSegmentResults(prev => prev.filter(r => !missedIdx.includes(r.idx)))
+      setInputText(''); setChecked(false); setDiffResult(null); setSkipped(false)
+      setCurrentIdx(missedIdx[0])
+      setIsComplete(false)
+    }
     return (
-      <div className="min-h-screen bg-[#f0f2f8] flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-200 p-8 text-center shadow-sm">
-          <div className="w-16 h-16 mx-auto mb-4 bg-indigo-50 rounded-full flex items-center justify-center">
-            <Headphones className="w-8 h-8 text-indigo-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Hoàn thành bài luyện</h2>
-          <p className="text-gray-500 text-sm mb-6">{exercise?.title}</p>
-          <div className="grid grid-cols-4 gap-3 mb-6">
-            {[
-              { label: 'Đúng', value: correct, color: 'text-green-600' },
-              { label: 'Sai', value: incorrect, color: 'text-red-500' },
-              { label: 'Tổng', value: totalSegments, color: 'text-gray-700' },
-              { label: 'Chính xác', value: `${avgAcc}%`, color: 'text-indigo-600' },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="bg-gray-50 rounded-xl p-3">
-                <div className={`text-xl font-bold ${color}`}>{value}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{label}</div>
-              </div>
-            ))}
-          </div>
-          {xpAwarded > 0 && (
-            <div className="flex items-center justify-center gap-1.5 text-amber-600 font-semibold mb-5 text-sm">
-              <Star className="w-4 h-4" /><span>+{xpAwarded} XP</span>
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <button onClick={() => { setIsComplete(false); setIsReviewMode(true) }} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors">Xem lại</button>
-            <button onClick={() => { setIsComplete(false); setCurrentIdx(0); setSegmentResults([]); setInputText(''); setChecked(false) }} className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors">Làm lại</button>
-            <button onClick={backToSession}className="w-full py-2.5 text-gray-500 hover:text-gray-700 text-sm transition-colors">Về trang học</button>
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <CelebrationScreen
+          score={totalSegments ? Math.round((correct / totalSegments) * 100) : 0}
+          correctAnswers={correct}
+          totalQuestions={totalSegments}
+          passThreshold={80}
+          xpAwarded={xpAwarded}
+          passGif={passGif}
+          wrongQuestionsCount={missedIdx.length}
+          onRetryWrongQuestions={missedIdx.length ? retryMissed : undefined}
+          onReviewAnswers={() => { setIsComplete(false); setIsReviewMode(true) }}
+          onBackToList={backToSession}
+          exerciseId={exerciseId}
+        />
       </div>
     )
   }
@@ -1361,7 +1381,7 @@ const ListeningDictationExercise = () => {
   // ── Review Screen ────────────────────────────────────────────────────────
   if (isReviewMode) {
     return (
-      <div className="min-h-screen bg-[#f0f2f8] flex flex-col">
+      <div className="min-h-screen flex flex-col">
         <audio ref={audioRef} src={exercise?.content?.audio_url} preload="auto" />
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-3 sticky top-0 z-10">
           <button onClick={() => setIsComplete(true)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
@@ -1489,7 +1509,7 @@ const ListeningDictationExercise = () => {
 
   // ── Main Student UI ──────────────────────────────────────────────────────
   return (
-    <div ref={containerRef} className={`min-h-screen bg-[#f0f2f8] flex flex-col ${isFullscreen ? 'overflow-y-auto' : ''}`}>
+    <div ref={containerRef} className={`min-h-screen flex flex-col ${isFullscreen ? 'bg-white overflow-y-auto' : ''}`}>
       <audio
         ref={audioRef}
         src={exercise?.content?.audio_url}
@@ -1528,31 +1548,16 @@ const ListeningDictationExercise = () => {
             </button>
           </div>
 
-          {/* Row 2: Title + badge (left) | progress bar + count (right) */}
-          <div className="flex items-center justify-between gap-6 px-6 pt-1 pb-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-[22px] font-bold text-gray-900 leading-tight tracking-tight">
-                  {exercise?.title || 'Listening Dictation'}
-                </h1>
-              </div>
-              <p className="text-sm text-gray-500 mt-0.5 truncate">
-                {exercise?.description || 'Listening Dictation'}
-              </p>
-            </div>
-
-            {/* Progress bar + count */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
-                {currentIdx + 1} / {totalSegments}
-              </span>
-            </div>
+          {/* Row 2: shared exercise header (title, themed running character, progress + stars) */}
+          <div className="px-6 pt-8 pb-2">
+            <ExerciseHeader
+              title={exercise?.title || 'Listening Dictation'}
+              progressPercentage={correctPct}
+              showQuestionCounter={false}
+              isBatmanMoving={isBatmanMoving}
+              showProgressLabel={false}
+              colorTheme={colorTheme}
+            />
           </div>
 
           {/* Tabs */}
@@ -1804,33 +1809,39 @@ const ListeningDictationExercise = () => {
                         )}
 
                         {/* 4. Action Buttons */}
-                        <div className="flex gap-2.5">
+                        {/* Same raised 3D buttons as the other exercise types */}
+                        <div className="flex gap-3 pt-1">
                           {!checked ? (
                             <>
-                              <button
+                              <Button3D
                                 onClick={handleCheck}
                                 title={!inputText.trim() ? 'Gợi ý từ đầu tiên' : undefined}
-                                className="px-3.5 h-[30px] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-blue-600 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5"
+                                color="blue"
+                                size="sm"
+                                className="flex items-center justify-center gap-1.5"
                               >
-                                <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Check
-                              </button>
-                              <button
+                                <Check className="w-4 h-4 stroke-[2.5]" /> Check
+                              </Button3D>
+                              <Button3D
                                 onClick={handleSkip}
-                                className="px-3.5 h-[30px] bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[13px] font-medium transition-all flex items-center justify-center gap-1.5"
+                                color="gray"
+                                size="sm"
+                                className="flex items-center justify-center gap-1.5"
                               >
-                                <SkipForward className="w-3.5 h-3.5 text-gray-500" /> Skip
-                              </button>
+                                <SkipForward className="w-4 h-4" /> Skip
+                              </Button3D>
                             </>
                           ) : (
-                            <>
-                              {/* Removed Try Again because it's no longer disabled */}
-                              <button onClick={handleNext}
-                                className="px-3.5 h-[30px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center justify-center gap-1.5">
-                                {currentIdx < totalSegments - 1 ? 'Next' : 'Hoàn thành'}
-                                <ArrowRight className="w-3.5 h-3.5" />
-                                <span className="text-[11px] opacity-70">↵</span>
-                              </button>
-                            </>
+                            <Button3D
+                              onClick={handleNext}
+                              color="blue"
+                              size="sm"
+                              className="flex items-center justify-center gap-1.5"
+                            >
+                              {currentIdx < totalSegments - 1 ? 'Next' : 'Finish'}
+                              <ArrowRight className="w-4 h-4" />
+                              <span className="text-[11px] opacity-70">↵</span>
+                            </Button3D>
                           )}
                         </div>
                       </>
@@ -1877,9 +1888,11 @@ const ListeningDictationExercise = () => {
                               + Note
                             </button>
                           )}
-                          <button onClick={handleNext} className="px-6 h-[34px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[13px] font-medium transition-all shadow-sm flex items-center gap-1.5">
-                            {currentIdx < totalSegments - 1 ? 'Next' : 'Hoàn thành'}
-                          </button>
+                          <Button3D onClick={handleNext} color="green" size="sm" className="flex items-center justify-center gap-1.5">
+                            {currentIdx < totalSegments - 1 ? 'Next' : 'Finish'}
+                            <ArrowRight className="w-4 h-4" />
+                            <span className="text-[11px] opacity-70">↵</span>
+                          </Button3D>
                         </div>
                       </>
                     )}

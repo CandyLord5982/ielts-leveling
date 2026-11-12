@@ -10,7 +10,7 @@ const emptyQuestion = (idx = 0) => ({
   time_limit: 0,
 })
 
-const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevelChange, folderPath }) => {
+const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevelChange, folderPath, exerciseTitle = '', onCreateFromQuestions }) => {
   const [localQuestions, setLocalQuestions] = useState(
     (questions || []).length ? questions : [emptyQuestion(0)]
   )
@@ -45,6 +45,89 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
   }
 
   const addQuestion = () => sync([...localQuestions, emptyQuestion(localQuestions.length)])
+
+  // --- Select mode: copy selected questions to a new exercise / remove / split into parts ---
+  // onCreateFromQuestions is provided by EditExerciseModal: ([{ title, questions }]) => Promise<boolean>
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState(() => new Set()) // indices into localQuestions
+  const [selectBusy, setSelectBusy] = useState(false)
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+
+  const toggleSelected = (idx) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
+
+  // Accepts "1-15, 20, 25-30" (1-based)
+  const selectRange = () => {
+    const input = window.prompt('Select questions (e.g. 1-15, 20, 25-30):')
+    if (!input) return
+    const next = new Set(selected)
+    for (const part of input.split(',')) {
+      const m = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/)
+      if (!m) continue
+      const from = Number(m[1])
+      const to = Number(m[2] || m[1])
+      for (let n = Math.min(from, to); n <= Math.max(from, to); n++) {
+        if (n >= 1 && n <= localQuestions.length) next.add(n - 1)
+      }
+    }
+    setSelected(next)
+  }
+
+  // Fresh copies with new ids so the new exercises don't share objects with this one
+  const cloneQuestions = (list) => {
+    const stamp = Date.now()
+    return list.map((q, i) => ({ ...JSON.parse(JSON.stringify(q)), id: `q${stamp}_c${i}` }))
+  }
+
+  const extractSelected = async () => {
+    if (selected.size === 0 || !onCreateFromQuestions) return
+    const title = window.prompt('Title for the new exercise:', `${exerciseTitle} (Extract)`.trim())
+    if (!title || !title.trim()) return
+    const picked = cloneQuestions(localQuestions.filter((_, i) => selected.has(i)))
+    setSelectBusy(true)
+    const ok = await onCreateFromQuestions([{ title: title.trim(), questions: picked }])
+    setSelectBusy(false)
+    if (ok) exitSelectMode()
+  }
+
+  const removeSelected = () => {
+    if (selected.size === 0) return
+    if (selected.size === localQuestions.length) {
+      alert('An exercise needs at least one question. Leave at least one unselected.')
+      return
+    }
+    if (!window.confirm(`Remove ${selected.size} selected question(s) from this exercise? (Click Save to apply.)`)) return
+    sync(localQuestions.filter((_, i) => !selected.has(i)))
+    exitSelectMode()
+  }
+
+  const splitIntoParts = async () => {
+    if (!onCreateFromQuestions || localQuestions.length < 2) return
+    const input = window.prompt(`Split ${localQuestions.length} questions into how many exercises?`, '2')
+    const parts = Number(input)
+    if (!Number.isInteger(parts) || parts < 2 || parts > localQuestions.length) return
+    const size = Math.ceil(localQuestions.length / parts)
+    const groups = []
+    for (let p = 0; p < parts; p++) {
+      const chunk = localQuestions.slice(p * size, (p + 1) * size)
+      if (chunk.length) groups.push({ title: `${exerciseTitle} (Part ${p + 1})`.trim(), questions: cloneQuestions(chunk) })
+    }
+    if (!window.confirm(`Create ${groups.length} new exercises (${groups.map(g => g.questions.length).join(' / ')} questions)? This exercise stays unchanged.`)) return
+    setSelectBusy(true)
+    const ok = await onCreateFromQuestions(groups)
+    setSelectBusy(false)
+    if (ok) exitSelectMode()
+  }
 
   // Bulk import: each non-empty line becomes one question
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -226,6 +309,15 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Speaking Questions</h3>
         <div className="flex items-center gap-2">
+          {onCreateFromQuestions && localQuestions.length > 1 && (
+            <button
+              type="button"
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              className={`flex items-center gap-1 px-3 py-1.5 text-white rounded-lg text-sm ${selectMode ? 'bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+            >
+              {selectMode ? 'Done selecting' : 'Select / Split'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setBulkOpen(o => !o)}
@@ -242,6 +334,40 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
           </button>
         </div>
       </div>
+
+      {selectMode && (
+        <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm">
+          <span className="font-medium text-indigo-900">{selected.size} selected</span>
+          <button type="button" onClick={() => setSelected(new Set(localQuestions.map((_, i) => i)))} className="px-2 py-1 text-indigo-700 hover:underline">All</button>
+          <button type="button" onClick={() => setSelected(new Set())} className="px-2 py-1 text-indigo-700 hover:underline">None</button>
+          <button type="button" onClick={selectRange} className="px-2 py-1 text-indigo-700 hover:underline">Range…</button>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={extractSelected}
+            disabled={selected.size === 0 || selectBusy}
+            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40"
+          >
+            Copy to new exercise
+          </button>
+          <button
+            type="button"
+            onClick={removeSelected}
+            disabled={selected.size === 0 || selectBusy}
+            className="px-3 py-1.5 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40"
+          >
+            Remove from this exercise
+          </button>
+          <button
+            type="button"
+            onClick={splitIntoParts}
+            disabled={selectBusy}
+            className="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-40"
+          >
+            Split all into N exercises…
+          </button>
+        </div>
+      )}
 
       {bulkOpen && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -275,9 +401,19 @@ const SpeakingAssessmentEditor = ({ questions, level, onQuestionsChange, onLevel
       )}
 
       {localQuestions.map((q, idx) => (
-        <div key={q.id} className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
+        <div key={q.id} className={`border rounded-lg p-4 space-y-4 ${selectMode && selected.has(idx) ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-purple-700">Question {idx + 1}</span>
+            <label className="flex items-center gap-2">
+              {selectMode && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(idx)}
+                  onChange={() => toggleSelected(idx)}
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              )}
+              <span className="text-sm font-semibold text-purple-700">Question {idx + 1}</span>
+            </label>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => moveUp(idx)} className="p-1 hover:bg-gray-200 rounded" title="Move up">
                 <ChevronUp className="w-4 h-4 text-gray-500" />

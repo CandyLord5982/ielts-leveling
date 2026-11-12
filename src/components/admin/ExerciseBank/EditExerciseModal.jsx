@@ -300,6 +300,8 @@ const EditExerciseModal = ({ isOpen, onClose, exercise, onUpdate, focusQuestionI
             onQuestionsChange={(questions) => handleContentChange({ ...content, questions })}
             onLevelChange={(level) => handleContentChange({ ...content, level })}
             folderPath={getFolderPath(formData.folder_id)}
+            exerciseTitle={formData.title}
+            onCreateFromQuestions={handleCreateFromQuestions}
           />
         )
       case 'video_upload':

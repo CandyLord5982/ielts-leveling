@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import PropTypes from 'prop-types'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -7,7 +8,7 @@ import { supabase } from '../../supabase/client'
 import { saveRecentExercise } from '../../utils/recentExercise'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { RichTextWithAudio } from '../ui/RichTextRenderer'
-import { Mic, Square, ArrowRight, ArrowLeft, Star, RefreshCw, CheckCircle, MessageSquare } from 'lucide-react'
+import { Mic, Square, ArrowRight, ArrowLeft, Star, RefreshCw, CheckCircle, MessageSquare, X } from 'lucide-react'
 import TeacherExerciseNav from '../ui/TeacherExerciseNav'
 
 const isMobileDevice = () =>
@@ -116,7 +117,15 @@ Guidance: ${levelConfig.aiContext}
 
 IELTS speaking question: "${prompt}"
 
-Student's answer (auto-transcribed from speech, so ignore punctuation and small transcription slips): "${spokenText}"
+Student's answer (auto-transcribed from speech): "${spokenText}"
+
+IMPORTANT — this is a SPOKEN answer. Judge it the way an IELTS examiner hears it, not as written text:
+- NEVER comment on punctuation, commas, full stops, run-on sentences, capitalization, or spelling. The transcript adds or drops these at random; the student did not produce them.
+- The speech recognizer often mishears words. If a word looks wrong but sounds like a word that fits (e.g. "mail" for "meal", "discourse" for "Discord", "it were" for "if we're"), assume the student said the right word and do NOT list it as a mistake.
+- Only list a mistake when you can quote the exact words and you are confident the student really said them wrong: wrong tense, wrong verb form, subject-verb agreement, wrong word choice, wrong preposition, or a clearly missing word that would be audible.
+- Do not list optional style choices (e.g. "could add 'the'", "could add 'some'") as mistakes. Put those in suggestions if useful.
+- No vague items like "inconsistent tenses throughout" — every mistake must quote the student's words and give the correction.
+- If there are no real mistakes, say so in "mistakes" and keep the score high.
 
 Respond ONLY in valid JSON:
 {
@@ -127,7 +136,7 @@ Respond ONLY in valid JSON:
   "vocabulary_score": number 0-100 (Lexical Resource),
   "grammar_score": number 0-100 (Grammatical Range & Accuracy),
   "strengths": "1-2 sentences on what the student did well",
-  "mistakes": "What's wrong: list the specific mistakes, quoting what the student said and giving the correction, e.g. \\"I go there yesterday\\" → \\"I went there yesterday\\". One per line, starting with '- '.",
+  "mistakes": "What's wrong: only real spoken grammar/vocabulary mistakes, quoting what the student said and giving the correction plus a short reason, e.g. \\"I go there yesterday\\" → \\"I went there yesterday\\" (past tense). One per line, starting with '- '. Never punctuation or capitalization.",
   "suggestions": "What to improve: 2-4 specific, actionable tips to reach a higher band. One per line, starting with '- '.",
   "sample_improvement": "A short improved version of the student's answer (2-4 sentences) at about one band higher"
 }`
@@ -208,6 +217,50 @@ Provide evaluation in JSON calibrated to the student's level:
   return parsed
 }
 
+// Splits a mistake line like `- "I go" → "I went" (past tense)` into its parts
+const parseMistake = (line) => {
+  const text = line.replace(/^\s*[-•*]\s*/, '').trim()
+  const arrow = text.match(/\s*(?:→|->|=>)\s*/)
+  if (!arrow) return { plain: text }
+  const wrong = text.slice(0, arrow.index).trim()
+  let right = text.slice(arrow.index + arrow[0].length).trim()
+  let reason = ''
+  const reasonMatch = right.match(/\s*\(([^()]*)\)\s*$/)
+  if (reasonMatch) {
+    reason = reasonMatch[1].trim()
+    right = right.slice(0, reasonMatch.index).trim()
+  }
+  return { wrong, right, reason }
+}
+
+const MistakeList = ({ mistakes }) => {
+  const lines = (Array.isArray(mistakes) ? mistakes : String(mistakes).split('\n'))
+    .map(l => String(l).trim())
+    .filter(Boolean)
+  return (
+    <ul className="space-y-2">
+      {lines.map((line, i) => {
+        const m = parseMistake(line)
+        if (m.plain !== undefined) {
+          return <li key={i} className="text-sm text-red-700">{m.plain}</li>
+        }
+        return (
+          <li key={i} className="text-sm leading-relaxed">
+            <span className="text-red-600">{m.wrong}</span>
+            <span className="mx-1.5 text-gray-400">→</span>
+            <span className="font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">{m.right}</span>
+            {m.reason && <span className="ml-2 text-xs text-gray-500">({m.reason})</span>}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+MistakeList.propTypes = {
+  mistakes: PropTypes.oneOfType([PropTypes.string, PropTypes.arrayOf(PropTypes.string)]).isRequired,
+}
+
 const fallbackResult = (msg = '') => ({
   overall_score: 50,
   content_score: 50,
@@ -253,7 +306,9 @@ const SpeakingAssessmentExercise = () => {
   const [colorTheme, setColorTheme] = useState('blue')
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [questionResults, setQuestionResults] = useState([])
+  // Latest scored answer per question index: { [idx]: { questionIndex, transcription, overallScore, aiResult } }
+  const [answers, setAnswers] = useState({})
+  const questionResults = Object.values(answers)
   const [isQuizComplete, setIsQuizComplete] = useState(false)
   const [xpAwarded, setXpAwarded] = useState(0)
 
@@ -281,6 +336,19 @@ const SpeakingAssessmentExercise = () => {
   const bgChunksRef = useRef([])
   const bgStreamRef = useRef(null)
   const lastAudioBlobRef = useRef(null)
+  const cancelledRef = useRef(false) // true when the student cancels mid-recording
+
+  // Local playback of the student's last recording (in-memory only, cleared per question)
+  const [playbackUrl, setPlaybackUrl] = useState(null)
+  const playbackUrlRef = useRef(null)
+  const showPlayback = (blob) => {
+    if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
+    const url = blob && blob.size > 1000 ? URL.createObjectURL(blob) : null
+    playbackUrlRef.current = url
+    setPlaybackUrl(url)
+  }
+  const clearPlayback = () => showPlayback(null)
+  useEffect(() => () => { if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current) }, [])
 
   const isMobile = isMobileDevice()
 
@@ -304,7 +372,8 @@ const SpeakingAssessmentExercise = () => {
   // Reset timer when question changes
   useEffect(() => {
     if (questions.length === 0 || currentQuestionIndex >= questions.length) return
-    const timeLimit = questions[currentQuestionIndex]?.time_limit || 0
+    // No countdown when revisiting a question that already has an answer
+    const timeLimit = answers[currentQuestionIndex] ? 0 : (questions[currentQuestionIndex]?.time_limit || 0)
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     if (timeLimit > 0) { setTimeRemaining(timeLimit); setTimerActive(true) }
     else { setTimeRemaining(null); setTimerActive(false) }
@@ -383,8 +452,10 @@ const SpeakingAssessmentExercise = () => {
       recorder.ondataavailable = (e) => { if (e.data.size > 0) bgChunksRef.current.push(e.data) }
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop())
+        if (cancelledRef.current) return
         const blob = new Blob(bgChunksRef.current, { type: options.mimeType || 'audio/webm' })
         lastAudioBlobRef.current = blob
+        showPlayback(blob)
       }
       bgRecorderRef.current = recorder
       recorder.start()
@@ -467,6 +538,7 @@ const SpeakingAssessmentExercise = () => {
     recognition.onend = () => {
       setIsRecording(false)
       setInterimTranscription('')
+      if (cancelledRef.current) return
       const text = finalTranscriptRef.current.trim()
       if (text) analyzeWithAI(text)
     }
@@ -496,8 +568,10 @@ const SpeakingAssessmentExercise = () => {
     recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
     recorder.onstop = async () => {
       stream.getTracks().forEach(t => t.stop())
+      if (cancelledRef.current) return
       const blob = new Blob(audioChunksRef.current, { type: options.mimeType || 'audio/webm' })
       lastAudioBlobRef.current = blob
+      showPlayback(blob)
       setIsTranscribing(true)
       try {
         const text = await transcribeAudio(blob)
@@ -518,6 +592,8 @@ const SpeakingAssessmentExercise = () => {
   }
 
   const startRecording = async () => {
+    cancelledRef.current = false
+    clearPlayback()
     setTranscription('')
     setInterimTranscription('')
     setAiResult(null)
@@ -555,44 +631,86 @@ const SpeakingAssessmentExercise = () => {
     setIsRecording(false)
   }
 
+  // Throw away the current attempt: no transcription, scoring or saving
+  const cancelRecording = () => {
+    cancelledRef.current = true
+    if (recognitionRef.current) {
+      recognitionRef.current.abort()
+      recognitionRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    stopBgRecorder()
+    lastAudioBlobRef.current = null
+    setIsRecording(false)
+    finalTranscriptRef.current = ''
+    setInterimTranscription('')
+    // Show the previous answer for this question again, if there was one
+    const saved = answers[currentQuestionIndex]
+    setTranscription(saved?.transcription || '')
+    setAiResult(saved?.aiResult || null)
+    setShowResults(!!saved)
+  }
+
   const analyzeWithAI = async (spokenText) => {
-    const q = questions[currentQuestionIndex]
+    const idx = currentQuestionIndex
+    const q = questions[idx]
     if (!spokenText || !q) return
     setIsAnalyzing(true)
     let aiScoreResult
     try {
       aiScoreResult = await scoreIeltsSpeakingWithLLM(q.prompt, spokenText, exercise?.content?.level)
-      setAiResult(aiScoreResult)
     } catch (err) {
       console.error('AI scoring error:', err)
       aiScoreResult = fallbackResult()
-      setAiResult(aiScoreResult)
     } finally {
+      setAiResult(aiScoreResult)
       setIsAnalyzing(false)
       setShowResults(true)
+      // Keep the latest attempt for this question so students can come back to it
+      setAnswers(prev => ({
+        ...prev,
+        [idx]: { questionIndex: idx, transcription: spokenText, overallScore: aiScoreResult?.overall_score || 0, aiResult: aiScoreResult },
+      }))
       // Save audio + submission for teacher review
       saveSubmission(spokenText, aiScoreResult)
     }
   }
 
-  const handleNextQuestion = () => {
-    setQuestionResults(prev => [...prev, {
-      questionIndex: currentQuestionIndex,
-      transcription,
-      overallScore: aiResult?.overall_score || 0,
-      aiResult,
-    }])
-    setTranscription('')
-    setInterimTranscription('')
-    setAiResult(null)
-    setShowResults(false)
-    finalTranscriptRef.current = ''
+  const isBusy = isRecording || isTranscribing || isAnalyzing
+  const answeredCount = Object.keys(answers).length
+  const allAnswered = questions.length > 0 && answeredCount === questions.length
 
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-    } else {
-      setIsQuizComplete(true)
+  const goToQuestion = (idx) => {
+    if (isBusy || idx < 0 || idx >= questions.length || idx === currentQuestionIndex) return
+    clearPlayback()
+    const saved = answers[idx]
+    setTranscription(saved?.transcription || '')
+    setInterimTranscription('')
+    setAiResult(saved?.aiResult || null)
+    setShowResults(!!saved)
+    setError(null)
+    finalTranscriptRef.current = ''
+    setCurrentQuestionIndex(idx)
+  }
+
+  // Next unanswered question after the current one (wrapping around), or the next index
+  const nextUnansweredIndex = () => {
+    for (let step = 1; step <= questions.length; step++) {
+      const i = (currentQuestionIndex + step) % questions.length
+      if (!answers[i]) return i
     }
+    return Math.min(currentQuestionIndex + 1, questions.length - 1)
+  }
+
+  const handleNextQuestion = () => {
+    if (allAnswered) {
+      clearPlayback()
+      setIsQuizComplete(true)
+      return
+    }
+    goToQuestion(nextUnansweredIndex())
   }
 
   const markExerciseCompleted = async () => {
@@ -719,15 +837,71 @@ const SpeakingAssessmentExercise = () => {
             </div>
             <div className="mt-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-600">Progress</span>
-                <span className="text-xs font-semibold text-purple-600">{currentQuestionIndex + 1} / {totalQuestions}</span>
+                <span className="text-xs text-gray-600">Answered</span>
+                <span className="text-xs font-semibold text-purple-600">{answeredCount} / {totalQuestions}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
                 <div
                   className="bg-purple-600 h-2.5 rounded-full transition-all duration-500"
-                  style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
+                  style={{ width: `${totalQuestions ? (answeredCount / totalQuestions) * 100 : 0}%` }}
                 />
               </div>
+              {!isQuizComplete && totalQuestions > 1 && (
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => goToQuestion(currentQuestionIndex - 1)}
+                    disabled={isBusy || currentQuestionIndex === 0}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                    title="Previous question"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex flex-wrap gap-1.5 flex-1">
+                    {questions.map((_, i) => {
+                      const isCurrent = i === currentQuestionIndex
+                      const done = !!answers[i]
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => goToQuestion(i)}
+                          disabled={isBusy && !isCurrent}
+                          title={done ? `Question ${i + 1} (answered)` : `Question ${i + 1}`}
+                          className={`w-8 h-8 rounded-full text-xs font-semibold border-2 transition-colors disabled:opacity-50 ${
+                            isCurrent
+                              ? 'border-purple-600 bg-purple-600 text-white'
+                              : done
+                                ? 'border-green-400 bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToQuestion(currentQuestionIndex + 1)}
+                    disabled={isBusy || currentQuestionIndex === totalQuestions - 1}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                    title="Next question"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              {!isQuizComplete && allAnswered && !showResults && (
+                <button
+                  type="button"
+                  onClick={handleNextQuestion}
+                  disabled={isBusy}
+                  className="mt-3 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  All questions answered — Finish
+                </button>
+              )}
             </div>
             {timeRemaining !== null && (
               <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
@@ -821,8 +995,18 @@ const SpeakingAssessmentExercise = () => {
                         : <Mic className="w-9 h-9 text-white" />}
                     </button>
                     <p className="text-sm text-gray-500">
-                      {isRecording ? 'Recording… tap to stop' : 'Tap to start speaking'}
+                      {isRecording ? 'Recording… tap to stop and get feedback' : 'Tap to start speaking'}
                     </p>
+                    {isRecording && (
+                      <button
+                        type="button"
+                        onClick={cancelRecording}
+                        className="flex items-center gap-1.5 px-4 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        title="Discard this attempt without scoring it"
+                      >
+                        <X className="w-4 h-4" /> Cancel
+                      </button>
+                    )}
 
                     {/* Live transcription (desktop only — mobile gets it after stop) */}
                     {(transcription || interimTranscription) && (
@@ -870,6 +1054,9 @@ const SpeakingAssessmentExercise = () => {
                       <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                         <p className="text-xs font-semibold text-gray-500 mb-1">You said:</p>
                         <p className="text-sm text-gray-800 italic">"{transcription}"</p>
+                        {playbackUrl && (
+                          <audio src={playbackUrl} controls className="w-full mt-2 h-10" />
+                        )}
                       </div>
                     )}
 
@@ -927,7 +1114,7 @@ const SpeakingAssessmentExercise = () => {
                     {aiResult.mistakes && (
                       <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                         <p className="text-sm font-semibold text-red-800 mb-1">{"What's wrong"}</p>
-                        <p className="text-sm text-red-700 whitespace-pre-line">{aiResult.mistakes}</p>
+                        <MistakeList mistakes={aiResult.mistakes} />
                       </div>
                     )}
                     {aiResult.suggestions && (
@@ -945,7 +1132,7 @@ const SpeakingAssessmentExercise = () => {
 
                     <div className="flex gap-3 justify-between pt-2">
                       <button
-                        onClick={() => { setTranscription(''); setAiResult(null); setShowResults(false); finalTranscriptRef.current = '' }}
+                        onClick={() => { clearPlayback(); setTranscription(''); setAiResult(null); setShowResults(false); finalTranscriptRef.current = '' }}
                         className="flex items-center gap-2 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
                       >
                         <RefreshCw className="w-4 h-4" /> Try Again
@@ -954,11 +1141,16 @@ const SpeakingAssessmentExercise = () => {
                         onClick={handleNextQuestion}
                         className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
                       >
-                        {currentQuestionIndex < questions.length - 1
-                          ? <><span>Next</span><ArrowRight className="w-4 h-4" /></>
-                          : <span>Finish</span>}
+                        {allAnswered
+                          ? <span>Finish</span>
+                          : <><span>Next</span><ArrowRight className="w-4 h-4" /></>}
                       </button>
                     </div>
+                    {!allAnswered && (
+                      <p className="text-xs text-gray-500 text-right">
+                        Answer all questions to finish ({totalQuestions - answeredCount} left)
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -218,7 +218,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
         className={`hidden lg:flex flex-col fixed top-0 left-0 h-full ${sidebarWidth} bg-white border-r border-gray-200 z-40 transition-all duration-300 ease-in-out overflow-hidden`}
       >
         {/* Header: Logo + Toggle button */}
-        <div className={`flex items-center ${collapsed ? 'justify-center py-4 px-2' : 'justify-between p-4'} flex-shrink-0`}>
+        <div className={`flex items-center ${collapsed ? 'flex-col justify-center gap-2 py-4 px-2' : 'justify-between p-4'} flex-shrink-0`}>
           {!collapsed && (
             <Link to="/" className="flex items-center space-x-2 min-w-0">
               <img src={branding.logoUrl} alt="Logo" className="h-10 w-auto flex-shrink-0" />
@@ -226,15 +226,15 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
             </Link>
           )}
           {collapsed && (
-            <Link to="/">
-              <img src={branding.logoUrl} alt="Logo" className="h-8 w-auto" />
+            <Link to="/" className="flex items-center justify-center w-10 h-10 flex-shrink-0">
+              <img src={branding.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
             </Link>
           )}
           {/* Nút toggle */}
           <button
             onClick={toggleCollapsed}
             title={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            className={`${collapsed ? 'mt-2' : ''} flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 bg-white shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:shadow-md transition-all`}
+            className={`flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 bg-white shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:shadow-md transition-all`}
           >
             {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>

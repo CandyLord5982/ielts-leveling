@@ -46,7 +46,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const challengeId = new URLSearchParams(location.search).get('challengeId') || null
   const isChallenge = new URLSearchParams(location.search).get('isChallenge') === 'true'
   const sessionId = new URLSearchParams(location.search).get('sessionId')
-  const { playCelebration, passGif } = useFeedback()
+  const { playCelebration, playLose, passGif } = useFeedback()
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -78,8 +78,9 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   // Play celebration when exercise is completed and passed
   useEffect(() => {
     if (testMode) return
-    if (exerciseCompleted && !hasPlayedPassAudio && totalScore >= 80) {
-      playCelebration()
+    if (exerciseCompleted && !hasPlayedPassAudio) {
+      if (totalScore >= 80) playCelebration()
+      else playLose()
       setHasPlayedPassAudio(true)
     }
   }, [exerciseCompleted, hasPlayedPassAudio, totalScore, playCelebration, testMode])
@@ -645,6 +646,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         setRetryQuestions(wrongQuestionsForRetry)
 
         setExerciseCompleted(false)
+        setHasPlayedPassAudio(false)
         setCurrentQuestionIndex(wrongQuestionsForRetry[0])
         setShowResults(false)
         setShowExplanation(false)

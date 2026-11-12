@@ -5,6 +5,8 @@ import { supabase } from '../../supabase/client'
 import RichTextRenderer, { RichTextWithAudio } from '../ui/RichTextRenderer'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from '../../utils/srs'
+import { clearReviewDueCache } from '../../utils/reviewDue'
+import { playReviewCorrect, playReviewWrong } from '../../utils/reviewSounds'
 import { ArrowLeft, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
 
 // Spaced-repetition review for previously-missed multiple-choice questions.
@@ -26,6 +28,9 @@ const ReviewQueue = () => {
   useEffect(() => {
     if (user) loadQueue()
   }, [user])
+
+  // Dashboard red dot should re-check after a review session
+  useEffect(() => () => { if (user) clearReviewDueCache(user.id) }, [user])
 
   const loadQueue = async () => {
     setLoading(true)
@@ -136,6 +141,8 @@ const ReviewQueue = () => {
     if (selected === null || !current) return
     const isCorrect = selected === current.correctAnswer
     setRevealed(true)
+    if (isCorrect) playReviewCorrect()
+    else playReviewWrong()
     setStats((s) => ({ correct: s.correct + (isCorrect ? 1 : 0), total: s.total + 1 }))
 
     const rating = ratingFromCorrectness(isCorrect)

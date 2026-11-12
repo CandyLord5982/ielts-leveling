@@ -4,6 +4,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from '../../utils/srs'
+import { clearReviewDueCache } from '../../utils/reviewDue'
+import { playReviewCorrect, playReviewWrong } from '../../utils/reviewSounds'
 import { ArrowLeft, CheckCircle, XCircle, RotateCcw, Plus, Lightbulb } from 'lucide-react'
 
 // Quizlet-style review of words saved from the dictionary popup.
@@ -48,6 +50,9 @@ const VocabReview = () => {
   useEffect(() => {
     if (user) load()
   }, [user])
+
+  // Dashboard red dot should re-check after a review session
+  useEffect(() => () => { if (user) clearReviewDueCache(user.id) }, [user])
 
   const load = async () => {
     setLoading(true)
@@ -140,6 +145,8 @@ const VocabReview = () => {
     if (revealed) return
     setSelected(opt.id)
     setRevealed(true)
+    if (opt.id === current.id) playReviewCorrect()
+    else playReviewWrong()
     // Only the first attempt counts toward the score / SRS.
     if (results[current.id]?.choice === undefined) {
       setResults((r) => ({ ...r, [current.id]: { ...r[current.id], choice: opt.id === current.id } }))
@@ -151,6 +158,8 @@ const VocabReview = () => {
     if (revealed || !typed.trim()) return
     const ok = typed.trim().toLowerCase() === current.word.toLowerCase()
     setRevealed(true)
+    if (ok) playReviewCorrect()
+    else playReviewWrong()
     if (results[current.id]?.type === undefined) {
       // Using a hint means it wasn't recalled on its own.
       const res = { ...results[current.id], type: ok && hintCount === 0 }

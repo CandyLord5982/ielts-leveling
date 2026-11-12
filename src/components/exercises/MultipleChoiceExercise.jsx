@@ -40,7 +40,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   const { user } = useAuth()
   const { canCreateContent } = usePermissions()
   const { startExercise, completeExerciseWithXP } = useProgress()
-  const { currentMeme, showMeme, playFeedback, playCelebration, passGif } = useFeedback()
+  const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback()
   const { activePet, drainPetEnergy, userEnergy } = usePet()
 
   // URL params
@@ -137,10 +137,9 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
       const score = Math.round((correctAnswers / totalQuestions) * 100)
       const passed = score >= 80
 
-      if (passed) {
-        playCelebration()
-        setHasPlayedPassAudio(true)
-      }
+      if (passed) playCelebration()
+      else playLose()
+      setHasPlayedPassAudio(true)
     }
   }, [isQuizComplete, hasPlayedPassAudio, questionResults, playCelebration, testMode])
 
@@ -705,6 +704,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     setShowExplanation(false)
     setQuestionResults([])
     setIsQuizComplete(false)
+    setHasPlayedPassAudio(false)
     setWrongQuestions([])
     setStartTime(Date.now())
     setHasPlayedPassAudio(false) // Reset audio flag

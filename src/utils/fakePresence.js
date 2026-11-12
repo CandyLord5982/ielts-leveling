@@ -19,7 +19,7 @@ const FAKE_NAMES = [
   'Mỹ Uyên', 'Zacha', '15thanggg05', 'Bảo Trâm', 'Minh Nhat',
   'Thanh Phong', 'Bảo Ngọc', 'Bảo Ngân', 'Bích Phương', 'Khánh Vy',
   'Quang Huy', 'Bảo Anh', 'Dương', 'Gà Công Nghiệp x9', 'Khánh',
-  'Kim Bảo (đẹp trai)', 'Bảo Ngọc Mint', 'Bảo Lân (đep trai)', 'Hà Giang', 'Minh Anh A',
+  'Kim Bảo', 'Bảo Ngọc Mint', 'Bảo Lân dz', 'Hà Giang', 'Minh Anh A',
   'Đình Cường', 'Huyền My', 'Huyền Anh', 'FCMOBILE IS BEST GAME', 'Gia Long',
   'Ngọc Hân', 'Hoàng An', 'Tuệ Minh', 'An Phú', 'Hải Long',
   'Nhật minh', 'Bảo Quân', 'Thảo nguyên', 'U_U', 'Hải Hà',
@@ -43,13 +43,13 @@ const FAKE_NAMES = [
   'Bông', 'Sóc', 'Kem Dâu', 'Mèo Ú', 'Gấu Trúc',
   'Pikachu Vn', 'Doraemon fan', 'Naruto20', 'Goku Đen', 'Sasuke_vn',
   'Free Fire Pro', 'Liên Quân Top 1', 'Roblox kid', 'minecraft_master', 'pubg_noob',
-  'Tiểu Long', 'Hắc Long', 'Vua Tiếng Anh', 'Thánh IELTS', 'IELTS 9.0 :)))',
+  'Tiểu Long', 'Hắc Long', 'Vua Tiếng Anh', 'Pro IELTS', 'IELTS 9.0 :)))',
   'hoc sinh gioi', 'Không Biết Tên', 'Ai Đó', 'Người Qua Đường', 'Ẩn Danh 123',
   ' Minh Khôi', ' Thu Hà', 'Gia Hưng', 'Bảo Ngọc', 'D2 Hoàng Anh',
   'Mai', 'Huy', 'Thảo', 'Tuấn', 'A1 Quỳnh Như',
   'Bảo Hân 🌸', 'Ngọc Trâm 💕', 'Thanh Tâm ✨', 'Kim Anh 🌷', 'Hạ Vy 🐰',
   'Gia Hưng 😎', 'Minh Hiếu 🔥', 'Tuấn Anh ⚽', 'Đức Minh 🎮', 'Quốc Anh 🇻🇳',
-  'Anh Khoa (cute)', 'Thành Nam (pro)', 'Bé Na', 'Minh Tú (học giỏi)', 'Hoàng Hải (vip)',
+  'Anh Khoa (cute)', 'Thành Nam', 'Bé Na', 'Minh Tú gioi tieng anh', 'Hoàng Hải',
   'NgocLan', 'BaoTran', 'ThuyTien', 'MinhKhoi', 'GiaNghi',
   'xuanmai', 'thanhtruc', 'khanhlinh_', 'nguyenvana', 'tran.minh',
   'Hà Phương', 'Thu Thủy', 'Mai Phương', 'Ngọc Hà', 'Lan Anh',
@@ -248,6 +248,8 @@ export const withFakePresence = (online, offline, now = Date.now()) => {
       if (seen) fakeOffline.push({ ...base, last_seen_at: seen })
     }
   })
+  // Most recently active first, so the order shifts naturally instead of following the name list
+  fakeOnline.sort((a, b) => (a.last_seen_at < b.last_seen_at ? 1 : -1))
   fakeOffline.sort((a, b) => (a.last_seen_at < b.last_seen_at ? 1 : -1))
   return {
     online: [...online, ...fakeOnline],

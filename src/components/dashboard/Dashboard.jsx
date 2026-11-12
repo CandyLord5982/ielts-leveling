@@ -1,6 +1,7 @@
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
 import { withFakePresence, loadFakeAvatarPool } from '../../utils/fakePresence'
+import { getReviewDue } from '../../utils/reviewDue'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getRecentExercise } from '../../utils/recentExercise'
@@ -199,7 +200,7 @@ const CourseStatsSection = ({ courseId }) => {
   );
 };
 const Dashboard = () => {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { branding } = useBranding()
   const { canCreateContent } = usePermissions()
   const [courses, setCourses] = useState([])
@@ -214,6 +215,15 @@ const Dashboard = () => {
   const [pvpAvailable, setPvpAvailable] = useState(true)
   const [courseCompletion, setCourseCompletion] = useState({})
   const [showTour, setShowTour] = useState(false)
+  const [reviewDue, setReviewDue] = useState({ questions: false, vocab: false })
+
+  // Red dots on the review shortcuts (cached for 10 min, see utils/reviewDue)
+  useEffect(() => {
+    if (!user?.id || !profile) return
+    let cancelled = false
+    getReviewDue(user.id).then(due => { if (!cancelled) setReviewDue(due) })
+    return () => { cancelled = true }
+  }, [user?.id, !!profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-start the welcome tour once for new students (low XP), after courses have rendered.
   useEffect(() => {
@@ -998,9 +1008,9 @@ const Dashboard = () => {
       {profile && (
         <div data-tour="review" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           {[
-            { path: '/review', label: 'Ôn tập câu sai', desc: 'Ôn lại các câu bạn từng làm sai', icon: RotateCcw, tint: 'bg-indigo-100 text-indigo-600', accent: 'text-indigo-600' },
-            { path: '/review/vocab', label: 'Ôn tập từ vựng', desc: 'Ôn lại các từ bạn đã tra và lưu', icon: BookOpen, tint: 'bg-emerald-100 text-emerald-600', accent: 'text-emerald-600' },
-          ].map(({ path, label, desc, icon: Icon, tint, accent }) => (
+            { path: '/review', label: 'Ôn tập câu sai', desc: 'Ôn lại các câu bạn từng làm sai', icon: RotateCcw, tint: 'bg-indigo-100 text-indigo-600', accent: 'text-indigo-600', due: reviewDue.questions },
+            { path: '/review/vocab', label: 'Ôn tập từ vựng', desc: 'Ôn lại các từ bạn đã tra và lưu', icon: BookOpen, tint: 'bg-emerald-100 text-emerald-600', accent: 'text-emerald-600', due: reviewDue.vocab },
+          ].map(({ path, label, desc, icon: Icon, tint, accent, due }) => (
             <button
               key={path}
               onClick={() => navigate(path)}
@@ -1015,11 +1025,19 @@ const Dashboard = () => {
 
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div
-                    className={`w-12 h-12 flex items-center justify-center flex-shrink-0 ${tint}`}
-                    style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
-                  >
-                    <Icon className="w-6 h-6" />
+                  <div className="relative flex-shrink-0">
+                    <div
+                      className={`w-12 h-12 flex items-center justify-center ${tint}`}
+                      style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                    >
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    {due && (
+                      <span className="absolute -top-1 -right-1 flex w-3.5 h-3.5" title="Có mục cần ôn tập">
+                        <span className="absolute inline-flex w-full h-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                        <span className="relative inline-flex w-3.5 h-3.5 rounded-full bg-red-500 ring-2 ring-white" />
+                      </span>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className={`text-sm font-semibold uppercase tracking-wide ${accent}`}>{label}</div>

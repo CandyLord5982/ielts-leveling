@@ -44,7 +44,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const sessionId = urlParams.get('sessionId')
   const challengeId = urlParams.get('challengeId') || null
   const isChallenge = urlParams.get('isChallenge') === 'true'
-  const { currentMeme, showMeme, playFeedback, playCelebration, passGif } = useFeedback()
+  const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback()
   const { activePet, drainPetEnergy, userEnergy } = usePet()
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -128,8 +128,9 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   // Play celebration when exercise is completed and passed
   useEffect(() => {
     if (testMode) return
-    if (exerciseCompleted && !hasPlayedPassAudio && totalScore >= 80) {
-      playCelebration()
+    if (exerciseCompleted && !hasPlayedPassAudio) {
+      if (totalScore >= 80) playCelebration()
+      else playLose()
       setHasPlayedPassAudio(true)
     }
   }, [exerciseCompleted, hasPlayedPassAudio, totalScore, playCelebration, testMode])
@@ -850,6 +851,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
       setRetryQuestions(wrongQuestionsForRetry)
 
       setExerciseCompleted(false)
+      setHasPlayedPassAudio(false)
       setCurrentQuestionIndex(wrongQuestionsForRetry[0])
       setShowResults(false)
       setShowExplanation(false)

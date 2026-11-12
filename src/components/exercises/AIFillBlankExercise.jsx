@@ -34,7 +34,7 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
   const { canCreateContent } = usePermissions()
   const { completeExerciseWithXP } = useProgress()
   const isTeacherView = canCreateContent()
-  const { playCelebration, passGif } = useFeedback()
+  const { playCelebration, playLose, passGif } = useFeedback()
 
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -273,9 +273,8 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
         const totalTimeSpent = startTime ? Math.floor((currentTime - startTime) / 1000) : 0
 
         // Play celebration if passed
-        if (averageScore >= 70) {
-          playCelebration()
-        }
+        if (averageScore >= 70) playCelebration()
+        else playLose()
 
         try {
           const roundedScore = Math.round(averageScore)

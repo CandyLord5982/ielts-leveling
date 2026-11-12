@@ -49,7 +49,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
 
   const { user } = useAuth()
   const { startExercise, completeExerciseWithXP } = useProgress()
-  const { playFeedback, showMeme, currentMeme, playCelebration, passGif } = useFeedback()
+  const { playFeedback, showMeme, currentMeme, playCelebration, playLose, passGif } = useFeedback()
   const { canCreateContent } = usePermissions()
   const isTeacherView = canCreateContent()
 
@@ -119,10 +119,9 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
       const allF = exercise?.content?.pages?.flatMap(p => p.fields || []) || []
       const correctF = allF.filter(f => fieldFeedback[f.id]?.correct).length
       const score = allF.length > 0 ? Math.round((correctF / allF.length) * 100) : 0
-      if (score >= 80) {
-        playCelebration()
-        setHasPlayedPassAudio(true)
-      }
+      if (score >= 80) playCelebration()
+      else playLose()
+      setHasPlayedPassAudio(true)
     }
   }, [exerciseComplete, hasPlayedPassAudio, playCelebration, testMode, fieldFeedback, exercise?.content?.pages])
 
@@ -477,6 +476,7 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
     setUserAnswers({})
     setFieldFeedback({})
     setExerciseComplete(false)
+    setHasPlayedPassAudio(false)
     setXpEarned(0)
     setStartTime(Date.now())
     setIsSubmitted(false)

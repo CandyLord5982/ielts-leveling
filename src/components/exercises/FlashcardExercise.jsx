@@ -245,7 +245,7 @@ const FlashcardExercise = () => {
   const [celebrationScore, setCelebrationScore] = useState(0);
   const [celebrationXP, setCelebrationXP] = useState(0);
   const [hasPlayedPassAudio, setHasPlayedPassAudio] = useState(false);
-  const { currentMeme, showMeme, playFeedback, playCelebration, passGif } = useFeedback();
+  const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback();
 
   // Get exerciseId and sessionId from URL search params
   const searchParams = new URLSearchParams(location.search);
@@ -918,8 +918,9 @@ const FlashcardExercise = () => {
 
   // Play celebration audio when celebration screen shows and score passes
   useEffect(() => {
-    if (showCelebration && !hasPlayedPassAudio && celebrationScore >= 80) {
-      playCelebration();
+    if (showCelebration && !hasPlayedPassAudio) {
+      if (celebrationScore >= 80) playCelebration();
+      else playLose();
       setHasPlayedPassAudio(true);
     }
   }, [showCelebration, hasPlayedPassAudio, celebrationScore, playCelebration]);

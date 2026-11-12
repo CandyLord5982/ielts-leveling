@@ -16,9 +16,7 @@ export const useFeedback = () => {
     assetUrl('/meme/right_cat_thumb_up.png'),
 assetUrl('/meme/right_drake_yes.jpg'),
 assetUrl('/meme/right_kid_thumb_up.png'),
-assetUrl('/meme/right_Leonardo-Dicaprio-Cheers.jpg'),
 assetUrl('/meme/right_not_bad_kid.png'),
-assetUrl('/meme/right_pooh.PNG'),
 assetUrl('/meme/right_Satisfied-Seal.jpg'),
 assetUrl('/meme/right_success_kid.png'),
 assetUrl('/meme/right_tapping_head.jpg')
@@ -31,17 +29,11 @@ assetUrl('/meme/right_tapping_head.jpg')
 assetUrl('/meme/wrong_always_has_been.jpg'),
 assetUrl('/meme/wrong_batman_slap.jpg'),
 assetUrl('/meme/wrong_bf.jpg'),
-assetUrl('/meme/wrong_Black-Girl-Wat.png'),
 assetUrl('/meme/wrong_drake.jpg'),
 assetUrl('/meme/wrong_Futurama-Fry.jpg'),
-assetUrl('/meme/wrong_leo_laugh.jpg'),
-assetUrl('/meme/wrong_megamind.webp'),
 assetUrl('/meme/wrong_Mocking-Spongebob.jpg'),
 assetUrl('/meme/wrong_nick_young.jpg'),
-assetUrl('/meme/wrong_pooh.PNG'),
 assetUrl('/meme/wrong_tom_confused.jpg'),
-assetUrl('/meme/wrong_you-guys-are-getting-paid.jpg'),
-
   ];
 
   // Pass celebration GIFs
@@ -57,13 +49,9 @@ assetUrl('/meme/wrong_you-guys-are-getting-paid.jpg'),
   ];
 
   // Sound URLs
-  const correctSounds = [assetUrl('/sound/correct.mp3')];
+  const correctSounds = [assetUrl('/sound/correct-review.mp3')];
 
-  const wrongSounds = [assetUrl('/sound/Bruh.mp3'),
-    assetUrl('/sound/error.mp3'),
-    assetUrl('/sound/ohhhroblox.mp3'),
-    assetUrl('/sound/vineboom.mp3')
-  ];
+  const wrongSounds = [assetUrl('/sound/incorrect-review.mp3')];
 
   /**
    * Play feedback (meme + sound) for correct or wrong answer
@@ -117,5 +105,18 @@ assetUrl('/meme/wrong_you-guys-are-getting-paid.jpg'),
     setPassGif(randomGif);
   };
 
-  return { currentMeme, showMeme, playFeedback, playCelebration, passGif };
+  /**
+   * Play the losing sound when the exercise ends below the pass mark
+   */
+  const playLose = () => {
+    try {
+      const audio = new Audio(assetUrl('/sound/lose-exercise.mp3'));
+      audio.volume = 0.5;
+      audio.play().catch((err) => console.log("Audio play failed:", err));
+    } catch (e) {
+      console.log("Sound not supported:", e);
+    }
+  };
+
+  return { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif };
 };

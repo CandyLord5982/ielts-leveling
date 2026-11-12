@@ -153,7 +153,7 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const { startExercise, completeExerciseWithXP } = useProgress()
   const isTeacherView = canCreateContent()
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
-  const { currentMeme, showMeme, playFeedback, playCelebration, passGif } = useFeedback()
+  const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback()
   const [showResultScreen, setShowResultScreen] = useState(false)
   const [questionResults, setQuestionResults] = useState([]) // Track results for each question
   const [session, setSession] = useState(null)
@@ -253,10 +253,9 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       const score = Math.round((totalCorrectZones / totalAllZones) * 100)
       const passed = score >= 75
 
-      if (passed) {
-        playCelebration()
-        setHasPlayedPassAudio(true)
-      }
+      if (passed) playCelebration()
+      else playLose()
+      setHasPlayedPassAudio(true)
     }
   }, [showResultScreen, hasPlayedPassAudio, questionResults, playCelebration])
 

@@ -22,7 +22,50 @@ const RC = {
 }
 
 // Biomes are the Wild Area zones (src/utils/wildZones.js), in the original cycling order
-const BIOMES = ['forest', 'caves', 'volcano', 'swamp', 'frozen', 'ruins'].map(getZone)
+const BIOMES = ['forest', 'caves', 'volcano', 'swamp', 'ruins'].map(getZone)
+
+// World map layout. Spots are % of the world box (x: left→right, y: top→bottom) and mark where
+// each thing's feet stand. A zone can hand-place them via `layout` in wildZones.js (admins:
+// "Edit layout" on the map); otherwise they sit evenly on one row.
+// Background for every battle scene (stage intro, fight, victory), whatever the zone
+const FIGHT_BG = assetUrl('/adventure/pet-adventure-fight-bg.jpg')
+
+// Side-scrolling is off for now: the world is exactly one screen. Set to true to bring back the
+// wide, scrolling world (map image at full height with its own width; narrow screens scroll).
+const MAP_SCROLLING = false
+const WORLD_MIN_W = 900 // (scrolling only) narrower screens scroll sideways instead of squashing the spots
+const LAYOUT_SPOTS = 5  // monster spots per layout (the most a run can have)
+const worldWidth = (viewW) => Math.max(viewW, WORLD_MIN_W)
+
+const defaultLayout = (n) => ({
+  camp: { x: 6, y: 62 },
+  monsters: Array.from({ length: n }, (_, i) => ({ x: Math.round((6 + (88 * (i + 1)) / (n + 1)) * 2) / 2, y: 62 })),
+  prize: { x: 94, y: 62 },
+})
+
+// Points in walking order: camp, monsters…, prize. Shorter runs use spots spread across the
+// layout, always ending on the last spot (the final boss).
+const worldPoints = (layout, n) => {
+  if (!layout || !(layout.monsters?.length >= n)) {
+    const d = defaultLayout(n)
+    return [d.camp, ...d.monsters, d.prize]
+  }
+  const spots = layout.monsters
+  const picked = Array.from({ length: n }, (_, i) =>
+    spots[Math.round((i * (spots.length - 1)) / Math.max(1, n - 1))])
+  return [layout.camp, ...picked, layout.prize]
+}
+
+const layoutSnippet = (layout) => {
+  const pt = (p) => `{ x: ${p.x}, y: ${p.y} }`
+  return [
+    '    layout: {',
+    `      camp: ${pt(layout.camp)},`,
+    `      monsters: [${layout.monsters.map(pt).join(', ')}],`,
+    `      prize: ${pt(layout.prize)},`,
+    '    },',
+  ].join('\n')
+}
 
 const MONSTER_IMAGES = [
   assetUrl('/pet-game/astro/alien1.png'),
@@ -222,7 +265,7 @@ const PetMazeAdventure = ({
   questionBank,
   currentLevel: _currentLevel = 1,
   chestEnabled: _chestEnabled = false,
-  profile: _profile,
+  profile,
   onGameEnd,
   onMazeComplete,
   onClose,
@@ -235,11 +278,26 @@ const PetMazeAdventure = ({
   // Build adventure once
   const [stops, setStops] = useState(() => buildAdventure(config.stops, zone))
   const [currentStop, setCurrentStop] = useState(0)
-  const [phase, setPhase] = useState('entrance') // entrance | map | playing | victory | complete | failed
+  // map (world) → entrance (stage intro) → playing → victory → back to map … → complete | failed
+  const [phase, setPhase] = useState('map')
   const [entranceStep, setEntranceStep] = useState(0)
   const [totalScore, setTotalScore] = useState(0)
   const [showConfirmClose, setShowConfirmClose] = useState(false)
   const [victoryScore, setVictoryScore] = useState(0)
+  // World map point the pet stands on: 0 = camp, k = k-th beaten monster, stops+1 = prize
+  const [pathPetPos, setPathPetPos] = useState(0)
+  const [mapShake, setMapShake] = useState(false)
+  const bossShakenRef = useRef(false)
+  const [worldSize, setWorldSize] = useState(() => ({ w: typeof window !== 'undefined' ? window.innerWidth : 400, h: 400 }))
+  // Layout editor (admins): editLayout is the layout being dragged; layoutOverride previews it after "Done"
+  const isAdminUser = profile?.role === 'admin'
+  const [editLayout, setEditLayout] = useState(null)
+  const [layoutOverride, setLayoutOverride] = useState(null)
+  const [layoutCopied, setLayoutCopied] = useState(false)
+  const dragSpotRef = useRef(null)
+  const worldScrollRef = useRef(null)
+  const worldInnerRef = useRef(null)
+  const startBattleRef = useRef(null)
   const entranceAudioRef = useRef(null)
 
   // Battle state
@@ -475,7 +533,7 @@ const PetMazeAdventure = ({
       setTimeout(() => setEntranceStep(2), 1200),
       setTimeout(() => setEntranceStep(3), 2000),
       setTimeout(() => setEntranceStep(4), 2800),
-      setTimeout(() => { setPhase('map'); setEntranceStep(0) }, 3500),
+      setTimeout(() => { setEntranceStep(0); startBattleRef.current?.() }, 3500),
     ]
     try {
       entranceAudioRef.current = new Audio(assetUrl('/sound/adventure-start.mp3'))
@@ -495,16 +553,46 @@ const PetMazeAdventure = ({
         s.play().catch(() => {})
       } catch {}
     }, 1700)
+    // Back to the world map; the pet then walks forward (to the prize after the last monster)
     const timer = setTimeout(() => {
-      if (currentStop >= stops.length - 1) {
-        setPhase('complete')
-      } else {
-        setCurrentStop(prev => prev + 1)
-        setPhase('entrance')
-      }
+      if (currentStop < stops.length - 1) setCurrentStop(prev => prev + 1)
+      setPhase('map')
     }, 7000)
     return () => { clearTimeout(laserTimer); clearTimeout(timer) }
   }, [phase, currentStop, stops.length])
+
+  // World map camera + walking: show the pet where it stood, then walk it to its new point
+  useEffect(() => {
+    if (phase !== 'map') return
+    const target = completedCount >= stops.length ? stops.length + 1 : completedCount
+    const focus = (pt, smooth) => {
+      const scroller = worldScrollRef.current
+      const inner = worldInnerRef.current
+      if (!scroller || !inner) return
+      const p = worldPoints(layoutOverride || currentBiome.layout, stops.length)[pt]
+      if (!p) return
+      const x = (p.x / 100) * inner.clientWidth
+      scroller.scrollTo({ left: inner.offsetLeft + x - scroller.clientWidth / 2, behavior: smooth ? 'smooth' : 'auto' })
+    }
+    setMapShake(false)
+    focus(pathPetPos, false)
+    const timers = []
+    const walking = pathPetPos !== target
+    if (walking) {
+      timers.push(setTimeout(() => { setPathPetPos(target); focus(target, true) }, 600))
+    }
+    // The first time the final boss is next up, shake the world once it's in view
+    const n = stops.length
+    if (!bossShakenRef.current && currentStop === n - 1 && !stops[n - 1]?.completed) {
+      timers.push(setTimeout(() => {
+        bossShakenRef.current = true
+        setMapShake(true)
+      }, walking ? 1900 : 400))
+    }
+    return () => timers.forEach(clearTimeout)
+    // pathPetPos is read only as the starting point; re-running on its change would loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, completedCount, stops.length])
 
   // Pet image
   const petImageUrl = useMemo(() => {
@@ -631,6 +719,50 @@ const PetMazeAdventure = ({
     startQTimer()
     if (challenges[0]) initChallengeMode(challenges[0])
   }, [currentStop, stops, wordBank, questionBank, startQTimer, initChallengeMode, petMaxHp])
+
+  // The world fills the map area (spots are % of it), so track that area's size
+  useEffect(() => {
+    if (phase !== 'map') return
+    const el = worldScrollRef.current
+    if (!el) return
+    const measure = () => setWorldSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [phase])
+
+  /* ---- Layout editor (admins): drag spots, then copy the snippet into wildZones.js ---- */
+  const openLayoutEditor = () => {
+    const base = layoutOverride || currentBiome.layout
+    const full = base && base.monsters?.length === LAYOUT_SPOTS ? base : defaultLayout(LAYOUT_SPOTS)
+    setEditLayout(JSON.parse(JSON.stringify(full)))
+    setLayoutCopied(false)
+  }
+  const onSpotPointerDown = (key) => (e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragSpotRef.current = key
+  }
+  const onSpotPointerMove = (e) => {
+    const key = dragSpotRef.current
+    const inner = worldInnerRef.current
+    if (key == null || !inner) return
+    const r = inner.getBoundingClientRect()
+    const clamp = (v) => Math.min(100, Math.max(0, Math.round(v * 2) / 2))
+    const p = { x: clamp(((e.clientX - r.left) / r.width) * 100), y: clamp(((e.clientY - r.top) / r.height) * 100) }
+    setEditLayout(prev => key === 'camp' ? { ...prev, camp: p }
+      : key === 'prize' ? { ...prev, prize: p }
+      : { ...prev, monsters: prev.monsters.map((m, i) => (i === key ? p : m)) })
+    setLayoutCopied(false)
+  }
+  const onSpotPointerUp = () => { dragSpotRef.current = null }
+  const copyLayout = () => {
+    navigator.clipboard?.writeText(layoutSnippet(editLayout)).then(() => setLayoutCopied(true)).catch(() => {})
+  }
+
+  // The stage intro (entrance) starts the battle when it ends
+  useEffect(() => { startBattleRef.current = startBattle }, [startBattle])
 
   const handleAnswer = useCallback((choiceIndex) => {
     if (phase !== 'playing' || feedback || selectedChoice !== null) return
@@ -901,7 +1033,10 @@ const PetMazeAdventure = ({
   }, [])
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-  const biomeBg = isMobile ? currentBiome.bgMobile : currentBiome.bgDesktop
+  // The map uses the zone's own art; the battle scenes (intro, fight, victory) share one fight background
+  const biomeBg = phase === 'map'
+    ? (isMobile ? currentBiome.bgMobile : currentBiome.bgDesktop)
+    : FIGHT_BG
   const currentChallenge = battleChallenges[challengeIndex]
 
   const portal = createPortal(
@@ -1149,77 +1284,245 @@ const PetMazeAdventure = ({
         </div>
       )}
 
-      {/* Map phase */}
-      {phase === 'map' && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center px-6 pt-16" style={{ animation: 'advMapSlideIn 0.5s ease-out' }}>
+      {/* Map phase: side-scrolling world map. Camp → monsters → prize, at the zone's layout spots */}
+      {phase === 'map' && (() => {
+        const n = stops.length
+        // One screen (MAP_SCROLLING off): the world is the screen and the map image covers it.
+        // Scrolling: with a map image the world is the image (full height, width from its aspect),
+        // otherwise the screen at least WORLD_MIN_W wide.
+        const mapImage = currentBiome.mapImage
+        const worldH = worldSize.h
+        const worldW = !MAP_SCROLLING
+          ? worldSize.w
+          : mapImage
+            ? Math.max(worldSize.w, Math.round(worldH * (currentBiome.mapAspect || 3)))
+            : worldWidth(worldSize.w)
+        const toPx = (p) => ({ x: (p.x / 100) * worldW, y: (p.y / 100) * worldH })
+        const pts = worldPoints(layoutOverride || currentBiome.layout, n).map(toPx)
+        const allDone = completedCount >= n
+        const camp = pts[0]
+        const goal = pts[pts.length - 1]
+        const petPt = pts[pathPetPos] || camp
+        const accent = currentBiome.accent
+        const editing = !!editLayout
+        const spotHandlers = (key) => ({
+          onPointerDown: onSpotPointerDown(key),
+          onPointerMove: onSpotPointerMove,
+          onPointerUp: onSpotPointerUp,
+          onPointerCancel: onSpotPointerUp,
+        })
 
-          <div className="text-center mt-6 mb-4">
-            <p className="text-white/50 text-xs uppercase tracking-widest">
-              {currentBiome.emoji} {currentBiome.name}
-            </p>
-            <p className="text-white/30 text-[10px] mt-1">
-              Stage {currentStop + 1} of {stops.length}
-            </p>
-          </div>
+        return (
+          <div className="absolute inset-0 z-10" style={{ animation: 'advMapSlideIn 0.5s ease-out' }}>
+            {/* Scrollable world: fills the whole screen; title and buttons float on top */}
+            <div className="absolute inset-0"
+              style={{ animation: mapShake ? 'advMapShake 0.6s ease-in-out' : undefined }}>
+              <div ref={worldScrollRef}
+                className="w-full h-full overflow-x-auto overflow-y-hidden"
+                style={{ touchAction: 'pan-x', scrollbarWidth: 'none' }}
+                onWheel={(e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY }}>
+                <div ref={worldInnerRef} className="relative h-full mx-auto"
+                  style={{
+                    width: worldW,
+                    backgroundImage: mapImage ? `url(${mapImage})` : undefined,
+                    backgroundSize: MAP_SCROLLING ? '100% 100%' : 'cover',
+                    backgroundPosition: 'center bottom',
+                  }}>
 
-          <div className="flex items-center gap-2 mb-6">
-            {stops.map((s, i) => (
-              <div key={s.id} className="w-3 h-3 rounded-full transition-all duration-300"
-                style={{
-                  background: s.completed ? rc.solid : i === currentStop ? `${rc.solid}80` : '#374151',
-                  boxShadow: i === currentStop ? `0 0 8px ${rc.light}` : 'none',
-                }}
-              />
-            ))}
-          </div>
+                  {editing ? (
+                    /* ---- Layout editor: drag every spot; the yellow dot is where feet stand ---- */
+                    <>
+                      {[
+                        { key: 'camp', p: toPx(editLayout.camp) },
+                        ...editLayout.monsters.map((m, i) => ({ key: i, p: toPx(m) })),
+                        { key: 'prize', p: toPx(editLayout.prize) },
+                      ].map(({ key, p }) => {
+                        const isBoss = key === LAYOUT_SPOTS - 1
+                        return (
+                          <div key={String(key)}>
+                            <div {...spotHandlers(key)}
+                              className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center cursor-grab active:cursor-grabbing rounded-xl border-2 border-dashed border-yellow-300/70 bg-black/30 px-1 pt-1"
+                              style={{ left: p.x, top: p.y, touchAction: 'none' }}>
+                              {key === 'camp' ? (
+                                <span className="text-4xl leading-none select-none">🏕️</span>
+                              ) : key === 'prize' ? (
+                                <span className="w-12 h-12 rounded-full flex items-center justify-center text-2xl font-black text-white border-2 select-none"
+                                  style={{ borderColor: rc.solid }}>?</span>
+                              ) : (
+                                <img src={stops[0]?.bossImage} alt="" draggable={false}
+                                  className={`${isBoss ? 'w-20 h-20' : 'w-16 h-16'} object-contain pointer-events-none`}
+                                  style={{ filter: isBoss ? 'drop-shadow(0 0 8px #ef4444)' : undefined }} />
+                              )}
+                              <span className={`text-[10px] font-bold mb-0.5 ${isBoss ? 'text-red-300' : 'text-yellow-200'}`}>
+                                {key === 'camp' ? 'Camp' : key === 'prize' ? 'Prize' : isBoss ? '5 · Boss' : `${key + 1}`}
+                              </span>
+                            </div>
+                            <div className="absolute -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-yellow-300 pointer-events-none"
+                              style={{ left: p.x, top: p.y }} />
+                          </div>
+                        )
+                      })}
+                    </>
+                  ) : (
+                    <>
+                      {/* Camp */}
+                      <div className="absolute -translate-x-1/2 -translate-y-full text-4xl select-none" style={{ left: camp.x - 30, top: camp.y + 8 }}>🏕️</div>
+                      <p className="absolute -translate-x-1/2 text-[11px] font-bold text-white/50" style={{ left: camp.x, top: camp.y + 18 }}>Start</p>
 
-          <div className="flex-1" />
+                      {/* Monsters */}
+                      {stops.map((s, k) => {
+                        const p = pts[k + 1]
+                        const isNext = !s.completed && k === currentStop
+                        const isLast = k === n - 1
+                        return (
+                          <div key={s.id}>
+                            <div className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-6 rounded-full bg-black/50" style={{ left: p.x, top: p.y }} />
+                            {s.completed ? (
+                              <div className="absolute -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center font-black text-black"
+                                style={{ left: p.x, top: p.y, background: accent, boxShadow: `0 0 12px ${accent}` }}>
+                                ✓
+                              </div>
+                            ) : (
+                              <button type="button" disabled={!isNext} onClick={() => setPhase('entrance')}
+                                className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center disabled:cursor-default"
+                                style={{ left: p.x, top: p.y + 10 }}>
+                                {isNext && (
+                                  <span className="text-xl mb-1" style={{ animation: 'advBubble 1s ease-in-out infinite' }}>⚔️</span>
+                                )}
+                                {isLast && <span className="text-2xl leading-none -mb-1" title="Final boss">👑</span>}
+                                <div className="relative">
+                                  {/* Final boss: red aura, even while still a silhouette */}
+                                  {isLast && (
+                                    <div className="absolute -inset-3 rounded-full blur-xl animate-pulse" style={{ background: 'rgba(239,68,68,0.45)' }} />
+                                  )}
+                                  <img src={s.bossImage} alt={isNext ? s.bossName : 'Unknown monster'} draggable={false}
+                                    className={`relative ${isLast ? (isNext ? 'w-28 h-28' : 'w-20 h-20') : (isNext ? 'w-20 h-20' : 'w-16 h-16')} object-contain`}
+                                    style={{
+                                      filter: isNext
+                                        ? (isLast ? 'drop-shadow(0 0 18px #ef4444) drop-shadow(0 0 6px #ef4444)' : `drop-shadow(0 0 14px ${accent})`)
+                                        : (isLast ? 'brightness(0) drop-shadow(0 0 8px #ef4444)' : 'brightness(0)'),
+                                      opacity: isNext ? 1 : isLast ? 0.85 : 0.55,
+                                      animation: isNext ? 'advMonsterIdle 1.5s ease-in-out infinite' : undefined,
+                                    }} />
+                                </div>
+                              </button>
+                            )}
+                            <p className={`absolute -translate-x-1/2 text-[11px] font-bold whitespace-nowrap ${isLast && !s.completed ? 'text-red-400' : isNext ? 'text-white' : 'text-white/50'}`}
+                              style={{ left: p.x, top: p.y + 18 }}>
+                              {s.completed ? 'Cleared' : isNext ? s.bossName : isLast ? 'BOSS' : `Stage ${k + 1}`}
+                            </p>
+                          </div>
+                        )
+                      })}
 
-          <div className="flex flex-col items-center mb-12">
-            <button onClick={startBattle}
-              className={`px-10 py-4 rounded-2xl font-bold text-white text-lg bg-gradient-to-r ${rc.gradient} hover:scale-105 active:scale-95 transition-all shadow-xl flex items-center justify-center gap-3`}
-              style={{ boxShadow: `0 0 30px ${rc.glow}` }}
-            >
-              ⚔️ Battle!
-            </button>
+                      {/* Prize at the end */}
+                      <div className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-6 rounded-full bg-black/50" style={{ left: goal.x, top: goal.y }} />
+                      <div className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center" style={{ left: goal.x, top: goal.y + 10 }}>
+                        {allDone && (
+                          <div className="absolute -inset-4 rounded-full blur-xl animate-pulse" style={{ background: rc.light }} />
+                        )}
+                        {mode === 'encounter' ? (
+                          <div className="relative w-14 h-14 mb-1 rounded-full flex items-center justify-center text-3xl font-black text-white border-2"
+                            style={{ borderColor: rc.solid, background: 'rgba(0,0,0,0.55)', boxShadow: `0 0 16px ${rc.light}`, animation: 'advBubble 1.6s ease-in-out infinite' }}>
+                            ?
+                          </div>
+                        ) : (
+                          <span className="relative text-5xl">🎁</span>
+                        )}
+                      </div>
+                      <p className="absolute -translate-x-1/2 text-[11px] font-bold whitespace-nowrap" style={{ left: goal.x, top: goal.y + 18, color: rc.solid }}>
+                        {mode === 'encounter' ? 'Wild pet' : 'Treasure'}
+                      </p>
 
-            {completedCount >= config.stops && (
-              <button onClick={() => setPhase('complete')}
-                className={`mt-4 px-10 py-4 rounded-2xl font-bold text-white text-lg bg-gradient-to-r ${rc.gradient} hover:scale-105 active:scale-95 transition-all shadow-xl animate-pulse`}
-                style={{ boxShadow: `0 0 30px ${rc.glow}` }}
-              >
-                {mode === 'encounter' ? '✨ Encounter Pet!' : '🏆 Claim Reward!'}
-              </button>
+                      {/* Pet */}
+                      <div className="absolute z-20 -translate-x-1/2 -translate-y-full pointer-events-none"
+                        style={{ left: petPt.x, top: petPt.y + 6, transition: 'left 1.2s ease-in-out, top 1.2s ease-in-out' }}>
+                        <div key={pathPetPos} style={{ animation: pathPetPos > 0 ? 'advWalkBob 0.3s ease-in-out 4' : 'advPetIdle 2s ease-in-out infinite' }}>
+                          <img src={petImageUrl} alt={petName} draggable={false} className="w-14 h-14 object-contain"
+                            style={{ filter: `drop-shadow(0 0 10px ${rc.light})` }} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Shade so the HUD and buttons stay readable over bright map art */}
+            <div className="absolute inset-0 pointer-events-none"
+              style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 22%, transparent 80%, rgba(0,0,0,0.45) 100%)' }} />
+
+            {/* Top overlay: zone, stage, layout editor */}
+            <div className="absolute top-14 left-0 right-0 flex flex-col items-center gap-2 px-4 pointer-events-none">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                <p className="text-white text-sm font-bold uppercase tracking-widest" style={{ textShadow: `0 0 12px ${accent}, 0 1px 3px rgba(0,0,0,0.8)` }}>
+                  {currentBiome.emoji} {currentBiome.name}
+                </p>
+                {!editing && !allDone && (
+                  <p className="text-white/80 text-xs" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                    Stage {currentStop + 1} of {n} · <span className="text-white font-bold">{stops[currentStop]?.bossName}</span>
+                  </p>
+                )}
+                {isAdminUser && !editing && (
+                  <button type="button" onClick={openLayoutEditor}
+                    className="pointer-events-auto px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-white/90 text-[11px] font-bold">
+                    ✏️ Edit layout{layoutOverride ? ' (preview, not saved)' : ''}
+                  </button>
+                )}
+              </div>
+
+              {editing && (
+                <div className="pointer-events-auto w-full max-w-xl flex flex-col items-center gap-2 rounded-xl bg-black/70 border border-white/10 p-3">
+                  <p className="text-white/80 text-xs text-center">
+                    Drag the camp, the 5 monster spots and the prize (scroll sideways to reach them all).
+                    Shorter runs use spots spread out from these; spot 5 is always the boss.
+                  </p>
+                  {layoutCopied && (
+                    <p className="text-emerald-300 text-xs font-bold text-center">
+                      Copied! Paste it into the &apos;{currentBiome.id}&apos; zone in src/utils/wildZones.js
+                    </p>
+                  )}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button type="button" onClick={copyLayout}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">📋 Copy code</button>
+                    <button type="button" onClick={() => { setEditLayout(defaultLayout(LAYOUT_SPOTS)); setLayoutCopied(false) }}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold">Reset</button>
+                    <button type="button" onClick={() => setEditLayout(null)}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold">Cancel</button>
+                    <button type="button" onClick={() => { setLayoutOverride(editLayout); setEditLayout(null) }}
+                      className="px-4 py-2 rounded-xl bg-white/90 hover:bg-white text-gray-900 text-sm font-bold">Done (preview)</button>
+                  </div>
+                  <details className="w-full">
+                    <summary className="text-white/50 text-[11px] cursor-pointer text-center">Show code</summary>
+                    <pre className="mt-1 w-full max-h-24 overflow-auto rounded-lg bg-black/60 p-2 text-[10px] text-emerald-200 select-text">
+                      {layoutSnippet(editLayout)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom overlay: one compact button, so it doesn't cover the ground */}
+            {!editing && (
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none">
+                {!allDone ? (
+                  <button onClick={() => setPhase('entrance')}
+                    className={`pointer-events-auto px-8 py-3 rounded-2xl font-bold text-white text-base bg-gradient-to-r ${rc.gradient} hover:scale-105 active:scale-95 transition-all shadow-xl flex items-center justify-center gap-2`}
+                    style={{ boxShadow: `0 0 30px ${rc.glow}` }}>
+                    ⚔️ Battle!
+                  </button>
+                ) : (
+                  <button onClick={() => setPhase('complete')}
+                    className={`pointer-events-auto px-8 py-3 rounded-2xl font-bold text-white text-base bg-gradient-to-r ${rc.gradient} hover:scale-105 active:scale-95 transition-all shadow-xl animate-pulse`}
+                    style={{ boxShadow: `0 0 30px ${rc.glow}` }}>
+                    {mode === 'encounter' ? '✨ Encounter Pet!' : '🏆 Claim Reward!'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
-
-          <div className="absolute bottom-32 left-1/4 sm:left-1/3 flex flex-col items-center z-10">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full blur-xl animate-pulse" style={{ background: `${rc.glow}` }} />
-              <img src={petImageUrl} alt={petName}
-                className="w-20 h-20 sm:w-28 sm:h-28 object-contain relative z-10"
-                style={{ animation: 'advPetIdle 2s ease-in-out infinite', filter: `drop-shadow(0 0 15px ${rc.light})` }}
-              />
-            </div>
-            <p className="text-white text-sm font-bold mt-2">{petName}</p>
-          </div>
-
-          <div className="absolute bottom-36 left-1/2 -translate-x-1/2 text-2xl sm:text-3xl font-black text-white/30 z-10" style={{ textShadow: '0 0 20px rgba(255,255,255,0.1)' }}>
-            VS
-          </div>
-
-          <div className="absolute bottom-32 right-1/4 sm:right-1/3 flex flex-col items-center z-10">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full blur-xl animate-pulse" style={{ background: `${currentBiome.accent}30` }} />
-              <img src={stops[currentStop]?.bossImage} alt={stops[currentStop]?.bossName}
-                className="w-20 h-20 sm:w-28 sm:h-28 object-contain relative z-10"
-                style={{ animation: 'advMonsterIdle 1.5s ease-in-out infinite' }}
-              />
-            </div>
-            <p className="text-white/70 text-sm font-bold mt-2">{stops[currentStop]?.bossName}</p>
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Battle phase */}
       {phase === 'playing' && currentChallenge && (
@@ -1798,6 +2101,22 @@ const PetMazeAdventure = ({
         @keyframes advStarBurst {
           0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
           100% { transform: translate(calc(-50% + var(--star-x)), calc(-50% + var(--star-y))) scale(1); opacity: 0; }
+        }
+        @keyframes advWalkBob {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+        @keyframes advMapShake {
+          0%, 100% { transform: translate(0, 0); }
+          15% { transform: translate(-8px, 3px); }
+          30% { transform: translate(7px, -4px); }
+          45% { transform: translate(-6px, 2px); }
+          60% { transform: translate(5px, -2px); }
+          80% { transform: translate(-2px, 1px); }
+        }
+        @keyframes advBubble {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
         }
         @keyframes advMapSlideIn {
           0% { opacity: 0; transform: translateY(30px); }

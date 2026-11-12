@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { assetUrl } from '../../hooks/useBranding'
 import { useInventory } from '../../hooks/useInventory'
 import { usePet } from '../../hooks/usePet'
+import { getZone } from '../../utils/wildZones'
 
 const rarityColors = {
   common: 'from-gray-300 to-gray-400',
@@ -105,40 +106,98 @@ const Particles = ({ count = 20, color = '#fff', burst = false, spread = 120 }) 
   )
 }
 
-/* ---- Confetti System ---- */
-const Confetti = ({ color }) => {
-  const pieces = useMemo(() =>
-    Array.from({ length: 40 }, (_, i) => ({
+/* ---- Gold dust: glowing specks that keep rising around the pet after a catch ---- */
+const GoldDust = ({ color, count = 28 }) => {
+  const specks = useMemo(() =>
+    Array.from({ length: count }, (_, i) => ({
       id: i,
-      x: Math.random() * 100,
-      delay: Math.random() * 0.5,
-      duration: 1.5 + Math.random() * 1.5,
-      size: 4 + Math.random() * 6,
-      color: [color, '#fff', '#FFD700', '#FF6B6B', '#4ADE80', '#60A5FA'][Math.floor(Math.random() * 6)],
-      rotation: Math.random() * 360,
-      drift: (Math.random() - 0.5) * 60,
+      x: (Math.random() - 0.5) * 240,
+      y: 30 + Math.random() * 60,
+      size: 2 + Math.random() * 3.5,
+      rise: 120 + Math.random() * 120,
+      drift: (Math.random() - 0.5) * 40,
+      duration: 1.8 + Math.random() * 1.6,
+      delay: 0.4 + Math.random() * 2.2,
+      gold: i % 3 !== 0,
     }))
-  , [color])
+  , [count])
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute left-1/2 top-1/2 w-0 h-0 pointer-events-none z-20">
+      {specks.map(s => (
+        <div
+          key={s.id}
+          className="absolute rounded-full"
+          style={{
+            left: s.x, top: s.y,
+            width: s.size, height: s.size,
+            background: s.gold ? '#FFE680' : color,
+            boxShadow: `0 0 ${s.size * 2}px ${s.gold ? 'rgba(255,215,0,0.9)' : color}`,
+            '--rise': `${-s.rise}px`,
+            '--drift': `${s.drift}px`,
+            animation: `dustRise ${s.duration}s ease-out ${s.delay}s infinite both`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/* ---- Confetti cannons ----
+ * Two volleys fired from both bottom corners: each piece arcs up over the pet, then flutters down
+ * while flipping in 3D. Colours stay on-theme (rarity colour, gold, white).
+ */
+const Confetti = ({ color, intensity = 1 }) => {
+  const pieces = useMemo(() => {
+    const palette = [color, color, '#FFD700', '#FFE680', '#FFFFFF']
+    const count = Math.round(220 * intensity)
+    return Array.from({ length: count }, (_, i) => {
+      const fromLeft = i % 2 === 0
+      const strip = Math.random() > 0.35
+      return {
+        id: i,
+        fromLeft,
+        vx: (fromLeft ? 1 : -1) * (12 + Math.random() * 40), // vw sideways
+        peak: 45 + Math.random() * 35,                        // vh up
+        fall: 25 + Math.random() * 45,                        // vh back down from the peak
+        delay: (i % 12) * 0.025 + Math.floor((i / count) * 3) * 0.45, // three volleys
+        duration: 2.4 + Math.random() * 1.4,
+        w: strip ? 5 : 8,
+        h: strip ? 13 : 8,
+        round: !strip && Math.random() > 0.5,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        spin: (Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 720),
+      }
+    })
+  }, [color, intensity])
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ perspective: 600 }}>
       {pieces.map(p => (
         <div
           key={p.id}
           className="absolute"
           style={{
-            left: `${p.x}%`,
-            top: '-5%',
-            width: p.size,
-            height: p.size * 0.6,
-            background: p.color,
-            borderRadius: '1px',
-            transform: `rotate(${p.rotation}deg)`,
-            animation: `confettiFall ${p.duration}s ease-in ${p.delay}s forwards`,
-            '--drift': `${p.drift}px`,
-            opacity: 0,
+            bottom: '-2%',
+            left: p.fromLeft ? '2%' : '98%',
+            '--vx': `${p.vx}vw`,
+            '--peak': `${p.peak}vh`,
+            '--fall': `${p.fall}vh`,
+            animation: `confettiArc ${p.duration}s linear ${p.delay}s both`,
           }}
-        />
+        >
+          <div
+            style={{
+              width: p.w,
+              height: p.h,
+              background: p.color,
+              borderRadius: p.round ? '50%' : '1px',
+              boxShadow: p.color === '#FFD700' ? '0 0 6px rgba(255,215,0,0.7)' : undefined,
+              '--spin': `${p.spin}deg`,
+              animation: `confettiFlutter ${p.duration}s linear ${p.delay}s both`,
+            }}
+          />
+        </div>
       ))}
     </div>
   )
@@ -150,7 +209,7 @@ const Confetti = ({ color }) => {
  *
  * Phases: entrance -> encounter -> throwing -> impact -> shaking -> result -> done
  */
-const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
+const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) => {
   const { getBallsInInventory, fetchInventory } = useInventory()
   const { attemptCatch } = usePet()
 
@@ -187,6 +246,40 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
     totalShakesRef.current = caught ? 3 : Math.floor(Math.random() * 2) + 1
   }
   const totalShakes = totalShakesRef.current ?? 3
+  // The throw in progress is the last one (attemptsLeft drops when the ball is thrown)
+  const isLastThrow = attemptsLeft <= 0
+
+  // Background: the art of the zone the pet was found in (darkened), else the default night field
+  const zone = getZone(zoneId)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const zoneBg = zone ? (zone.mapImage || (isMobile ? zone.bgMobile : zone.bgDesktop)) : null
+
+  // Random decoration is rolled once, so it doesn't jump around every time the phase changes
+  const grassBlades = useMemo(() => Array.from({ length: 8 }, (_, i) => ({ left: i * 13 + Math.random() * 5 })), [])
+  const ambientDots = useMemo(() => Array.from({ length: 15 }, (_, i) => ({
+    w: 2 + Math.random() * 3, h: 2 + Math.random() * 3,
+    left: Math.random() * 100, top: Math.random() * 70,
+    dur: 4 + Math.random() * 4, delay: Math.random() * 5, green: i % 3 === 0,
+  })), [])
+  const stars = useMemo(() => Array.from({ length: 20 }, () => ({
+    size: 1 + Math.random() * 2, dur: 1.5 + Math.random() * 2,
+  })), [])
+  const shards = useMemo(() => Array.from({ length: 6 }, () => ({
+    x: (Math.random() - 0.5) * 120, y: (Math.random() - 0.5) * 120, r: Math.random() * 360,
+  })), [])
+
+  // Sound effects for the throw → hit → shakes build-up
+  const sfxCache = useRef({})
+  const playSfx = useCallback((path, volume = 0.5) => {
+    try {
+      const url = assetUrl(path)
+      if (!sfxCache.current[url]) sfxCache.current[url] = new Audio(url)
+      const a = sfxCache.current[url]
+      a.volume = volume
+      a.currentTime = 0
+      a.play().catch(() => {})
+    } catch { /* audio may fail */ }
+  }, [])
 
   // Entrance phase — silhouette intro then encounter
   useEffect(() => {
@@ -282,12 +375,13 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
     dragPosRef.current = { x: 0, y: 0 }
     setIsDragging(false)
     setPhase('throwing')
+    playSfx('/sound/woosh.mp3', 0.5)
     setAttemptsLeft(prev => prev - 1)
 
     const result = await attemptCatch(pet.id, selectedBall.id)
     await fetchInventory()
     setCatchResult(result)
-  }, [pet, selectedBall, attemptCatch, fetchInventory])
+  }, [pet, selectedBall, attemptCatch, fetchInventory, playSfx])
 
   useEffect(() => {
     if (!isDragging) return
@@ -341,11 +435,15 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
       const timer = setTimeout(() => setPhase('result'), 600)
       return () => clearTimeout(timer)
     }
-    // Increasing tension — each shake takes longer
-    const delay = 600 + shakeCount * 150
-    const timer = setTimeout(() => setShakeCount(prev => prev + 1), delay)
+    // Increasing tension — each shake takes longer (much longer on the last throw), and each
+    // click is louder than the one before
+    const delay = isLastThrow ? 900 + shakeCount * 300 : 600 + shakeCount * 150
+    const timer = setTimeout(() => {
+      playSfx('/sound/pop2.mp3', Math.min(1, 0.4 + shakeCount * 0.2))
+      setShakeCount(prev => prev + 1)
+    }, delay)
     return () => clearTimeout(timer)
-  }, [phase, shakeCount, totalShakes])
+  }, [phase, shakeCount, totalShakes, isLastThrow, playSfx])
 
   // Result phase
   useEffect(() => {
@@ -384,15 +482,30 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
       }}
     >
       {/* ---- Background ---- */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-emerald-950 to-black">
+      <div className={`absolute inset-0 ${zoneBg ? 'bg-black' : 'bg-gradient-to-b from-slate-950 via-emerald-950 to-black'}`}>
+        {/* Zone art from the adventure, darkened so the silhouette and UI stand out */}
+        {zoneBg && (
+          <>
+            <div className="absolute inset-0"
+              style={{ backgroundImage: `url(${zoneBg})`, backgroundSize: 'cover', backgroundPosition: 'center bottom' }} />
+            <div className="absolute inset-0 bg-black/55" />
+          </>
+        )}
+
+        {/* Last throw: red edges */}
+        {(attemptsLeft === 1 && phase === 'encounter') || (isLastThrow && ['throwing', 'impact', 'shaking'].includes(phase)) ? (
+          <div className="absolute inset-0 pointer-events-none animate-pulse"
+            style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(220,38,38,0.35) 100%)' }} />
+        ) : null}
+
         {/* Animated grass blades */}
         <div className="absolute bottom-0 left-0 right-0 h-1/3">
-          {[...Array(8)].map((_, i) => (
+          {grassBlades.map((g, i) => (
             <div
               key={i}
               className="absolute bottom-0 bg-gradient-to-t from-green-900/60 to-transparent rounded-t-full"
               style={{
-                left: `${i * 13 + Math.random() * 5}%`,
+                left: `${g.left}%`,
                 width: '3px',
                 height: `${40 + i * 8}px`,
                 animation: `grassSway ${2 + i * 0.3}s ease-in-out infinite alternate`,
@@ -406,35 +519,35 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
 
         {/* Floating ambient particles */}
         <div className="absolute inset-0">
-          {[...Array(15)].map((_, i) => (
+          {ambientDots.map((d, i) => (
             <div
               key={i}
               className="absolute rounded-full"
               style={{
-                width: 2 + Math.random() * 3,
-                height: 2 + Math.random() * 3,
-                background: i % 3 === 0 ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)',
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 70}%`,
-                animation: `floatUp ${4 + Math.random() * 4}s ease-in-out infinite`,
-                animationDelay: `${Math.random() * 5}s`,
+                width: d.w,
+                height: d.h,
+                background: d.green ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)',
+                left: `${d.left}%`,
+                top: `${d.top}%`,
+                animation: `floatUp ${d.dur}s ease-in-out infinite`,
+                animationDelay: `${d.delay}s`,
               }}
             />
           ))}
         </div>
 
-        {/* Stars */}
-        {[...Array(20)].map((_, i) => (
+        {/* Stars (night field only; zone art brings its own sky) */}
+        {!zoneBg && stars.map((s, i) => (
           <div
             key={i}
             className="absolute rounded-full"
             style={{
-              width: 1 + Math.random() * 2,
-              height: 1 + Math.random() * 2,
+              width: s.size,
+              height: s.size,
               background: 'rgba(255,255,255,0.4)',
               left: `${5 + (i * 4.7) % 90}%`,
               top: `${3 + (i * 11) % 30}%`,
-              animation: `twinkle ${1.5 + Math.random() * 2}s ease-in-out infinite`,
+              animation: `twinkle ${s.dur}s ease-in-out infinite`,
               animationDelay: `${i * 0.2}s`,
             }}
           />
@@ -463,21 +576,22 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {/* "!" alert */}
           <div className="flex flex-col items-center animate-[entrancePulse_1s_ease-out] mb-6">
-            <div className="text-4xl font-black text-white tracking-wider animate-[slideDown_0.6s_ease-out]" style={{ textShadow: '0 0 30px rgba(255,255,255,0.3)' }}>
+            <div className="text-4xl font-black tracking-wider animate-[slideDown_0.6s_ease-out]"
+              style={{ color: raritySolidColor[rarity], textShadow: `0 0 30px ${rarityLightColor[rarity]}` }}>
               !
             </div>
-            <p className="text-emerald-400 text-lg font-bold mt-2 animate-[fadeSlideUp_0.8s_ease-out_0.3s_both]">
-              A wild pet appeared!
+            <p className="text-lg font-bold mt-2 animate-[fadeSlideUp_0.8s_ease-out_0.3s_both]" style={{ color: raritySolidColor[rarity] }}>
+              A wild {rarity} pet appeared!
             </p>
           </div>
 
-          {/* Silhouette */}
+          {/* Silhouette, glowing in the rarity colour */}
           <div className="relative animate-[fadeSlideUp_0.6s_ease-out_0.6s_both]">
             <img
               src={pet?.image_url}
               alt="???"
               className="w-32 h-32 sm:w-40 sm:h-40 object-contain relative z-10"
-              style={{ filter: 'brightness(0) drop-shadow(0 0 20px rgba(0,0,0,0.8))' }}
+              style={{ filter: `brightness(0) drop-shadow(0 0 18px ${raritySolidColor[rarity]})` }}
             />
           </div>
 
@@ -493,8 +607,8 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
             <div className="relative">
               {/* Subtle mysterious glow */}
               <div
-                className="absolute -inset-10 rounded-full blur-2xl animate-pulse opacity-30"
-                style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%)' }}
+                className="absolute -inset-10 rounded-full blur-2xl animate-pulse opacity-60"
+                style={{ background: `radial-gradient(circle, ${rarityLightColor[rarity]}, transparent 70%)` }}
               />
               {/* Silhouette */}
               <img
@@ -503,17 +617,23 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
                 className="w-28 h-28 sm:w-36 sm:h-36 object-contain relative z-10"
                 style={{
                   animation: 'petBob 2s ease-in-out infinite',
-                  filter: 'brightness(0) drop-shadow(0 0 15px rgba(0,0,0,0.8))',
+                  filter: `brightness(0) drop-shadow(0 0 15px ${raritySolidColor[rarity]})`,
                 }}
               />
             </div>
 
-            {/* Mystery info */}
+            {/* Mystery info: the pet stays a secret, its rarity doesn't */}
             <div className="mt-4 flex flex-col items-center">
-              <h2 className="text-gray-400 text-2xl font-bold tracking-widest">???</h2>
-              <span className="mt-1.5 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-gray-800 text-gray-500">
-                Unknown
+              <h2 className="text-gray-300 text-2xl font-bold tracking-widest">???</h2>
+              <span className={`mt-1.5 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${rarityBadge[rarity]}`}>
+                {rarity}
               </span>
+              {attemptsLeft === 1 && (
+                <p className="mt-3 text-red-400 text-sm font-black uppercase tracking-widest animate-pulse"
+                  style={{ textShadow: '0 0 12px rgba(239,68,68,0.7)' }}>
+                  ⚠️ Last chance!
+                </p>
+              )}
             </div>
           </div>
 
@@ -627,27 +747,34 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
                 className="w-28 h-28 sm:w-36 sm:h-36 object-contain"
                 style={{
                   animation: 'petBob 2s ease-in-out infinite',
-                  filter: 'brightness(0) drop-shadow(0 0 15px rgba(0,0,0,0.8))',
+                  filter: `brightness(0) drop-shadow(0 0 15px ${raritySolidColor[rarity]})`,
                 }}
               />
             </div>
           </div>
 
-          {/* Flying ball with trail */}
+          {/* Flying ball: a smooth parabola. The outer layers move it in a straight line to the
+              pet (x and y separately, constant speed); the inner layer adds the rise-and-fall arc
+              and shrinks it into the distance. */}
           <div
             className="absolute z-40"
             style={{
               left: throwTrajectory.startX - 28,
               top: throwTrajectory.startY - 28,
-              animation: 'ballFly 0.5s cubic-bezier(0.2, 0, 0.2, 1) forwards',
               '--fly-x': `${throwTrajectory.endX - throwTrajectory.startX}px`,
               '--fly-y': `${throwTrajectory.endY - throwTrajectory.startY}px`,
+              '--arc': `${-Math.min(170, 70 + Math.abs(throwTrajectory.endY - throwTrajectory.startY) * 0.25)}px`,
+              animation: 'ballFlyX 0.55s linear forwards',
             }}
           >
-            {/* Motion trail */}
-            <div className="absolute inset-0 w-14 h-14 rounded-full bg-white/10 blur-md scale-150 animate-pulse" />
-            <div className="w-14 h-14 relative z-10">
-              <BallImage ball={selectedBall} className="w-full h-full animate-[spin_0.2s_linear_infinite]" />
+            <div style={{ animation: 'ballFlyY 0.55s linear forwards' }}>
+              <div style={{ animation: 'ballArc 0.55s forwards' }}>
+                {/* Motion trail */}
+                <div className="absolute inset-0 w-14 h-14 rounded-full bg-white/10 blur-md scale-150" />
+                <div className="w-14 h-14 relative z-10">
+                  <BallImage ball={selectedBall} className="w-full h-full animate-[spin_0.35s_linear_infinite]" />
+                </div>
+              </div>
             </div>
           </div>
         </>
@@ -724,8 +851,8 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
           </div>
 
           {/* Tension text */}
-          <p className="text-gray-500 text-xs mt-6 animate-pulse tracking-widest uppercase">
-            {shakeCount === 0 ? '...' : shakeCount === 1 ? 'Holding...' : shakeCount === 2 ? 'Almost...' : 'Come on...'}
+          <p className={`text-xs mt-6 animate-pulse tracking-widest uppercase ${isLastThrow ? 'text-red-400 font-bold' : 'text-gray-500'}`}>
+            {shakeCount === 0 ? (isLastThrow ? 'Last ball...' : '...') : shakeCount === 1 ? 'Holding...' : shakeCount === 2 ? 'Almost...' : 'Come on...'}
           </p>
         </div>
       )}
@@ -736,7 +863,7 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
           {caught ? (
             <div className="flex flex-col items-center text-center">
               {/* Confetti */}
-              <Confetti color={raritySolidColor[rarity]} />
+              <Confetti color={raritySolidColor[rarity]} intensity={isLegendary ? 1.6 : isEpic ? 1.3 : 1} />
 
               {/* Success burst */}
               <div className="relative">
@@ -745,20 +872,40 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
                   className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 animate-[expandRing_1s_ease-out_forwards]"
                   style={{ borderColor: raritySolidColor[rarity] }}
                 />
-                {/* Starburst rays */}
-                <div className="absolute -inset-16 animate-[slowSpin_8s_linear_infinite]">
-                  {[...Array(8)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="absolute left-1/2 top-1/2 origin-bottom"
-                      style={{
-                        width: 2,
-                        height: 60,
-                        background: `linear-gradient(to top, ${raritySolidColor[rarity]}40, transparent)`,
-                        transform: `translate(-50%, -100%) rotate(${i * 45}deg)`,
-                      }}
-                    />
-                  ))}
+                {/* Light rays: open up behind the pet, then turn slowly */}
+                <div className="absolute left-1/2 top-1/2 w-0 h-0 pointer-events-none">
+                  <div
+                    className="absolute rounded-full"
+                    style={{
+                      width: 560, height: 560, left: -280, top: -280,
+                      background: `repeating-conic-gradient(from 0deg, ${raritySolidColor[rarity]}55 0deg 7deg, transparent 7deg 22deg)`,
+                      WebkitMaskImage: 'radial-gradient(circle, black 12%, transparent 62%)',
+                      maskImage: 'radial-gradient(circle, black 12%, transparent 62%)',
+                      animation: 'raysOpen 0.9s ease-out both, slowSpin 16s linear infinite',
+                    }}
+                  />
+                </div>
+
+                {/* Gold sparkles twinkling in a ring around the pet */}
+                <div className="absolute left-1/2 top-1/2 w-0 h-0 pointer-events-none z-20">
+                  {[...Array(8)].map((_, i) => {
+                    const a = (i / 8) * Math.PI * 2
+                    const r = i % 2 === 0 ? 112 : 92
+                    return (
+                      <span
+                        key={i}
+                        className="absolute text-yellow-300"
+                        style={{
+                          left: Math.cos(a) * r - 7, top: Math.sin(a) * r - 10,
+                          fontSize: i % 2 === 0 ? 18 : 12,
+                          textShadow: '0 0 8px rgba(255,215,0,0.9)',
+                          animation: `sparkleTwinkle 1.4s ease-in-out ${0.3 + i * 0.12}s infinite both`,
+                        }}
+                      >
+                        ✦
+                      </span>
+                    )
+                  })}
                 </div>
                 {/* Glow */}
                 <div
@@ -766,7 +913,9 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
                   style={{ background: `radial-gradient(circle, ${rarityLightColor[rarity]}, transparent 60%)` }}
                 />
                 {/* Particles */}
-                <Particles count={24} color={raritySolidColor[rarity]} burst spread={140} />
+                <Particles count={36} color={raritySolidColor[rarity]} burst spread={140} />
+                <Particles count={32} color="#FFD700" burst spread={220} />
+                <GoldDust color={raritySolidColor[rarity]} count={isLegendary ? 40 : 28} />
                 {/* Pet image */}
                 <img
                   src={pet.image_url}
@@ -820,29 +969,36 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
               <div className="relative">
                 {/* Shattered ball pieces */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  {[...Array(6)].map((_, i) => (
+                  {shards.map((s, i) => (
                     <div
                       key={i}
                       className="absolute w-3 h-3 bg-red-400/60 rounded-sm"
                       style={{
                         animation: `shardFly 0.8s ease-out forwards`,
-                        '--shard-x': `${(Math.random() - 0.5) * 120}px`,
-                        '--shard-y': `${(Math.random() - 0.5) * 120}px`,
-                        '--shard-r': `${Math.random() * 360}deg`,
+                        '--shard-x': `${s.x}px`,
+                        '--shard-y': `${s.y}px`,
+                        '--shard-r': `${s.r}deg`,
                       }}
                     />
                   ))}
                 </div>
+                {/* Last ball gone: the pet dashes straight off the right side of the screen */}
                 <img
                   src={pet.image_url}
                   alt="???"
-                  className="w-32 h-32 object-contain animate-[escapeJump_1.2s_ease-out_forwards]"
-                  style={{ filter: 'brightness(0) drop-shadow(0 0 10px rgba(0,0,0,0.6))' }}
+                  className={`w-32 h-32 object-contain ${isLastThrow
+                    ? 'animate-[escapeRunOff_0.5s_ease-in_0.3s_both]'
+                    : 'animate-[escapeJump_1.2s_ease-out_forwards]'}`}
+                  style={{ filter: `brightness(0) drop-shadow(0 0 10px ${raritySolidColor[rarity]})` }}
                 />
               </div>
 
-              <h2 className="text-red-400 text-3xl font-black mt-6 animate-[headShake_0.5s_ease-in-out]">Oh no!</h2>
-              <p className="text-gray-300 text-lg mt-2">The mystery pet broke free!</p>
+              <h2 className="text-red-400 text-3xl font-black mt-6 animate-[headShake_0.5s_ease-in-out]">
+                {isLastThrow ? 'It got away…' : 'Oh no!'}
+              </h2>
+              <p className="text-gray-300 text-lg mt-2">
+                {isLastThrow ? 'The wild pet ran off into the wild.' : 'The mystery pet broke free!'}
+              </p>
               <p className="text-gray-600 text-xs mt-2">Catch rate was {catchResult?.catch_rate}%</p>
 
               {phase === 'done' && attemptsLeft > 0 && (
@@ -882,10 +1038,20 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-10px); }
         }
-        @keyframes ballFly {
-          0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
-          40% { transform: translate(calc(var(--fly-x) * 0.5), calc(var(--fly-y) * 0.7 - 50px)) scale(0.8) rotate(360deg); opacity: 1; }
-          100% { transform: translate(var(--fly-x), var(--fly-y)) scale(0.4) rotate(720deg); opacity: 0.8; }
+        /* Ball throw: straight-line travel (x and y on separate layers) + a parabolic arc on top.
+           The arc uses quadratic ease-out up and ease-in down, which together trace a parabola. */
+        @keyframes ballFlyX {
+          from { transform: translateX(0); }
+          to { transform: translateX(var(--fly-x)); }
+        }
+        @keyframes ballFlyY {
+          from { transform: translateY(0); }
+          to { transform: translateY(var(--fly-y)); }
+        }
+        @keyframes ballArc {
+          0% { transform: translateY(0) scale(1); animation-timing-function: cubic-bezier(0.333, 0.667, 0.667, 1); }
+          50% { transform: translateY(var(--arc)) scale(0.72); animation-timing-function: cubic-bezier(0.333, 0, 0.667, 0.333); }
+          100% { transform: translateY(0) scale(0.45); }
         }
         @keyframes ballShake {
           0%, 100% { transform: rotate(0deg); }
@@ -922,6 +1088,10 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
           60% { opacity: 0.6; transform: translateY(-60px) scale(0.8); }
           100% { opacity: 0; transform: translateY(-100px) scale(0.3); }
         }
+        @keyframes escapeRunOff {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(110vw); }
+        }
         @keyframes expandRing {
           0% { width: 0; height: 0; opacity: 1; }
           100% { width: 300px; height: 300px; opacity: 0; }
@@ -940,9 +1110,29 @@ const WildEncounterModal = ({ pet, onClose, onCatchComplete }) => {
           0% { transform: translate(0, 0); opacity: 0.6; }
           100% { transform: translate(var(--tx), var(--ty)); opacity: 0; }
         }
-        @keyframes confettiFall {
-          0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(100vh) translateX(var(--drift)) rotate(720deg); opacity: 0.5; }
+        @keyframes confettiArc {
+          0% { transform: translate(0, 0); opacity: 0; animation-timing-function: cubic-bezier(0.12, 0.75, 0.3, 1); }
+          4% { opacity: 1; }
+          32% { transform: translate(calc(var(--vx) * 0.6), calc(var(--peak) * -1)); animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.6); }
+          85% { opacity: 1; }
+          100% { transform: translate(var(--vx), calc(var(--peak) * -1 + var(--fall))); opacity: 0; }
+        }
+        @keyframes confettiFlutter {
+          0% { transform: rotateZ(0deg) rotateX(0deg) rotateY(0deg); }
+          100% { transform: rotateZ(var(--spin)) rotateX(1080deg) rotateY(360deg); }
+        }
+        @keyframes dustRise {
+          0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+          20% { opacity: 1; }
+          100% { transform: translate(var(--drift), var(--rise)) scale(1); opacity: 0; }
+        }
+        @keyframes raysOpen {
+          0% { opacity: 0; transform: scale(0.2); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes sparkleTwinkle {
+          0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+          50% { opacity: 1; transform: scale(1.15) rotate(90deg); }
         }
         @keyframes sparkFly {
           0% { transform: translate(0, 0); opacity: 1; }

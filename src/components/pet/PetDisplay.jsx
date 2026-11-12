@@ -54,14 +54,7 @@ import { assetUrl } from '../../hooks/useBranding';
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule';
 import { getSettings, getSetting } from '../../utils/siteSettings';
 import { normalizeDashWords } from '../../utils/petDash';
-import { WILD_ZONES, DEFAULT_ZONE_ID, getZone, boostedRarities } from '../../utils/wildZones';
-const WILD_RARITY_CHIP = {
-  common: 'bg-gray-400 text-gray-900',
-  uncommon: 'bg-green-400 text-green-950',
-  rare: 'bg-blue-400 text-blue-950',
-  epic: 'bg-purple-400 text-purple-950',
-  legendary: 'bg-yellow-400 text-yellow-950',
-};
+import { WILD_ZONES, DEFAULT_ZONE_ID, getZone } from '../../utils/wildZones';
 
 const PetDisplay = () => {
   const {
@@ -104,7 +97,7 @@ const PetDisplay = () => {
     }
     setTimeout(() => setMessage(null), 3000);
   };
-  const { inventory, fetchInventory } = useInventory();
+  const { inventory, fetchInventory, getBallsInInventory } = useInventory();
   const { user, profile, isAdmin } = useAuth();
   const isStaff = () => isAdmin() || profile?.role === 'teacher';
   const { getEquippedItemsXPBonus, addXP } = useProgress();
@@ -175,6 +168,7 @@ const PetDisplay = () => {
   const [selectedZoneId, setSelectedZoneId] = useState(DEFAULT_ZONE_ID);
   const [mazeAdventure, setMazeAdventure] = useState(null); // { mode: 'encounter'|'standalone', pet: object|null, rarity: string }
   const [encounterPetAfterMaze, setEncounterPetAfterMaze] = useState(null); // pet object to show WildEncounterModal after maze
+  const [encounterZoneId, setEncounterZoneId] = useState(null); // zone that encounter came from (its art is the catch background)
   const [wildAreaCooldown, setWildAreaCooldown] = useState(0);
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -494,6 +488,20 @@ const PetDisplay = () => {
     }
   }
 
+  // The training animation + sound after a game can't be seen while the maze (or the wild
+  // encounter after it) covers the screen, so it's saved up and played once on return.
+  const fullscreenGameOpenRef = useRef(false);
+  const pendingTrainingXpRef = useRef(0);
+  const playTrainingFeedbackRef = useRef(null);
+  useEffect(() => {
+    const open = !!mazeAdventure || !!encounterPetAfterMaze;
+    fullscreenGameOpenRef.current = open;
+    if (!open && pendingTrainingXpRef.current > 0) {
+      const xp = pendingTrainingXpRef.current;
+      pendingTrainingXpRef.current = 0;
+      playTrainingFeedbackRef.current?.(xp);
+    }
+  }, [mazeAdventure, encounterPetAfterMaze]);
 
   if (!activePet) {
     return (
@@ -624,6 +632,16 @@ const PetDisplay = () => {
       setTrainingVideoLoaded(false);
     }, 6000);
   };
+
+  // Training animation + sound after a game (see the hold-back logic above `if (!activePet)`)
+  const playTrainingFeedback = (xpGained) => {
+    triggerPlayAnimation(xpGained);
+    setTimeout(() => {
+      const trainSound = new Audio(assetUrl('/sound/pet-training.mp3'));
+      trainSound.play().catch(() => {});
+    }, 4000);
+  };
+  playTrainingFeedbackRef.current = playTrainingFeedback;
 
   const handleFeed = async (itemId = null) => {
     const result = await feedPet(activePet.id, itemId);
@@ -1007,13 +1025,12 @@ const PetDisplay = () => {
     const result = await playWithPet(activePet.id);
     if (result.success) {
       const xpGained = result.xp_gained || 10;
-      triggerPlayAnimation(xpGained);
+      if (fullscreenGameOpenRef.current) {
+        pendingTrainingXpRef.current += xpGained;
+      } else {
+        playTrainingFeedback(xpGained);
+      }
       await addXP(5);
-
-      setTimeout(() => {
-        const trainSound = new Audio(assetUrl('/sound/pet-training.mp3'));
-        trainSound.play().catch(() => {});
-      }, 4000);
 
       const evolved = result.evolution?.evolved;
       const levelUp = result.level_up;
@@ -2907,8 +2924,10 @@ const PetDisplay = () => {
                       key={zone.id}
                       type="button"
                       onClick={() => setSelectedZoneId(zone.id)}
-                      className={`relative h-32 sm:h-36 rounded-xl overflow-hidden border-2 transition-all ${selected ? 'scale-[1.03] shadow-lg' : 'border-transparent opacity-75 hover:opacity-100'}`}
-                      style={selected ? { borderColor: zone.accent, boxShadow: `0 0 18px ${zone.accent}66` } : undefined}
+                      className={`relative h-32 sm:h-36 rounded-xl overflow-hidden border-2 transition-all ${selected ? 'scale-[1.03] shadow-lg' : 'opacity-75 hover:opacity-100'}`}
+                      style={selected
+                        ? { borderColor: zone.accent, boxShadow: `0 0 18px ${zone.accent}66` }
+                        : { borderColor: `${zone.accent}59` }}
                     >
                       <img src={zone.bgMobile} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
@@ -2925,14 +2944,6 @@ const PetDisplay = () => {
                         </div>
                         <div>
                           <p className="text-white font-bold text-sm leading-tight">{zone.emoji} {zone.name}</p>
-                          <p className="text-white/60 text-[10px] leading-tight mt-0.5 line-clamp-2">{zone.tagline}</p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {boostedRarities(zone).map((r) => (
-                              <span key={r} className={`text-[9px] font-bold uppercase px-1 rounded ${WILD_RARITY_CHIP[r] || 'bg-gray-500 text-white'}`}>
-                                {r} ↑
-                              </span>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     </button>
@@ -2956,6 +2967,12 @@ const PetDisplay = () => {
                   <div>
                     <p className="text-emerald-400/70 text-sm">You need an Adventure Ticket to search!</p>
                     <p className="text-emerald-500/50 text-xs mt-1">Buy tickets from the Shop!</p>
+                  </div>
+                ) : !isAdmin() && getBallsInInventory().length === 0 ? (
+                  // Without a ball the wild pet at the end can't be caught, so don't let them spend a ticket
+                  <div>
+                    <p className="text-amber-300 text-sm font-medium">You need a ball to catch the pet you find!</p>
+                    <p className="text-amber-200/60 text-xs mt-1">Buy balls from the Shop, then come back.</p>
                   </div>
                 ) : (
                   <button
@@ -2985,6 +3002,7 @@ const PetDisplay = () => {
                     if (result?.encountered) {
                       fetchInventory()
                       setShowWildArea(false)
+                      setEncounterZoneId(selectedZoneId)
                       setEncounterPetAfterMaze(result.pet)
                     } else {
                       setMessage({ type: 'info', text: 'No wild pets found... try again!' })
@@ -3018,6 +3036,7 @@ const PetDisplay = () => {
           onGameEnd={(score, gameType, extra) => handleGameEnd(score, gameType, extra)}
           onMazeComplete={() => {
             if (mazeAdventure.mode === 'encounter' && mazeAdventure.pet) {
+              setEncounterZoneId(mazeAdventure.zoneId || null)
               setEncounterPetAfterMaze(mazeAdventure.pet)
             }
             setMazeAdventure(null)
@@ -3030,6 +3049,7 @@ const PetDisplay = () => {
       {(pendingEncounter || encounterPetAfterMaze) && (
         <WildEncounterModal
           pet={pendingEncounter || encounterPetAfterMaze}
+          zoneId={pendingEncounter ? null : encounterZoneId}
           onClose={() => {
             clearEncounter()
             setEncounterPetAfterMaze(null)

@@ -14,10 +14,8 @@ import { CLIP } from "../ui/hudClip";
 // Thay spinner bằng skeleton để điều hướng mượt hơn
 import {
   ArrowLeft,
-  Star,
   Lock,
   BookOpen,
-  Flame,
   Plus,
   Edit,
   List,
@@ -33,7 +31,6 @@ import {
   Users,
   Copy,
   Clock,
-  ChevronRight,
   CheckCircle,
 } from "lucide-react";
 import StudentStatsPopover from "../ui/StudentStatsPopover";
@@ -85,6 +82,24 @@ const getBorderColor = (colorTheme) => {
   return themeBorders[colorTheme] || themeBorders.blue;
 };
 
+// Minimal view: units cycle through these colors by position (no green - green means "complete").
+// Full class strings so Tailwind keeps them.
+const UNIT_PALETTE = [
+  // tile: lesson icon; tileTest: test icon (solid, so tests stand out in any unit color); dot: "next" rail dot
+  { strip: "linear-gradient(90deg, #3b82f6, #1d4ed8)", bar: "bg-blue-500", badge: "border-blue-500 bg-blue-50 text-blue-600",
+    tile: "bg-blue-50 border-blue-200 text-blue-600", tileTest: "bg-blue-500 border-blue-500 text-white", dot: "bg-blue-500 border-blue-500" },
+  { strip: "linear-gradient(90deg, #8b5cf6, #6d28d9)", bar: "bg-violet-500", badge: "border-violet-500 bg-violet-50 text-violet-600",
+    tile: "bg-violet-50 border-violet-200 text-violet-600", tileTest: "bg-violet-500 border-violet-500 text-white", dot: "bg-violet-500 border-violet-500" },
+  { strip: "linear-gradient(90deg, #f97316, #c2410c)", bar: "bg-orange-500", badge: "border-orange-500 bg-orange-50 text-orange-600",
+    tile: "bg-orange-50 border-orange-200 text-orange-600", tileTest: "bg-orange-500 border-orange-500 text-white", dot: "bg-orange-500 border-orange-500" },
+  { strip: "linear-gradient(90deg, #f43f5e, #be123c)", bar: "bg-rose-500", badge: "border-rose-500 bg-rose-50 text-rose-600",
+    tile: "bg-rose-50 border-rose-200 text-rose-600", tileTest: "bg-rose-500 border-rose-500 text-white", dot: "bg-rose-500 border-rose-500" },
+];
+const getUnitAccent = (unitIndex) => UNIT_PALETTE[unitIndex % UNIT_PALETTE.length];
+
+// Unit card image strip: top-left corner cut to match HudPanel's chamfer
+const STRIP_CLIP = "polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px)";
+
 const UnitList = () => {
   const { levelId: rawLevelId, courseId: rawCourseId } = useParams();
   const sanitizeId = (v) => (v && v !== "undefined" && v !== "null" ? v : null);
@@ -125,6 +140,9 @@ const UnitList = () => {
   const [bulkPasteLoading, setBulkPasteLoading] = useState(false);
   const [lockedUnitIds, setLockedUnitIds] = useState(new Set()); // non-free units in free-preview mode
   const [showEnrollNotice, setShowEnrollNotice] = useState(false);
+  // Minimal view: units the viewer opened/closed by hand ({ [unitId]: bool }); others use the default
+  const [unitOpenOverrides, setUnitOpenOverrides] = useState({});
+  const [showMoreTools, setShowMoreTools] = useState(false); // teacher "More" menu in the hero
   useEffect(() => {
     if (!showEnrollNotice) return;
     const t = setTimeout(() => setShowEnrollNotice(false), 2500);
@@ -1205,94 +1223,201 @@ const UnitList = () => {
       <OnlineBattleJoinBanner courseId={currentId} />
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden w-full">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/study")}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Quay lại
-              </Button>
-            </div>
-            {canCreateContent() && (
-              <div className="flex items-center space-x-2">
-                {courseStudentStats && (
-                  <StudentStatsPopover stats={courseStudentStats} size="md" />
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/teacher/class-reports?course=${currentId}&from=course`)}
-                  className="flex items-center space-x-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+        {/* Header: course hero banner */}
+            {(() => {
+              const isStudent = profile?.role === "user";
+              const unitCount = units.filter((u) => isStudent || !u.assigned_student_id).length;
+              const courseLessons = sessions.filter((s) => isStudent || !s.assigned_student_id);
+              const lessonCount = courseLessons.length;
+              const lessonsDone = courseLessons.filter((s) => getSessionStatus(s).status === "completed").length;
+              const coursePct = lessonCount ? Math.round((lessonsDone / lessonCount) * 100) : 0;
+              const initials = (level.title || "")
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((w) => w[0])
+                .join("")
+                .toUpperCase();
+              const summary = [
+                `${unitCount} ${unitCount === 1 ? "unit" : "units"}`,
+                `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`,
+              ].join(" · ");
+
+              const RING_R = 26;
+              const RING_C = 2 * Math.PI * RING_R;
+              const classPct = courseStudentStats?.total
+                ? Math.round((courseStudentStats.completed / courseStudentStats.total) * 100)
+                : 0;
+              const renderRing = (pct, sub, label) => (
+                <div
+                  className="relative w-20 h-20 md:w-24 md:h-24"
+                  role="progressbar"
+                  aria-label={label}
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
                 >
-                  <ClipboardList className="w-4 h-4" />
-                  <span>Điểm danh</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/teacher/unit-report/${currentId}`)}
-                  className="flex items-center space-x-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Unit Report</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/teacher/course-report/${currentId}`)}
-                  className="flex items-center space-x-2 bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Report</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/teacher/live-battle/${currentId}`)}
-                  className="flex items-center space-x-2 bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                >
-                  <Swords className="w-4 h-4" />
-                  <span>Live Battle</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/teacher/online-battle/${currentId}`)}
-                  className="flex items-center space-x-2 bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
-                >
-                  <Radio className="w-4 h-4" />
-                  <span>Online Battle</span>
-                </Button>
-                {activeWar ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowWarSetup(true)}
-                    className="flex items-center space-x-2 bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
-                  >
-                    <Swords className="w-4 h-4" />
-                    <span>Edit War</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowWarSetup(true)}
-                    className="flex items-center space-x-2 bg-gradient-to-r from-red-50 to-blue-50 border-purple-200 text-purple-700 hover:from-red-100 hover:to-blue-100"
-                  >
-                    <Swords className="w-4 h-4" />
-                    <span>Class War</span>
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+                  <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
+                    <circle cx="32" cy="32" r={RING_R} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="6" />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r={RING_R}
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray={RING_C}
+                      strokeDashoffset={RING_C * (1 - pct / 100)}
+                      style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                    <span className="text-lg md:text-xl font-extrabold tabular-nums">{pct}%</span>
+                    <span className="mt-1 text-[10px] md:text-[11px] font-semibold text-white/75 tabular-nums">{sub}</span>
+                  </div>
+                </div>
+              );
+              return (
+                // Not overflow-hidden itself, so the teacher "More" menu can drop below the banner
+                <div className="relative z-30 text-white bg-slate-900">
+                  {/* Course thumbnail behind a dark overlay (no color theme) */}
+                  <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+                    {level.thumbnail_url && (
+                      <img
+                        src={level.thumbnail_url}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover scale-105 blur-md"
+                      />
+                    )}
+                    <span className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-900/80 to-slate-900/60" />
+                  </div>
+
+                  <div className="relative px-4 md:px-6 pt-4 pb-6 md:pb-8">
+                  {/* Same centered column as the minimal unit list below; decorated grid is full width */}
+                  <div className={level.ui_style !== "decorated" ? "max-w-3xl mx-auto" : ""}>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/study")}
+                      className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white transition-colors"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Quay lại
+                    </button>
+
+                    <div className="flex items-center justify-between gap-4 md:gap-6">
+                      <div className="flex items-center gap-4 min-w-0">
+                        {level.thumbnail_url ? (
+                          <img
+                            src={level.thumbnail_url}
+                            alt=""
+                            className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover flex-shrink-0 ring-4 ring-white/25 shadow-lg"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl flex-shrink-0 flex items-center justify-center bg-white/20 ring-4 ring-white/15 text-2xl md:text-3xl font-extrabold shadow-lg">
+                            {initials || <BookOpen className="w-8 h-8" />}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          {level.difficulty_label && (
+                            <span className="inline-block mb-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-[11px] font-bold uppercase tracking-wider">
+                              {level.difficulty_label}
+                            </span>
+                          )}
+                          <h1 className="text-2xl md:text-3xl font-extrabold leading-tight tracking-tight line-clamp-2 drop-shadow-sm">
+                            {level.title}
+                          </h1>
+                          <p className="mt-1 text-sm text-white/80">{summary}</p>
+                        </div>
+                      </div>
+
+                      {/* Students: their course progress. Teachers: class completion (hover for the student list). */}
+                      {isStudent && lessonCount > 0 && (
+                        <div className="flex-shrink-0">
+                          {renderRing(coursePct, `${lessonsDone}/${lessonCount}`, "Course progress")}
+                        </div>
+                      )}
+                      {!isStudent && courseStudentStats && (
+                        <div className="flex-shrink-0">
+                          <StudentStatsPopover stats={courseStudentStats} size="md">
+                            <div className="cursor-default">
+                              {renderRing(
+                                classPct,
+                                `${courseStudentStats.completed}/${courseStudentStats.total}`,
+                                "Students who finished the course",
+                              )}
+                            </div>
+                          </StudentStatsPopover>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Teacher tools: everyday actions visible, the rest under "More" */}
+                    {canCreateContent() && (
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
+                        {[
+                          { label: "Điểm danh", icon: ClipboardList, to: `/teacher/class-reports?course=${currentId}&from=course` },
+                          { label: "Report", icon: BarChart3, to: `/teacher/course-report/${currentId}` },
+                          { label: "Live Battle", icon: Swords, to: `/teacher/live-battle/${currentId}` },
+                        ].map(({ label, icon: Icon, to }) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => navigate(to)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+                          >
+                            <Icon className="w-4 h-4" />
+                            {label}
+                          </button>
+                        ))}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowMoreTools((v) => !v)}
+                            aria-expanded={showMoreTools}
+                            aria-haspopup="menu"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+                          >
+                            More
+                            <ChevronDown className={`w-4 h-4 transition-transform ${showMoreTools ? "rotate-180" : ""}`} />
+                          </button>
+                          {showMoreTools && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowMoreTools(false)} aria-hidden="true" />
+                              <div
+                                role="menu"
+                                className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-gray-700 shadow-xl"
+                              >
+                                {[
+                                  { label: "Unit Report", icon: FileText, action: () => navigate(`/teacher/unit-report/${currentId}`) },
+                                  { label: "Online Battle", icon: Radio, action: () => navigate(`/teacher/online-battle/${currentId}`) },
+                                  { label: activeWar ? "Edit War" : "Class War", icon: Swords, action: () => setShowWarSetup(true) },
+                                ].map(({ label, icon: Icon, action }) => (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setShowMoreTools(false);
+                                      action();
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                  >
+                                    <Icon className="w-4 h-4 text-gray-400" />
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  </div>
+                </div>
+              );
+            })()}
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -1616,9 +1741,17 @@ const UnitList = () => {
                 const nextSession = nextGroup
                   ? nextGroup.list.find((s) => getSessionStatus(s).canAccess && !isSessionDone(s))
                   : null;
-                const nextUnitIndex = nextGroup ? sortedUnits.indexOf(nextGroup.unit) : -1;
                 const doneTotal = allVisible.filter(isSessionDone).length;
                 const pad = (n) => String(n).padStart(2, '0');
+
+                // Collapsible units. Teachers: all open. Students: only the unit holding "Up next"
+                // (or the first unit if nothing is reachable yet), so the page reads like a syllabus.
+                const isUnitOpen = (unit, unitIndex) => {
+                  if (unit.id in unitOpenOverrides) return unitOpenOverrides[unit.id];
+                  if (canCreateContent()) return true;
+                  if (nextGroup) return nextGroup.unit.id === unit.id;
+                  return unitIndex === 0 && doneTotal < allVisible.length;
+                };
 
                 const sessionStatusText = (session) => {
                   const { status } = getSessionStatus(session);
@@ -1635,121 +1768,116 @@ const UnitList = () => {
 
                 return (
                   <div className="max-w-3xl mx-auto flex flex-col gap-6 mt-4">
-                    {/* Up next - students only */}
-                    {!canCreateContent() && allVisible.length > 0 && (
-                      nextSession ? (
-                        <button
-                          type="button"
-                          onClick={() => handleSessionClick(nextSession)}
-                          className="group relative block w-full text-left"
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute inset-0 border border-blue-300 bg-blue-50 transition-colors group-hover:border-blue-400"
-                            style={{ clipPath: CLIP.card }}
-                          />
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute top-[10px] left-0 w-[2px] h-[calc(100%-10px)] bg-blue-400"
-                          />
-                          <span className="relative block p-5 md:p-6">
-                            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-blue-500">
-                              <span>[ {doneTotal === 0 ? 'Start here' : 'Up next'} ]</span>
-                              <span className="font-mono text-gray-400">Unit {pad(nextUnitIndex + 1)}</span>
-                            </span>
-                            <span className="mt-2 block text-xl md:text-2xl font-bold leading-snug tracking-tight text-gray-900">
-                              {nextSession.title}
-                            </span>
-                            <span className="mt-1.5 block w-16 h-[2px] bg-blue-500" />
-                            <span className="mt-2 block text-sm text-gray-500 truncate">
-                              {nextGroup.unit.title}
-                              {nextSession.is_test ? ' · Test' : ''}
-                            </span>
-                            <span
-                              className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-400 px-7 py-2.5 text-sm font-bold uppercase tracking-wider text-white transition-all group-hover:brightness-110 group-hover:gap-3"
-                              style={{ clipPath: CLIP.btn }}
+                    {/* "Up next" / "Course complete" now live in the hero banner above */}
+                    {unitGroups.length > 1 && (
+                      <div className="flex items-center justify-between -mb-3">
+                        <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Course content</h2>
+                        {(() => {
+                          const anyOpen = unitGroups.some((g, i) => isUnitOpen(g.unit, i));
+                          return (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setUnitOpenOverrides(
+                                  Object.fromEntries(unitGroups.map((g) => [g.unit.id, !anyOpen])),
+                                )
+                              }
+                              className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                             >
-                              {(sessionProgress[nextSession.id]?.progress_percentage || 0) > 0 ? 'Continue' : 'Start'}
-                              <ChevronRight className="w-4 h-4" />
-                            </span>
-                          </span>
-                        </button>
-                      ) : (
-                        <HudPanel tone="done">
-                          <div className="flex items-center gap-3 p-5">
-                            <CheckCircle className="w-8 h-8 flex-shrink-0 text-emerald-500" />
-                            <div>
-                              <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Everything complete</p>
-                              <p className="text-sm text-emerald-600">
-                                <span className="font-mono font-bold">{doneTotal}/{allVisible.length}</span> sessions done
-                              </p>
-                            </div>
-                          </div>
-                        </HudPanel>
-                      )
+                              {anyOpen ? 'Collapse all' : 'Expand all'}
+                            </button>
+                          );
+                        })()}
+                      </div>
                     )}
 
                     {unitGroups.map(({ unit, list: unitSessions }, unitIndex) => {
                       const unitDone = unitSessions.filter(isSessionDone).length;
-                      const isNextUnit = !canCreateContent() && nextGroup?.unit.id === unit.id;
                       const unitPct = unitSessions.length ? Math.round((unitDone / unitSessions.length) * 100) : 0;
+                      const isUnitComplete = unitSessions.length > 0 && unitDone === unitSessions.length;
+                      const open = isUnitOpen(unit, unitIndex);
+                      const toggleOpen = () => setUnitOpenOverrides((prev) => ({ ...prev, [unit.id]: !open }));
+                      const accent = getUnitAccent(unitIndex);
 
                       return (
-                        <HudPanel key={unit.id} tone="muted" hoverGroup={false}>
-                          <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5 md:py-4">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <HudPanel key={unit.id} tone="default" hoverGroup={false}>
+                          {/* Colored left edge in the unit's theme */}
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none absolute left-0 top-[10px] w-[3px] h-[calc(100%-10px)] ${isUnitComplete ? 'bg-emerald-500' : accent.bar}`}
+                          />
+
+                          {/* Colored unit header: number, title, progress, collapse toggle, teacher actions */}
+                          <div
+                            className="relative flex items-center justify-between gap-3 px-4 py-3 md:px-5 text-white"
+                            style={{ clipPath: STRIP_CLIP, background: accent.strip }}
+                          >
+                            <button
+                              type="button"
+                              onClick={toggleOpen}
+                              aria-expanded={open}
+                              className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                            >
                               <span
-                                className={`flex h-9 w-9 flex-shrink-0 items-center justify-center border font-mono text-sm font-bold ${isNextUnit ? 'border-blue-500 text-blue-600' : 'border-gray-300 text-gray-600'}`}
+                                className={`flex h-9 w-9 flex-shrink-0 items-center justify-center border font-mono text-sm font-bold ${
+                                  isUnitComplete
+                                    ? 'border-emerald-300 bg-emerald-500 text-white'
+                                    : 'border-white/40 bg-white/15 text-white'
+                                }`}
                                 style={{ clipPath: CLIP.icon }}
                               >
-                                {pad(unitIndex + 1)}
+                                {isUnitComplete ? <CheckCircle className="w-4 h-4" /> : pad(unitIndex + 1)}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <h3 className="font-bold tracking-tight text-gray-900 truncate">{unit.title}</h3>
+                                <h3 className="font-bold tracking-tight truncate drop-shadow-sm">{unit.title}</h3>
                                 {unitSessions.length > 0 && (
                                   <div className="mt-1 flex items-center gap-2">
                                     <div
-                                      className="relative h-2.5 w-24 md:w-32 bg-gray-100 border border-gray-200 overflow-hidden"
+                                      className="relative h-2.5 w-24 md:w-32 bg-white/20 border border-white/30 overflow-hidden"
                                       style={{ clipPath: CLIP.bar }}
                                       role="progressbar"
                                       aria-valuenow={unitDone}
                                       aria-valuemin={0}
                                       aria-valuemax={unitSessions.length}
                                     >
-                                      <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700" style={{ width: `${unitPct}%` }} />
+                                      <div className="h-full bg-white transition-all duration-700" style={{ width: `${unitPct}%` }} />
                                     </div>
-                                    <span className="font-mono text-xs font-bold text-gray-500 tabular-nums">
+                                    <span className="font-mono text-xs font-bold text-white/90 tabular-nums">
                                       {unitDone}/{unitSessions.length}
+                                    </span>
+                                    <span className="text-xs text-white/75 whitespace-nowrap">
+                                      · {unitSessions.length} {unitSessions.length === 1 ? 'lesson' : 'lessons'}
                                     </span>
                                   </div>
                                 )}
                               </div>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {canCreateContent() && (
-                                <>
-                                  <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move up">
-                                    <ChevronUp className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move down">
-                                    <ChevronDown className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-gray-400 hover:text-gray-700" title="Edit unit">
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Add session">
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleDeleteUnit(unit)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete unit">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                              <ChevronDown
+                                className={`w-5 h-5 flex-shrink-0 text-white/80 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+                              />
+                            </button>
+                            {canCreateContent() && (
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button onClick={() => handleSwapUnit(unitIndex, -1)} disabled={unitIndex === 0} className="p-1.5 text-white/70 hover:text-white disabled:opacity-30" title="Move up">
+                                  <ChevronUp className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleSwapUnit(unitIndex, 1)} disabled={unitIndex === sortedUnits.length - 1} className="p-1.5 text-white/70 hover:text-white disabled:opacity-30" title="Move down">
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleEditUnit(unit)} className="p-1.5 text-white/70 hover:text-white" title="Edit unit">
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setAddSessionUnitId(unit.id)} className="p-1.5 text-white/70 hover:text-white" title="Add session">
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleDeleteUnit(unit)} className="p-1.5 text-white/70 hover:text-white hover:bg-red-500/40" title="Delete unit">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
-                          {unitSessions.length > 0 ? (
-                            <div className="px-3 pb-3 md:px-4">
+                          {open && (unitSessions.length > 0 ? (
+                            <div className="px-3 pt-2 pb-3 md:px-4">
                               {unitSessions.map((session, i) => {
                                 const { status, canAccess } = getSessionStatus(session);
                                 const isLocked = !canAccess;
@@ -1763,8 +1891,8 @@ const UnitList = () => {
                                 const tone = isLocked
                                   ? 'bg-gray-100 border-gray-200 text-gray-400'
                                   : session.is_test
-                                      ? 'bg-orange-50 border-orange-200 text-orange-600'
-                                      : 'bg-blue-50 border-blue-200 text-blue-600';
+                                      ? accent.tileTest
+                                      : accent.tile;
 
                                 return (
                                   <div key={session.id} className="relative pl-9 py-1.5">
@@ -1775,7 +1903,7 @@ const UnitList = () => {
                                         isDone
                                           ? 'w-3 h-3 bg-emerald-500 border-emerald-500'
                                           : isNext
-                                            ? 'w-3 h-3 bg-blue-500 border-blue-500'
+                                            ? `w-3 h-3 ${accent.dot}`
                                             : 'w-2.5 h-2.5 bg-white border-gray-300'
                                       }`}
                                     />
@@ -1783,6 +1911,7 @@ const UnitList = () => {
                                     <HudPanel
                                       tone="default"
                                       accentBar={isNext}
+                                      accentBarClass={accent.bar}
                                       onClick={() => (status === "locked" ? setShowEnrollNotice(true) : !isLocked && handleSessionClick(session))}
                                       onContextMenu={canCreateContent() ? (e) => handleSessionContextMenu(e, session, unit.id) : undefined}
                                       className={isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
@@ -1820,11 +1949,7 @@ const UnitList = () => {
                                             </div>
                                           )}
                                         </div>
-                                        {isLocked ? (
-                                          <Lock className="flex-shrink-0 w-4 h-4 text-gray-400" />
-                                        ) : (
-                                          <ChevronRight className="flex-shrink-0 w-5 h-5 text-gray-300 group-hover:text-gray-500 transition-colors" />
-                                        )}
+                                        {isLocked && <Lock className="flex-shrink-0 w-4 h-4 text-gray-400" />}
                                       </div>
                                     </HudPanel>
                                   </div>
@@ -1832,10 +1957,10 @@ const UnitList = () => {
                               })}
                             </div>
                           ) : (
-                            <p className="px-5 pb-4 text-sm text-gray-500">
+                            <p className="px-5 py-4 text-sm text-gray-500">
                               {canCreateContent() ? 'No sessions yet.' : 'Sessions will be available soon'}
                             </p>
-                          )}
+                          ))}
                         </HudPanel>
                       );
                     })}

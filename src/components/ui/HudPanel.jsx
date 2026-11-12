@@ -16,7 +16,7 @@ const TONES = {
  */
 // hoverGroup: lets children use group-hover:*. Turn it off on a panel that contains other panels,
 // otherwise hovering the outer one would trigger the hover styles of every inner row.
-const HudPanel = ({ tone = 'default', accentBar = false, hoverGroup = true, className = '', children, ...props }) => (
+const HudPanel = ({ tone = 'default', accentBar = false, accentBarClass = 'bg-blue-400', hoverGroup = true, className = '', children, ...props }) => (
   <div className={`${hoverGroup ? 'group ' : ''}relative ${className}`} {...props}>
     <span
       aria-hidden="true"
@@ -26,7 +26,7 @@ const HudPanel = ({ tone = 'default', accentBar = false, hoverGroup = true, clas
     {accentBar && (
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-[10px] left-0 w-[2px] h-[calc(100%-10px)] bg-blue-400"
+        className={`pointer-events-none absolute top-[10px] left-0 w-[2px] h-[calc(100%-10px)] ${accentBarClass}`}
       />
     )}
     <div className="relative">{children}</div>
@@ -36,6 +36,7 @@ const HudPanel = ({ tone = 'default', accentBar = false, hoverGroup = true, clas
 HudPanel.propTypes = {
   tone: PropTypes.oneOf(['default', 'accent', 'done', 'muted', 'glass']),
   accentBar: PropTypes.bool,
+  accentBarClass: PropTypes.string,
   hoverGroup: PropTypes.bool,
   className: PropTypes.string,
   children: PropTypes.node,

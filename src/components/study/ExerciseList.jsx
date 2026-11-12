@@ -552,18 +552,27 @@ const ExerciseList = () => {
         console.error("Error fetching session progress:", sessionProgressError);
       }
 
-      // Fetch all exercises for these sessions to calculate detailed progress
-      const { data: allExercises, error: exercisesErr } = await supabase
-        .from("exercises")
-        .select("id, session_id, xp_reward, is_active")
-        .in("session_id", allCourseSessions?.map((s) => s.id) || [])
-        .eq("is_active", true);
+      // Exercises per session for progress. Sessions link exercises through exercise_assignments
+      // (same source as the current session's list above and as UnitList), not exercises.session_id.
+      const { data: allAssignments, error: exercisesErr } = await supabase
+        .from("exercise_assignments")
+        .select("session_id, exercise:exercises(id, xp_reward, is_active)")
+        .in("session_id", allCourseSessions?.map((s) => s.id) || []);
 
       if (exercisesErr) {
         console.error("Error fetching exercises for progress:", exercisesErr);
       }
 
-      const exerciseIds = allExercises?.map((e) => e.id) || [];
+      const allExercises = (allAssignments || [])
+        .filter((a) => a.exercise?.id)
+        .map((a) => ({
+          id: a.exercise.id,
+          session_id: a.session_id,
+          xp_reward: a.exercise.xp_reward,
+          is_active: a.exercise.is_active,
+        }));
+
+      const exerciseIds = [...new Set(allExercises.map((e) => e.id))];
 
       // Fetch user's completed exercises among these
       const { data: userCompleted, error: userProgErr } = await supabase
@@ -615,6 +624,9 @@ const ExerciseList = () => {
         if (existing) {
           sessionProgressMap[s.id] = {
             ...existing,
+            // A stale "in_progress" row must not hide a session whose exercises are all done
+            status:
+              total > 0 && completedCount === total ? "completed" : existing.status,
             xp_earned: Math.max(existing.xp_earned || 0, xpEarned),
             progress_percentage: Math.max(
               existing.progress_percentage || 0,

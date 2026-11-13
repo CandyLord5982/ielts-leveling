@@ -54,6 +54,8 @@ import { assetUrl } from '../../hooks/useBranding';
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule';
 import { getSettings, getSetting } from '../../utils/siteSettings';
 import { normalizeDashWords } from '../../utils/petDash';
+import { fetchLearnedBankWords, MIN_LEARNED_WORDS, LEARN_PATH } from '../../utils/vocabDecks';
+import { useNavigate } from 'react-router-dom';
 import { WILD_ZONES, DEFAULT_ZONE_ID, getZone } from '../../utils/wildZones';
 
 const PetDisplay = () => {
@@ -99,6 +101,7 @@ const PetDisplay = () => {
   };
   const { inventory, fetchInventory, getBallsInInventory } = useInventory();
   const { user, profile, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const isStaff = () => isAdmin() || profile?.role === 'teacher';
   const { getEquippedItemsXPBonus, addXP } = useProgress();
   const [showFeedMenu, setShowFeedMenu] = useState(false);
@@ -154,6 +157,7 @@ const PetDisplay = () => {
   const [dashStarting, setDashStarting] = useState(false);
   const [dashStartError, setDashStartError] = useState('');
   const [wordBank, setWordBank] = useState([]);
+  const [learnedWordCount, setLearnedWordCount] = useState(null); // null = unknown (query failed) → don't lock
   const [questionBank, setQuestionBank] = useState([]);
   const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'dash', 'matchgame', 'wordtype', 'bombparty', 'sayitright', 'quizrush', 'bossbattle', 'angrypet', 'catch', 'fishing']);
   const [competitionGame, setCompetitionGame] = useState(null); // game type with active competition
@@ -862,7 +866,17 @@ const PetDisplay = () => {
     setGameLeaderboards(prev => ({ ...prev, [gameType]: sorted }));
   };
 
+  // Games train on the words this student has learned (flashcards / saved words that are in
+  // the bank). Under MIN_LEARNED_WORDS the picker is locked; the whole bank is only the
+  // fallback for staff testing, the wild-area maze, and a failed learned-words query.
   const fetchWordBank = async () => {
+    const learned = user?.id ? await fetchLearnedBankWords(user.id) : null;
+    setLearnedWordCount(learned ? learned.length : null);
+    if (learned && learned.length >= MIN_LEARNED_WORDS) {
+      setWordBank(learned);
+      return learned;
+    }
+
     const userLevel = profile?.current_level || 1;
 
     const { data: words } = await supabase
@@ -2311,6 +2325,34 @@ const PetDisplay = () => {
                 >
                   OK
                 </button>
+              </div>
+            ) : !isStaff() && learnedWordCount != null && learnedWordCount < MIN_LEARNED_WORDS ? (
+              <div className="py-6">
+                <div className="text-5xl mb-3">📚</div>
+                <p className="text-base font-semibold text-gray-700 mb-1">Learn words to unlock training</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Your pet trains with the words you&apos;ve learned. Learn at least {MIN_LEARNED_WORDS} words first!
+                </p>
+                <div className="mx-auto mb-1 h-2 w-48 overflow-hidden rounded-full bg-gray-100">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(learnedWordCount / MIN_LEARNED_WORDS) * 100}%` }} />
+                </div>
+                <p className="text-xs text-gray-400 mb-5">{learnedWordCount} / {MIN_LEARNED_WORDS} words learned</p>
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => { setShowGame(null); navigate(LEARN_PATH); }}
+                    className="px-6 py-2 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+                    style={{ clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)' }}
+                  >
+                    Learn words
+                  </button>
+                  <button
+                    onClick={() => setShowGame(null)}
+                    className="px-6 py-2 bg-gray-100 text-gray-600 font-medium hover:bg-gray-200 transition"
+                    style={{ clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)' }}
+                  >
+                    Later
+                  </button>
+                </div>
               </div>
             ) : (
             <>

@@ -5,7 +5,8 @@ import { supabase } from '../../supabase/client'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import MeaningPicker, { firstChoice, resolveChoice } from '../ui/MeaningPicker'
 import { lookupWord } from '../../utils/dictionaryApi'
-import { ArrowLeft, Pencil, Trash2, Check, X, Search, Plus, BookOpen, Loader2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Check, X, Search, Plus, BookOpen, Loader2, Layers } from 'lucide-react'
+import { LEARN_PATH } from '../../utils/vocabDecks'
 
 const EMPTY_ADD = { word: '', definition: '', example: '', part_of_speech: null, phonetic: null }
 
@@ -183,12 +184,18 @@ const SavedWords = () => {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <button onClick={() => navigate('/review/vocab')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
           <ArrowLeft className="w-4 h-4" /> Ôn tập từ vựng
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{words.length} từ</span>
+          <button
+            onClick={() => navigate(LEARN_PATH)}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50"
+          >
+            <Layers className="w-4 h-4" /> Học từ mới
+          </button>
           {!adding && (
             <button
               onClick={openAdd}
@@ -291,7 +298,7 @@ const SavedWords = () => {
       {words.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
           <h2 className="text-lg font-bold text-gray-900 mb-1">Chưa có từ nào được lưu</h2>
-          <p className="text-sm text-gray-500">Bấm "Thêm từ", hoặc nhấp đúp vào một từ bất kỳ để tra nghĩa rồi bấm "Lưu từ".</p>
+          <p className="text-sm text-gray-500">Bấm “Học từ mới” để học từ bộ SAT, “Thêm từ”, hoặc nhấp đúp vào một từ bất kỳ để tra nghĩa rồi bấm “Lưu từ”.</p>
         </div>
       ) : filtered.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">Không tìm thấy từ nào.</p>

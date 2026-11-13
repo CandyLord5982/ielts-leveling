@@ -6,7 +6,8 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from '../../utils/srs'
 import { clearReviewDueCache } from '../../utils/reviewDue'
 import { playReviewCorrect, playReviewWrong } from '../../utils/reviewSounds'
-import { ArrowLeft, CheckCircle, XCircle, RotateCcw, Plus, Lightbulb } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, RotateCcw, Plus, Lightbulb, Layers } from 'lucide-react'
+import { LEARN_PATH } from '../../utils/vocabDecks'
 
 // Quizlet-style review of words saved from the dictionary popup.
 // Phase 1: show meaning -> pick the word. Phase 2: show meaning -> type the word.
@@ -213,16 +214,19 @@ const VocabReview = () => {
   }
 
   const header = (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
         <ArrowLeft className="w-4 h-4" /> Trang chủ
       </button>
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {words.length > 0 && phase !== 'done' && (
           <span className="text-sm text-gray-500">
             {phase === 'choice' ? 'Chọn từ' : 'Gõ từ'} · Đã thuộc {mastered} / {words.length}
           </span>
         )}
+        <button onClick={() => navigate(LEARN_PATH)} className="text-sm text-emerald-600 hover:text-emerald-800">
+          Học từ mới
+        </button>
         <button onClick={() => navigate('/review/vocab/words')} className="text-sm text-blue-600 hover:text-blue-800">
           Danh sách từ
         </button>
@@ -244,12 +248,20 @@ const VocabReview = () => {
               ? 'Nhấp đúp vào một từ bất kỳ để tra nghĩa, rồi bấm "Lưu từ".'
               : 'Các từ đã lưu của bạn chưa đến hạn ôn lại.'}
           </p>
-          <button
-            onClick={() => navigate('/review/vocab/words', { state: { add: true } })}
-            className="mt-5 inline-flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Thêm từ
-          </button>
+          <div className="mt-5 flex justify-center gap-2">
+            <button
+              onClick={() => navigate(LEARN_PATH)}
+              className="inline-flex items-center gap-1 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              <Layers className="w-4 h-4" /> Học từ mới
+            </button>
+            <button
+              onClick={() => navigate('/review/vocab/words', { state: { add: true } })}
+              className="inline-flex items-center gap-1 px-5 py-2 border-2 border-blue-200 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Thêm từ
+            </button>
+          </div>
         </div>
       </div>
     )

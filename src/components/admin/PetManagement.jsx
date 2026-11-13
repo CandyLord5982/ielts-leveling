@@ -16,9 +16,10 @@ const PetManagement = () => {
   const [wordBank, setWordBank] = useState([])
   const [wordSearch, setWordSearch] = useState('')
   const [wordDiffFilter, setWordDiffFilter] = useState('all')
+  const [wordDeckFilter, setWordDeckFilter] = useState('all')
   const [wordLoading, setWordLoading] = useState(false)
-  const [editingWord, setEditingWord] = useState(null) // { id, word, hint, difficulty, min_level, image_url }
-  const [newWord, setNewWord] = useState({ word: '', hint: '', difficulty: 'easy', min_level: 1, image_url: '' })
+  const [editingWord, setEditingWord] = useState(null) // { id, deck, word, hint, difficulty, min_level, image_url }
+  const [newWord, setNewWord] = useState({ deck: 'sat', word: '', hint: '', difficulty: 'easy', min_level: 1, image_url: '' })
   const [showAddWord, setShowAddWord] = useState(false)
   const [editingPet, setEditingPet] = useState(null)
   const [message, setMessage] = useState(null)
@@ -263,8 +264,9 @@ const PetManagement = () => {
   }
 
   const saveNewWord = async () => {
-    if (!newWord.word.trim() || !newWord.hint.trim()) return
+    if (!newWord.word.trim() || !newWord.hint.trim() || !newWord.deck.trim()) return
     const { error } = await supabase.from('pet_word_bank').insert({
+      deck: newWord.deck.trim().toLowerCase(),
       word: newWord.word.trim().toLowerCase(),
       hint: newWord.hint.trim(),
       difficulty: newWord.difficulty,
@@ -272,15 +274,16 @@ const PetManagement = () => {
       image_url: newWord.image_url.trim() || null,
     })
     if (error) { showMessage(error.message, 'error'); return }
-    setNewWord({ word: '', hint: '', difficulty: 'easy', min_level: 1, image_url: '' })
+    setNewWord({ deck: newWord.deck, word: '', hint: '', difficulty: 'easy', min_level: 1, image_url: '' })
     setShowAddWord(false)
     showMessage('Word added!', 'success')
     fetchWordBank()
   }
 
   const saveEditWord = async () => {
-    if (!editingWord) return
+    if (!editingWord || !editingWord.deck?.trim()) return
     const { error } = await supabase.from('pet_word_bank').update({
+      deck: editingWord.deck.trim().toLowerCase(),
       word: editingWord.word.trim().toLowerCase(),
       hint: editingWord.hint.trim(),
       difficulty: editingWord.difficulty,
@@ -311,8 +314,10 @@ const PetManagement = () => {
   const filteredWords = wordBank.filter(w => {
     const matchSearch = w.word.toLowerCase().includes(wordSearch.toLowerCase()) || w.hint.toLowerCase().includes(wordSearch.toLowerCase())
     const matchDiff = wordDiffFilter === 'all' || w.difficulty === wordDiffFilter
-    return matchSearch && matchDiff
+    const matchDeck = wordDeckFilter === 'all' || w.deck === wordDeckFilter
+    return matchSearch && matchDiff && matchDeck
   })
+  const wordDecks = [...new Set(wordBank.map(w => w.deck).filter(Boolean))].sort()
 
   // ── Question Bank ─────────────────────────────────────────────
   const fetchQuestionBank = async () => {
@@ -618,6 +623,11 @@ const PetManagement = () => {
                   className="pl-8 pr-3 py-1.5 border rounded-lg text-sm w-52"
                 />
               </div>
+              {/* Deck filter */}
+              <select value={wordDeckFilter} onChange={(e) => setWordDeckFilter(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm">
+                <option value="all">All decks</option>
+                {wordDecks.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
               {/* Difficulty filter */}
               <select value={wordDiffFilter} onChange={(e) => setWordDiffFilter(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm">
                 <option value="all">All difficulties</option>
@@ -635,10 +645,16 @@ const PetManagement = () => {
           {/* Add Word Form */}
           {showAddWord && (
             <div className="bg-gray-50 rounded-lg p-4 mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <input type="text" placeholder="Deck (sat, ielts…)" value={newWord.deck} list="word-deck-options"
+                onChange={(e) => setNewWord({ ...newWord, deck: e.target.value })}
+                className="px-3 py-2 border rounded-lg text-sm" />
+              <datalist id="word-deck-options">
+                {wordDecks.map(d => <option key={d} value={d} />)}
+              </datalist>
               <input type="text" placeholder="Word" value={newWord.word}
                 onChange={(e) => setNewWord({ ...newWord, word: e.target.value })}
                 className="px-3 py-2 border rounded-lg text-sm" />
-              <input type="text" placeholder="Hint" value={newWord.hint}
+              <input type="text" placeholder="Hint (definition; synonym, synonym)" value={newWord.hint}
                 onChange={(e) => setNewWord({ ...newWord, hint: e.target.value })}
                 className="px-3 py-2 border rounded-lg text-sm" />
               <select value={newWord.difficulty} onChange={(e) => setNewWord({ ...newWord, difficulty: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
@@ -677,6 +693,7 @@ const PetManagement = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
                   <tr>
+                    <th className="px-3 py-2 text-left">Deck</th>
                     <th className="px-3 py-2 text-left">Word</th>
                     <th className="px-3 py-2 text-left">Hint</th>
                     <th className="px-3 py-2 text-left">Difficulty</th>
@@ -690,6 +707,10 @@ const PetManagement = () => {
                     <tr key={w.id} className="border-b hover:bg-gray-50">
                       {editingWord?.id === w.id ? (
                         <>
+                          <td className="px-3 py-2">
+                            <input value={editingWord.deck || ''} list="word-deck-options" onChange={(e) => setEditingWord({ ...editingWord, deck: e.target.value })}
+                              className="w-20 px-2 py-1 border rounded text-sm" />
+                          </td>
                           <td className="px-3 py-2">
                             <input value={editingWord.word} onChange={(e) => setEditingWord({ ...editingWord, word: e.target.value })}
                               className="w-full px-2 py-1 border rounded text-sm" />
@@ -719,6 +740,9 @@ const PetManagement = () => {
                         </>
                       ) : (
                         <>
+                          <td className="px-3 py-2">
+                            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-semibold uppercase">{w.deck}</span>
+                          </td>
                           <td className="px-3 py-2 font-semibold">{w.word}</td>
                           <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{w.hint}</td>
                           <td className="px-3 py-2">
@@ -743,7 +767,7 @@ const PetManagement = () => {
                     </tr>
                   ))}
                   {filteredWords.length === 0 && (
-                    <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">No words found</td></tr>
+                    <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">No words found</td></tr>
                   )}
                 </tbody>
               </table>

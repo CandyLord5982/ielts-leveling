@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Loader2, BookmarkPlus, Check } from 'lucide-react'
-import { lookupWord } from '../../utils/dictionaryApi'
+import { lookupWord, baseForms } from '../../utils/dictionaryApi'
+import { findBankWord, cardDefinition, cardSynonyms, savedDefinition, deckInfo } from '../../utils/vocabDecks'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
 import MeaningPicker, { firstChoice, resolveChoice } from './MeaningPicker'
 
 const WORD_RE = /^[a-zA-Z][a-zA-Z'-]*$/
 
-// Global, mounted once in Layout. Double-click any plain word on the page to
-// look it up via the free dictionaryapi.dev API.
+// Global, mounted once in Layout. Double-click any plain word on the page to look it up.
+// Words in the word bank show the bank's meaning (so saved words match the bank and
+// count as bank words); everything else comes from the free dictionary APIs.
 const WordLookupPopup = () => {
-  const [state, setState] = useState(null) // { word, x, y, status, entry, error }
+  // { word, x, y, status, entry, error, retryable, bank, source: 'bank' | 'dict' }
+  const [state, setState] = useState(null)
   const popupRef = useRef(null)
   const { user } = useAuth()
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
@@ -30,7 +33,9 @@ const WordLookupPopup = () => {
   }, [entry, choice])
 
   // Reset / pre-check whether the looked-up word is already saved.
-  const entryWord = entry?.word?.toLowerCase()
+  const bank = state?.bank
+  const showingBank = state?.source === 'bank' && !!bank
+  const entryWord = (showingBank ? bank.word : entry?.word)?.toLowerCase()
   useEffect(() => {
     setSaveState('idle')
     if (!user || !entryWord) return
@@ -47,7 +52,30 @@ const WordLookupPopup = () => {
     return () => { cancelled = true }
   }, [user, entryWord])
 
+  // Same row the bank page's "Add" creates.
+  const saveBankWord = async () => {
+    setSaveState('saving')
+    const { error } = await supabase.from('saved_words').upsert(
+      {
+        user_id: user.id,
+        word: bank.word.toLowerCase(),
+        definition: savedDefinition(bank),
+        example: bank.example || null,
+        part_of_speech: bank.part_of_speech || null,
+        phonetic: bank.phonetic || null,
+        bank_word_id: bank.id,
+      },
+      { onConflict: 'user_id,word', ignoreDuplicates: true },
+    )
+    if (error) console.error('Error saving word:', error)
+    setSaveState(error ? 'error' : 'saved')
+  }
+
   const handleSave = async () => {
+    if (showingBank) {
+      if (user) await saveBankWord()
+      return
+    }
     const picked = resolveChoice(entry?.meanings, choice)
     if (!user || !entry || !picked) return
     const { meaning, def } = picked
@@ -67,8 +95,8 @@ const WordLookupPopup = () => {
     setSaveState(error ? 'error' : 'saved')
   }
 
-  // setState is stable, so this is safe to call from the mount-only listener effect below.
-  const runLookup = (word) => {
+  // setState is stable, so these are safe to call from the mount-only listener effect below.
+  const runDictionary = (word) => {
     lookupWord(word)
       .then((entry) => {
         setState((s) => (s && s.word === word ? { ...s, status: 'done', entry } : s))
@@ -80,9 +108,27 @@ const WordLookupPopup = () => {
       })
   }
 
+  // Bank first; the dictionary is only fetched when the word isn't in the bank.
+  const runLookup = (word) => {
+    findBankWord(word, baseForms).catch(() => null).then((bank) => {
+      if (bank) {
+        setState((s) => (s && s.word === word ? { ...s, status: 'done', bank, source: 'bank' } : s))
+      } else {
+        runDictionary(word)
+      }
+    })
+  }
+
+  const showDictionary = () => {
+    setState((s) => (s ? { ...s, source: 'dict', status: s.entry ? 'done' : 'loading', error: null } : s))
+    if (!state.entry) runDictionary(state.word)
+  }
+
+  const showBank = () => setState((s) => (s ? { ...s, source: 'bank', status: 'done', error: null } : s))
+
   const retry = () => {
     setState((s) => (s ? { ...s, status: 'loading', error: null, retryable: false } : s))
-    runLookup(state.word)
+    runDictionary(state.word)
   }
 
   useEffect(() => {
@@ -94,7 +140,7 @@ const WordLookupPopup = () => {
       const word = selection?.toString().trim()
       if (!word || !WORD_RE.test(word)) return
 
-      setState({ word, x: e.clientX, y: e.clientY, status: 'loading', entry: null, error: null, retryable: false })
+      setState({ word, x: e.clientX, y: e.clientY, status: 'loading', entry: null, error: null, retryable: false, bank: null, source: 'dict' })
       runLookup(word)
     }
 
@@ -137,7 +183,23 @@ const WordLookupPopup = () => {
     ? { top: y + gap }
     : { bottom: window.innerHeight - y + gap }
 
-  const phoneticText = entry?.phonetic
+  const phoneticText = showingBank ? bank.phonetic : entry?.phonetic
+  // For "mitigated" the bank entry is "mitigate" — show the word that will be saved.
+  const headword = showingBank ? bank.word : word
+  const saveButton = user && (
+    <button
+      onClick={handleSave}
+      disabled={saveState === 'saving' || saveState === 'saved'}
+      className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+        saveState === 'saved'
+          ? 'bg-green-50 text-green-700 cursor-default'
+          : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60'
+      }`}
+    >
+      {saveState === 'saved' ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+      {saveState === 'saved' ? 'Đã lưu để ôn tập' : saveState === 'saving' ? 'Đang lưu...' : saveState === 'error' ? 'Lỗi, thử lại' : 'Lưu từ'}
+    </button>
+  )
 
   return createPortal(
     <div
@@ -147,7 +209,7 @@ const WordLookupPopup = () => {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900">{word}</span>
+          <span className="font-semibold text-gray-900">{headword}</span>
           {phoneticText && <span className="text-gray-400">{phoneticText}</span>}
         </div>
         <button onClick={() => setState(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
@@ -172,7 +234,32 @@ const WordLookupPopup = () => {
         </div>
       )}
 
-      {status === 'done' && entry && (
+      {status === 'done' && showingBank && (
+        <div className="space-y-3">
+          <div>
+            <span className="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-semibold uppercase tracking-wider">
+              Kho từ {deckInfo(bank.deck).name}
+            </span>
+            <p className="text-gray-800">{cardDefinition(bank)}</p>
+            {cardSynonyms(bank).length > 0 && (
+              <p className="mt-1 text-xs text-gray-500">≈ {cardSynonyms(bank).join(', ')}</p>
+            )}
+            {bank.example && <p className="mt-1.5 text-gray-500 italic">&ldquo;{bank.example}&rdquo;</p>}
+          </div>
+          {saveButton}
+          <button onClick={showDictionary} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+            Xem nghĩa khác trong từ điển
+          </button>
+        </div>
+      )}
+
+      {bank && !showingBank && (
+        <button onClick={showBank} className="mb-2 text-xs text-blue-600 hover:text-blue-800 font-medium">
+          ← Nghĩa trong kho từ
+        </button>
+      )}
+
+      {status === 'done' && !showingBank && entry && (
         <div className="space-y-3">
           {user && saveState !== 'saved' && (
             <p className="text-xs text-gray-400">Chọn nghĩa muốn lưu:</p>
@@ -194,20 +281,7 @@ const WordLookupPopup = () => {
               />
             </div>
           )}
-          {user && (
-            <button
-              onClick={handleSave}
-              disabled={saveState === 'saving' || saveState === 'saved'}
-              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                saveState === 'saved'
-                  ? 'bg-green-50 text-green-700 cursor-default'
-                  : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60'
-              }`}
-            >
-              {saveState === 'saved' ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
-              {saveState === 'saved' ? 'Đã lưu để ôn tập' : saveState === 'saving' ? 'Đang lưu...' : saveState === 'error' ? 'Lỗi, thử lại' : 'Lưu từ'}
-            </button>
-          )}
+          {saveButton}
         </div>
       )}
     </div>,

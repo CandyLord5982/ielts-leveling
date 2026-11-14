@@ -7,7 +7,7 @@ import { clearReviewDueCache } from '../../utils/reviewDue'
 import { deckInfo, cardDefinition, cardSynonyms, savedDefinition, frequencyLevel, speakWord } from '../../utils/vocabDecks'
 import VocabFlashcards, { FrequencyDots } from './VocabFlashcards'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Search, Plus, Check, Volume2, ArrowRight, Loader2, EyeOff, RotateCcw, Layers, List, Shuffle } from 'lucide-react'
+import { ArrowLeft, Search, Plus, Check, Volume2, ArrowRight, Loader2, EyeOff, RotateCcw, Layers, List, Shuffle, ChevronDown } from 'lucide-react'
 
 // Browse a word deck (pet_word_bank) as Quizlet-style flashcards (or a searchable list) and
 // add the words you want to your own list (saved_words). Added words are due right away,
@@ -18,7 +18,7 @@ const FETCH_SIZE = 1000 // PostgREST caps a response at 1000 rows
 const SORTS = [
   { id: 'freq', labelKey: 'bank.sortFreq' },
   { id: 'az', label: 'A → Z' },
-  { id: 'shuffle', labelKey: 'bank.sortShuffle', icon: Shuffle },
+  { id: 'shuffle', labelKey: 'bank.sortShuffle' },
 ]
 const VIEWS = [
   { id: 'cards', labelKey: 'bank.viewCards', icon: Layers },
@@ -360,20 +360,32 @@ const VocabBank = () => {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-1 text-sm">
-                <span className="text-gray-400 mr-1">{t('bank.sortLabel')}</span>
-                {SORTS.map(({ id, label, labelKey, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => chooseSort(id)}
-                    title={id === 'shuffle' && sort === 'shuffle' ? t('bank.reshuffle') : undefined}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-colors ${
-                      sort === id ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
+              <div className="flex items-center gap-2 text-sm">
+                <label htmlFor="vocab-bank-sort" className="text-gray-400">{t('bank.sortLabel')}</label>
+                <div className="relative">
+                  <select
+                    id="vocab-bank-sort"
+                    value={sort}
+                    onChange={(e) => chooseSort(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 font-medium cursor-pointer outline-none hover:bg-gray-50 focus:border-blue-500"
                   >
-                    {Icon && <Icon className="w-3.5 h-3.5" />} {labelKey ? t(labelKey) : label}
+                    {SORTS.map(({ id, label, labelKey }) => (
+                      <option key={id} value={id}>{labelKey ? t(labelKey) : label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                {/* Re-picking the same option doesn't fire onChange, so reshuffling gets its own button */}
+                {sort === 'shuffle' && (
+                  <button
+                    onClick={() => chooseSort('shuffle')}
+                    title={t('bank.reshuffle')}
+                    aria-label={t('bank.reshuffle')}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <Shuffle className="w-4 h-4" />
                   </button>
-                ))}
+                )}
               </div>
             </div>
           </div>

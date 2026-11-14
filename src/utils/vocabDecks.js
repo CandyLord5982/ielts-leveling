@@ -32,6 +32,24 @@ export const savedDefinition = (w) => {
   return syn.length ? `${cardDefinition(w)}; ${syn.join(', ')}` : cardDefinition(w)
 }
 
+// The active bank word for a word seen in text, trying its exact form first and then simple
+// base forms ("mitigated" → "mitigate"). null when it isn't in any deck or the query fails.
+export async function findBankWord(word, baseForms = () => []) {
+  const key = word.trim().toLowerCase()
+  const forms = [key, ...baseForms(key)]
+  const { data, error } = await supabase
+    .from('pet_word_bank')
+    .select('id, word, deck, hint, definition, synonyms, part_of_speech, phonetic, example')
+    .in('word', forms)
+    .eq('is_active', true)
+  if (error) {
+    console.error('Error looking up bank word:', error)
+    return null
+  }
+  if (!data?.length) return null
+  return forms.map((f) => data.find((w) => w.word === f)).find(Boolean) || null
+}
+
 // Browser text-to-speech; silently does nothing where unsupported.
 export const speakWord = (text) => {
   try {

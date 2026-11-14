@@ -4,12 +4,12 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../supabase/client'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import MeaningPicker, { firstChoice, resolveChoice } from '../ui/MeaningPicker'
-import { lookupWord } from '../../utils/dictionaryApi'
+import { lookupWord, baseForms } from '../../utils/dictionaryApi'
 import { ArrowLeft, Pencil, Trash2, Check, X, Search, Plus, BookOpen, Loader2, Layers } from 'lucide-react'
-import { BANK_PATH } from '../../utils/vocabDecks'
+import { BANK_PATH, findBankWord, cardDefinition, cardSynonyms, savedDefinition, deckInfo } from '../../utils/vocabDecks'
 import { useTranslation } from 'react-i18next'
 
-const EMPTY_ADD = { word: '', definition: '', example: '', part_of_speech: null, phonetic: null }
+const EMPTY_ADD = { word: '', definition: '', example: '', part_of_speech: null, phonetic: null, bank_word_id: null }
 
 // Manage saved words: add one by hand (optionally filled from the dictionary),
 // edit the meaning/example, rename, or delete.
@@ -21,7 +21,8 @@ const SavedWords = () => {
   const location = useLocation()
   const [adding, setAdding] = useState(!!location.state?.add)
   const [addDraft, setAddDraft] = useState(EMPTY_ADD)
-  const [lookup, setLookup] = useState(null) // { status: loading | done | error, entry, error }
+  // { status: loading | done | error, source: 'bank' | 'dict', bank, entry, error }
+  const [lookup, setLookup] = useState(null)
   const [choice, setChoice] = useState(null)
   const [addError, setAddError] = useState('')
   const [addBusy, setAddBusy] = useState(false)
@@ -100,7 +101,7 @@ const SavedWords = () => {
 
   // Editing the word invalidates the dictionary results (but keeps a hand-typed meaning).
   const changeAddWord = (value) => {
-    setAddDraft((d) => ({ ...d, word: value, part_of_speech: null, phonetic: null }))
+    setAddDraft((d) => ({ ...d, word: value, part_of_speech: null, phonetic: null, bank_word_id: null }))
     setLookup(null)
     setChoice(null)
   }
@@ -114,23 +115,65 @@ const SavedWords = () => {
       definition: picked.def.definition,
       example: picked.def.example || '',
       part_of_speech: picked.meaning.partOfSpeech || null,
+      bank_word_id: null,
     }))
   }
 
+  // Fill the form exactly as the word bank's "Add" would.
+  const applyBank = (bank) => {
+    setChoice(null)
+    setAddDraft((d) => ({
+      ...d,
+      word: bank.word.toLowerCase(),
+      definition: savedDefinition(bank),
+      example: bank.example || '',
+      part_of_speech: bank.part_of_speech || null,
+      phonetic: bank.phonetic || null,
+      bank_word_id: bank.id,
+    }))
+  }
+
+  const runDictionary = async (word, bank = null) => {
+    setLookup({ status: 'loading', source: 'dict', bank })
+    try {
+      const entry = await lookupWord(word)
+      // The dictionary may resolve an inflection to its base form ("running" -> "run").
+      setAddDraft((d) => ({ ...d, word: entry.word.toLowerCase(), phonetic: entry.phonetic || null }))
+      setLookup({ status: 'done', source: 'dict', bank, entry })
+      applyChoice(entry, firstChoice(entry.meanings))
+    } catch (err) {
+      setLookup({ status: 'error', source: 'dict', bank, error: err.message === 'NOT_FOUND' ? 'saved.notFound' : 'saved.lookupFailed' })
+    }
+  }
+
+  // Word bank first; the dictionary only when the word isn't in the bank.
   const runLookup = async () => {
     const word = addDraft.word.trim()
     if (!word || lookup?.status === 'loading') return
     setLookup({ status: 'loading' })
     setAddError('')
-    try {
-      const entry = await lookupWord(word)
-      // The dictionary may resolve an inflection to its base form ("running" -> "run").
-      setAddDraft((d) => ({ ...d, word: entry.word.toLowerCase(), phonetic: entry.phonetic || null }))
-      setLookup({ status: 'done', entry })
-      applyChoice(entry, firstChoice(entry.meanings))
-    } catch (err) {
-      setLookup({ status: 'error', error: err.message === 'NOT_FOUND' ? 'saved.notFound' : 'saved.lookupFailed' })
+    const bank = await findBankWord(word, baseForms).catch(() => null)
+    if (bank) {
+      setLookup({ status: 'done', source: 'bank', bank })
+      applyBank(bank)
+    } else {
+      runDictionary(word)
     }
+  }
+
+  const showDictionary = () => {
+    const { bank, entry } = lookup
+    if (entry) {
+      setLookup({ status: 'done', source: 'dict', bank, entry })
+      applyChoice(entry, firstChoice(entry.meanings))
+    } else {
+      runDictionary(bank.word, bank)
+    }
+  }
+
+  const showBank = () => {
+    setLookup((l) => ({ ...l, status: 'done', source: 'bank', error: null }))
+    applyBank(lookup.bank)
   }
 
   const saveAdd = async () => {
@@ -150,6 +193,7 @@ const SavedWords = () => {
         example: addDraft.example.trim() || null,
         part_of_speech: addDraft.part_of_speech,
         phonetic: addDraft.phonetic,
+        bank_word_id: addDraft.bank_word_id,
       })
       .select()
       .single()
@@ -236,9 +280,31 @@ const SavedWords = () => {
             </button>
           </div>
 
+          {lookup?.bank && lookup.source === 'dict' && (
+            <button onClick={showBank} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+              {t('saved.bankMeaning')}
+            </button>
+          )}
+
           {lookup?.status === 'error' && <p className="text-sm text-gray-500">{t(lookup.error)}</p>}
 
-          {lookup?.status === 'done' && (
+          {lookup?.status === 'done' && lookup.source === 'bank' && (
+            <div className="rounded-lg bg-blue-50/50 border border-blue-100 p-3 text-sm">
+              <span className="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold uppercase tracking-wider">
+                {t('saved.fromBank', { deck: deckInfo(lookup.bank.deck).name })}
+              </span>
+              <p className="text-gray-800">{cardDefinition(lookup.bank)}</p>
+              {cardSynonyms(lookup.bank).length > 0 && (
+                <p className="mt-1 text-xs text-gray-500">≈ {cardSynonyms(lookup.bank).join(', ')}</p>
+              )}
+              {lookup.bank.example && <p className="mt-1.5 text-gray-500 italic">&ldquo;{lookup.bank.example}&rdquo;</p>}
+              <button onClick={showDictionary} className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium">
+                {t('saved.dictionaryMeanings')}
+              </button>
+            </div>
+          )}
+
+          {lookup?.status === 'done' && lookup.source !== 'bank' && (
             <div>
               <div className="flex items-baseline gap-2 mb-2">
                 <p className="text-xs text-gray-400">{t('saved.pickMeaning')}</p>

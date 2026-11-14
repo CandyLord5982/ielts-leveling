@@ -54,7 +54,7 @@ async function fromWiktionary(word) {
 }
 
 // Crude base forms for when both sources miss an inflected word.
-const baseForms = (word) => {
+export const baseForms = (word) => {
   const forms = []
   if (word.endsWith('ies')) forms.push(word.slice(0, -3) + 'y')
   if (word.endsWith('es')) forms.push(word.slice(0, -2))

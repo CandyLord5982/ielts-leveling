@@ -139,7 +139,7 @@ const VocabFlashcards = ({ words, saved, busy, filter, resetKey, onAdd, onRemove
           tabIndex={0}
           aria-label={flipped ? t('cards.showFront') : t('cards.showMeaning')}
           onClick={() => { if (!swiped.current) flip() }}
-          className="relative w-full h-full cursor-pointer select-none transition-transform duration-500 outline-none"
+          className="relative w-full h-full cursor-pointer select-none transition-transform duration-300 ease-out outline-none"
           style={{ transformStyle: 'preserve-3d', transform: flipped ? 'rotateY(180deg)' : 'none' }}
         >
           {/* Front */}

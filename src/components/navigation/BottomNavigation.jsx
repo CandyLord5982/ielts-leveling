@@ -6,9 +6,11 @@ import { useMissions } from '../../hooks/useMissions'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useAuth } from '../../hooks/useAuth'
 import NotificationPanel from '../notifications/NotificationPanel'
+import { useTranslation } from 'react-i18next'
 
 import { assetUrl } from '../../hooks/useBranding';
 const BottomNavigation = ({ onOpenReport }) => {
+  const { t } = useTranslation('nav')
   const location = useLocation()
   const { newItemCount } = useInventory()
   const { unclaimedCount: missionBadge } = useMissions()
@@ -34,20 +36,20 @@ const BottomNavigation = ({ onOpenReport }) => {
   }, [showNotifPanel, showMoreMenu])
 
   const mainItems = [
-    { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: 'Home' },
-    { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: 'Missions', badge: missionBadge },
-    { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: 'Progress' },
+    { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: t('home') },
+    { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: t('missions'), badge: missionBadge },
+    { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: t('progress') },
   ]
 
   const moreItems = [
-    { path: '/shop', imageSrc: assetUrl('/icon/navigation/shop.svg'), label: 'Shop' },
-    { path: '/leaderboard', imageSrc: assetUrl('/icon/navigation/leaderboard.svg'), label: 'BXH' },
-    { path: '/inventory', imageSrc: assetUrl('/icon/navigation/inventory.svg'), label: 'Kho đồ', badge: newItemCount },
-    { id: 'notifications', label: 'Thông báo', isNotification: true, badge: unreadCount },
-    { id: 'report', label: 'Báo cáo', isReport: true },
-    { path: '/profile', imageSrc: assetUrl('/icon/navigation/account.svg'), label: 'Account' },
-    ...(isTeacher() ? [{ path: '/teacher', icon: 'teacher', label: 'Teacher' }] : []),
-    ...(isAdmin() ? [{ path: '/admin', icon: 'admin', label: 'Admin' }] : []),
+    { path: '/shop', imageSrc: assetUrl('/icon/navigation/shop.svg'), label: t('shop') },
+    { path: '/leaderboard', imageSrc: assetUrl('/icon/navigation/leaderboard.svg'), label: t('leaderboard') },
+    { path: '/inventory', imageSrc: assetUrl('/icon/navigation/inventory.svg'), label: t('inventory'), badge: newItemCount },
+    { id: 'notifications', label: t('notifications'), isNotification: true, badge: unreadCount },
+    { id: 'report', label: t('report'), isReport: true },
+    { path: '/profile', imageSrc: assetUrl('/icon/navigation/account.svg'), label: t('account') },
+    ...(isTeacher() ? [{ path: '/teacher', icon: 'teacher', label: t('teacher') }] : []),
+    ...(isAdmin() ? [{ path: '/admin', icon: 'admin', label: t('admin') }] : []),
   ]
 
   const isMoreActive = ['/shop', '/leaderboard', '/inventory', '/profile', '/admin', '/teacher'].some(
@@ -208,7 +210,7 @@ const BottomNavigation = ({ onOpenReport }) => {
                 </span>
               )}
             </div>
-            <span className="text-xs font-medium truncate w-full text-center">More</span>
+            <span className="text-xs font-medium truncate w-full text-center">{t('more')}</span>
           </button>
         </div>
       </nav>

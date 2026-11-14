@@ -6,13 +6,16 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import MeaningPicker, { firstChoice, resolveChoice } from '../ui/MeaningPicker'
 import { lookupWord } from '../../utils/dictionaryApi'
 import { ArrowLeft, Pencil, Trash2, Check, X, Search, Plus, BookOpen, Loader2, Layers } from 'lucide-react'
-import { LEARN_PATH } from '../../utils/vocabDecks'
+import { BANK_PATH } from '../../utils/vocabDecks'
+import { useTranslation } from 'react-i18next'
 
 const EMPTY_ADD = { word: '', definition: '', example: '', part_of_speech: null, phonetic: null }
 
 // Manage saved words: add one by hand (optionally filled from the dictionary),
 // edit the meaning/example, rename, or delete.
+// Error states hold translation keys (review.json), so they follow a language switch.
 const SavedWords = () => {
+  const { t } = useTranslation('review')
   const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -65,7 +68,7 @@ const SavedWords = () => {
     const word = draft.word.trim().toLowerCase()
     const definition = draft.definition.trim()
     if (!word || !definition) {
-      setError('Từ và nghĩa không được để trống.')
+      setError('saved.emptyFields')
       return
     }
     setBusy(true)
@@ -74,7 +77,7 @@ const SavedWords = () => {
     setBusy(false)
     if (err) {
       // 23505 = unique violation (another saved word already has this spelling)
-      setError(err.code === '23505' ? 'Bạn đã lưu từ này rồi.' : 'Không thể lưu thay đổi.')
+      setError(err.code === '23505' ? 'saved.alreadySaved' : 'saved.saveFailed')
       return
     }
     setWords((list) => list.map((w) => (w.id === editingId ? { ...w, ...updates } : w)))
@@ -126,10 +129,7 @@ const SavedWords = () => {
       setLookup({ status: 'done', entry })
       applyChoice(entry, firstChoice(entry.meanings))
     } catch (err) {
-      const msg = err.message === 'NOT_FOUND'
-        ? 'Không tìm thấy từ này. Bạn có thể tự nhập nghĩa.'
-        : 'Không thể tải định nghĩa. Thử lại hoặc tự nhập nghĩa.'
-      setLookup({ status: 'error', error: msg })
+      setLookup({ status: 'error', error: err.message === 'NOT_FOUND' ? 'saved.notFound' : 'saved.lookupFailed' })
     }
   }
 
@@ -137,7 +137,7 @@ const SavedWords = () => {
     const word = addDraft.word.trim().toLowerCase()
     const definition = addDraft.definition.trim()
     if (!word || !definition) {
-      setAddError('Từ và nghĩa không được để trống.')
+      setAddError('saved.emptyFields')
       return
     }
     setAddBusy(true)
@@ -156,7 +156,7 @@ const SavedWords = () => {
     setAddBusy(false)
     if (err) {
       if (err.code !== '23505') console.error('Error adding word:', err)
-      setAddError(err.code === '23505' ? 'Bạn đã lưu từ này rồi.' : 'Không thể thêm từ.')
+      setAddError(err.code === '23505' ? 'saved.alreadySaved' : 'saved.addFailed')
       return
     }
     setWords((list) => [data, ...list])
@@ -164,11 +164,11 @@ const SavedWords = () => {
   }
 
   const handleDelete = async (w) => {
-    if (!window.confirm(`Xóa từ "${w.word}"?`)) return
+    if (!window.confirm(t('saved.confirmDelete', { word: w.word }))) return
     const { error: err } = await supabase.from('saved_words').delete().eq('id', w.id)
     if (err) {
       console.error('Error deleting word:', err)
-      alert('Không thể xóa từ này.')
+      alert(t('saved.deleteFailed'))
       return
     }
     setWords((list) => list.filter((x) => x.id !== w.id))
@@ -186,22 +186,22 @@ const SavedWords = () => {
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <button onClick={() => navigate('/review/vocab')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
-          <ArrowLeft className="w-4 h-4" /> Ôn tập từ vựng
+          <ArrowLeft className="w-4 h-4" /> {t('vocabReview')}
         </button>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{words.length} từ</span>
+          <span className="text-sm text-gray-500">{t('wordCount', { count: words.length })}</span>
           <button
-            onClick={() => navigate(LEARN_PATH)}
+            onClick={() => navigate(BANK_PATH)}
             className="flex items-center gap-1 px-3 py-1.5 text-sm text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50"
           >
-            <Layers className="w-4 h-4" /> Học từ mới
+            <Layers className="w-4 h-4" /> {t('wordBank')}
           </button>
           {!adding && (
             <button
               onClick={openAdd}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              <Plus className="w-4 h-4" /> Thêm từ
+              <Plus className="w-4 h-4" /> {t('vocab.addWord')}
             </button>
           )}
         </div>
@@ -220,7 +220,7 @@ const SavedWords = () => {
                   runLookup()
                 }
               }}
-              placeholder="Từ tiếng Anh"
+              placeholder={t('saved.englishWord')}
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
@@ -232,16 +232,16 @@ const SavedWords = () => {
               className="flex items-center gap-1 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 flex-shrink-0"
             >
               {lookup?.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-              Tra từ điển
+              {t('saved.lookUp')}
             </button>
           </div>
 
-          {lookup?.status === 'error' && <p className="text-sm text-gray-500">{lookup.error}</p>}
+          {lookup?.status === 'error' && <p className="text-sm text-gray-500">{t(lookup.error)}</p>}
 
           {lookup?.status === 'done' && (
             <div>
               <div className="flex items-baseline gap-2 mb-2">
-                <p className="text-xs text-gray-400">Chọn nghĩa muốn lưu:</p>
+                <p className="text-xs text-gray-400">{t('saved.pickMeaning')}</p>
                 {addDraft.phonetic && <span className="text-xs text-gray-400">{addDraft.phonetic}</span>}
               </div>
               <div className="max-h-72 overflow-y-auto text-sm pr-1">
@@ -257,27 +257,27 @@ const SavedWords = () => {
           <textarea
             value={addDraft.definition}
             onChange={(e) => setAddDraft((d) => ({ ...d, definition: e.target.value }))}
-            placeholder="Nghĩa"
+            placeholder={t('saved.meaning')}
             rows={3}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500 text-sm"
           />
           <input
             value={addDraft.example}
             onChange={(e) => setAddDraft((d) => ({ ...d, example: e.target.value }))}
-            placeholder="Ví dụ (không bắt buộc)"
+            placeholder={t('saved.examplePlaceholder')}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500 text-sm"
           />
-          {addError && <p className="text-sm text-red-600">{addError}</p>}
+          {addError && <p className="text-sm text-red-600">{t(addError)}</p>}
           <div className="flex justify-end gap-2">
             <button onClick={closeAdd} className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-              <X className="w-4 h-4" /> Hủy
+              <X className="w-4 h-4" /> {t('common:cancel')}
             </button>
             <button
               onClick={saveAdd}
               disabled={addBusy}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              <Check className="w-4 h-4" /> Thêm
+              <Check className="w-4 h-4" /> {t('common:add')}
             </button>
           </div>
         </div>
@@ -289,7 +289,7 @@ const SavedWords = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm từ hoặc nghĩa..."
+            placeholder={t('searchPlaceholder')}
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 outline-none focus:border-blue-500"
           />
         </div>
@@ -297,11 +297,11 @@ const SavedWords = () => {
 
       {words.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Chưa có từ nào được lưu</h2>
-          <p className="text-sm text-gray-500">Bấm “Học từ mới” để học từ bộ SAT, “Thêm từ”, hoặc nhấp đúp vào một từ bất kỳ để tra nghĩa rồi bấm “Lưu từ”.</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{t('saved.emptyTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('saved.emptyBody')}</p>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-center text-sm text-gray-400 py-8">Không tìm thấy từ nào.</p>
+        <p className="text-center text-sm text-gray-400 py-8">{t('noMatches')}</p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((w) => (
@@ -311,33 +311,33 @@ const SavedWords = () => {
                   <input
                     value={draft.word}
                     onChange={(e) => setDraft((d) => ({ ...d, word: e.target.value }))}
-                    placeholder="Từ"
+                    placeholder={t('saved.word')}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500 font-semibold"
                   />
                   <textarea
                     value={draft.definition}
                     onChange={(e) => setDraft((d) => ({ ...d, definition: e.target.value }))}
-                    placeholder="Nghĩa"
+                    placeholder={t('saved.meaning')}
                     rows={3}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500 text-sm"
                   />
                   <input
                     value={draft.example}
                     onChange={(e) => setDraft((d) => ({ ...d, example: e.target.value }))}
-                    placeholder="Ví dụ (không bắt buộc)"
+                    placeholder={t('saved.examplePlaceholder')}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500 text-sm"
                   />
-                  {error && <p className="text-sm text-red-600">{error}</p>}
+                  {error && <p className="text-sm text-red-600">{t(error)}</p>}
                   <div className="flex justify-end gap-2">
                     <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                      <X className="w-4 h-4" /> Hủy
+                      <X className="w-4 h-4" /> {t('common:cancel')}
                     </button>
                     <button
                       onClick={saveEdit}
                       disabled={busy}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
-                      <Check className="w-4 h-4" /> Lưu
+                      <Check className="w-4 h-4" /> {t('common:save')}
                     </button>
                   </div>
                 </div>
@@ -353,10 +353,10 @@ const SavedWords = () => {
                     {w.example && <p className="text-sm text-gray-400 italic mt-1">&ldquo;{w.example}&rdquo;</p>}
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => startEdit(w)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded" title="Sửa">
+                    <button onClick={() => startEdit(w)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded" title={t('common:edit')}>
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(w)} className="p-1.5 text-gray-400 hover:text-red-600 rounded" title="Xóa">
+                    <button onClick={() => handleDelete(w)} className="p-1.5 text-gray-400 hover:text-red-600 rounded" title={t('common:delete')}>
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>

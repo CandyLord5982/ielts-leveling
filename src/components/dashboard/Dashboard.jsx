@@ -15,16 +15,18 @@ import { assetUrl, useBranding } from '../../hooks/useBranding';
 import { usePermissions } from '../../hooks/usePermissions';
 import { CheckCircle, Clock, XCircle, ChevronDown, ChevronRight, RotateCcw, BookOpen, HelpCircle } from 'lucide-react';
 import OnboardingTour from '../ui/OnboardingTour';
+import { useTranslation } from 'react-i18next';
 
 // Welcome tour for new students. Steps whose target isn't on the page show as centered cards.
+// Title/body come from dashboard.json → tour.<key>.
 const TOUR_STEPS = [
-  { emoji: '👋', title: 'Chào mừng bạn!', body: 'Cùng xem nhanh trang chủ để bắt đầu học nhé.' },
-  { target: 'stats', title: 'Chuỗi ngày, XP và Gems', body: 'Học mỗi ngày để giữ chuỗi 🔥. Làm bài để nhận XP và Gems, dùng để lên hạng và mua vật phẩm.' },
-  { target: 'courses', title: 'Khóa học của bạn', body: 'Đây là các khóa học bạn có thể học. Liên hệ admin để mở khóa content advanced.' },
-  { target: 'review', title: 'Ôn tập', body: 'Ôn lại các câu bạn từng làm sai và các từ vựng bạn đã lưu theo thuật toán spaced repetition.' },
-  { target: 'pet', title: 'Thú cưng', body: 'Chăm sóc thú cưng và chơi mini game ôn từ vựng. Thú cưng sẽ là trợ thủ giải thích câu hỏi.' },
-  { target: 'nav', title: 'Thanh điều hướng', body: 'Chuyển nhanh giữa trang chủ, bảng xếp hạng, hồ sơ và các mục khác ở đây.' },
-  { emoji: '📖', title: 'Mẹo: tra từ nhanh', body: 'Nhấp đúp vào bất kỳ từ tiếng Anh nào để xem nghĩa và lưu lại để ôn tập.' },
+  { key: 'welcome', emoji: '👋' },
+  { key: 'stats', target: 'stats' },
+  { key: 'courses', target: 'courses' },
+  { key: 'review', target: 'review' },
+  { key: 'pet', target: 'pet' },
+  { key: 'nav', target: 'nav' },
+  { key: 'tip', emoji: '📖' },
 ];
 const TOUR_DONE_KEY = (userId) => `onboarding_done_${userId}`;
 const NEWCOMER_MAX_XP = 50;
@@ -200,6 +202,7 @@ const CourseStatsSection = ({ courseId }) => {
   );
 };
 const Dashboard = () => {
+  const { t } = useTranslation('dashboard')
   const { user, profile } = useAuth()
   const { branding } = useBranding()
   const { canCreateContent } = usePermissions()
@@ -777,17 +780,23 @@ const Dashboard = () => {
     }))
 
     if (vietnamHour >= 5 && vietnamHour < 12) {
-      return "Buổi sáng vui vẻ, học thôi nào! 🌅"
+      return t('greeting.morning')
     } else if (vietnamHour >= 12 && vietnamHour < 18) {
-      return "Buổi chiều vui vẻ, học thôi nào! ☀️"
+      return t('greeting.afternoon')
     } else {
-      return "Buổi tối vui vẻ, học thôi nào! 🌙"
+      return t('greeting.evening')
     }
   }
 
+  const tourSteps = TOUR_STEPS.map(({ key, ...step }) => ({
+    ...step,
+    title: t(`tour.${key}.title`),
+    body: t(`tour.${key}.body`),
+  }))
+
   return (
     <div className="space-y-8 md:pt-8">
-      {showTour && <OnboardingTour steps={TOUR_STEPS} onClose={closeTour} />}
+      {showTour && <OnboardingTour steps={tourSteps} onClose={closeTour} />}
       {/* Header with Blue Background */}
       <div className="relative -mx-4 md:-mx-6 lg:mx-0 -mt-6 md:-mt-6 lg:-mt-6 -mb-4 md:-mb-6 lg:mb-0">
         {/* Background Image */}
@@ -813,8 +822,8 @@ const Dashboard = () => {
             <button
               onClick={() => setShowTour(true)}
               className="absolute bottom-3 right-4 z-20 w-8 h-8 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-sm flex items-center justify-center text-white transition-colors"
-              title="Xem hướng dẫn"
-              aria-label="Xem hướng dẫn"
+              title={t('showTour')}
+              aria-label={t('showTour')}
             >
               <HelpCircle className="w-5 h-5" />
             </button>
@@ -859,7 +868,7 @@ const Dashboard = () => {
                 />
                 <div>
                   <h5 className="text-2xl md:text-3xl font-bold drop-shadow-lg">
-                    Chào {profile?.full_name || 'Học viên'}! 👋
+                    {t('hello', { name: profile?.full_name || t('defaultName') })}
                   </h5>
                   <div className="h-[2px] w-20 bg-gradient-to-r from-white/50 to-transparent mt-1 mb-1" />
                   <p className="text-base md:text-lg opacity-90 drop-shadow-md max-w-2xl">
@@ -976,7 +985,7 @@ const Dashboard = () => {
                 )}
               </div>
               <div>
-                <div className="text-sm text-blue-600 font-semibold uppercase tracking-wide">Bài gần nhất</div>
+                <div className="text-sm text-blue-600 font-semibold uppercase tracking-wide">{t('recentExercise')}</div>
                 <div className="font-medium text-gray-500">{recent.title}</div>
               </div>
             </div>
@@ -992,7 +1001,7 @@ const Dashboard = () => {
               onMouseLeave={(e) => e.currentTarget.style.animation = 'scalePulse 2s ease-in-out infinite'}
               onClick={() => navigate(recent.continuePath)}
             >
-              Tiếp tục✨
+              {t('continue')}
             </button>
             <style>{`
               @keyframes scalePulse {
@@ -1004,12 +1013,12 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Review shortcuts: missed questions (left) + saved vocab (right). Same cut-corner style as "Bài gần nhất". */}
+      {/* Review shortcuts: missed questions (left) + saved vocab (right). Same cut-corner style as the last-exercise card. */}
       {profile && (
         <div data-tour="review" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           {[
-            { path: '/review', label: 'Ôn tập câu sai', desc: 'Ôn lại các câu bạn từng làm sai', icon: RotateCcw, tint: 'bg-indigo-100 text-indigo-600', accent: 'text-indigo-600', due: reviewDue.questions },
-            { path: '/review/vocab', label: 'Ôn tập từ vựng', desc: 'Ôn lại các từ bạn đã tra và lưu', icon: BookOpen, tint: 'bg-emerald-100 text-emerald-600', accent: 'text-emerald-600', due: reviewDue.vocab },
+            { path: '/review', label: t('reviewQuestions'), desc: t('reviewQuestionsDesc'), icon: RotateCcw, tint: 'bg-indigo-100 text-indigo-600', accent: 'text-indigo-600', due: reviewDue.questions },
+            { path: '/review/vocab', label: t('reviewVocab'), desc: t('reviewVocabDesc'), icon: BookOpen, tint: 'bg-emerald-100 text-emerald-600', accent: 'text-emerald-600', due: reviewDue.vocab },
           ].map(({ path, label, desc, icon: Icon, tint, accent, due }) => (
             <button
               key={path}
@@ -1033,7 +1042,7 @@ const Dashboard = () => {
                       <Icon className="w-6 h-6" />
                     </div>
                     {due && (
-                      <span className="absolute -top-1 -right-1 flex w-3.5 h-3.5" title="Có mục cần ôn tập">
+                      <span className="absolute -top-1 -right-1 flex w-3.5 h-3.5" title={t('dueDot')}>
                         <span className="absolute inline-flex w-full h-full rounded-full bg-red-400 opacity-75 animate-ping" />
                         <span className="relative inline-flex w-3.5 h-3.5 rounded-full bg-red-500 ring-2 ring-white" />
                       </span>
@@ -1063,7 +1072,7 @@ const Dashboard = () => {
           {loading ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="text-gray-600 mt-2">Đang tải...</p>
+              <p className="text-gray-600 mt-2">{t('common:loading')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
@@ -1166,7 +1175,7 @@ const Dashboard = () => {
                     {!isLocked && profile?.role === 'user' && courseProgress[course.id] && (
                       <div className="px-3 py-2 bg-gray-50 mb-1">
                         <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                          <span>Tiến độ</span>
+                          <span>{t('progress')}</span>
                           <span className="font-semibold">{courseProgress[course.id].percentage}%</span>
                         </div>
                         <div className="w-full bg-gray-200 h-2 overflow-hidden"

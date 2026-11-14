@@ -1,17 +1,19 @@
 import { supabase } from '../supabase/client'
 
-// Pet training games only use words the student has learned (saved_words linked to
-// pet_word_bank). Below this many, the game picker is locked behind the learn page.
+// Pet training games only use bank words the student has added to their list AND reviewed
+// at least once in /review/vocab. Below this many, the game picker is locked.
 export const MIN_LEARNED_WORDS = 10
 
-export const LEARN_PATH = '/review/vocab/learn'
+// Browse a deck and add words to your own list.
+export const BANK_PATH = '/review/vocab/bank'
 
+// Deck names are proper nouns, so they aren't translated.
 const DECK_INFO = {
-  sat: { name: 'SAT', desc: 'Từ vựng học thuật thường gặp trong đề SAT' },
-  ielts: { name: 'IELTS', desc: 'Từ vựng theo chủ đề cho IELTS' },
+  sat: { name: 'SAT' },
+  ielts: { name: 'IELTS' },
 }
 
-export const deckInfo = (deck) => DECK_INFO[deck] || { name: deck.toUpperCase(), desc: '' }
+export const deckInfo = (deck) => DECK_INFO[deck] || { name: deck.toUpperCase() }
 
 // `hint` is "definition; syn1, syn2". definition/synonyms columns override it when an
 // import fills them in; otherwise split the hint.
@@ -30,12 +32,35 @@ export const savedDefinition = (w) => {
   return syn.length ? `${cardDefinition(w)}; ${syn.join(', ')}` : cardDefinition(w)
 }
 
-// The bank words this user has learned, in the shape the pet games expect.
-// Returns null when the query fails (e.g. migration not applied) so callers can fall back.
+// Browser text-to-speech; silently does nothing where unsupported.
+export const speakWord = (text) => {
+  try {
+    const synth = window.speechSynthesis
+    if (!synth) return
+    synth.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'en-US'
+    u.rate = 0.9
+    synth.speak(u)
+  } catch { /* no speech support */ }
+}
+
+// 1–5 from the wordfreq Zipf score (3 ≈ once per million words). null when unscored.
+export const frequencyLevel = (f) => {
+  if (f == null) return null
+  if (f >= 4) return 5
+  if (f >= 3.5) return 4
+  if (f >= 3) return 3
+  if (f >= 2.75) return 2
+  return 1
+}
+
+// The student's bank words: how many they've added, and the reviewed ones in the shape the
+// pet games expect. Returns null when the query fails so callers can fall back.
 export async function fetchLearnedBankWords(userId) {
   const { data, error } = await supabase
     .from('saved_words')
-    .select('bank:pet_word_bank(word, hint, image_url)')
+    .select('last_reviewed_at, bank:pet_word_bank(word, hint, image_url)')
     .eq('user_id', userId)
     .not('bank_word_id', 'is', null)
   if (error) {
@@ -43,5 +68,9 @@ export async function fetchLearnedBankWords(userId) {
     return null
   }
   // Inactive bank rows come back as null through RLS.
-  return (data || []).map((r) => r.bank).filter(Boolean)
+  const rows = (data || []).filter((r) => r.bank)
+  return {
+    added: rows.length,
+    reviewed: rows.filter((r) => r.last_reviewed_at).map((r) => r.bank),
+  }
 }

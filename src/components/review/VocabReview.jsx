@@ -7,7 +7,8 @@ import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from
 import { clearReviewDueCache } from '../../utils/reviewDue'
 import { playReviewCorrect, playReviewWrong } from '../../utils/reviewSounds'
 import { ArrowLeft, CheckCircle, XCircle, RotateCcw, Plus, Lightbulb, Layers } from 'lucide-react'
-import { LEARN_PATH } from '../../utils/vocabDecks'
+import { BANK_PATH } from '../../utils/vocabDecks'
+import { useTranslation } from 'react-i18next'
 
 // Quizlet-style review of words saved from the dictionary popup.
 // Phase 1: show meaning -> pick the word. Phase 2: show meaning -> type the word.
@@ -32,6 +33,7 @@ const maskWord = (text, word) => {
 }
 
 const VocabReview = () => {
+  const { t } = useTranslation('review')
   const { user } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -216,19 +218,23 @@ const VocabReview = () => {
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="w-4 h-4" /> Trang chủ
+        <ArrowLeft className="w-4 h-4" /> {t('common:home')}
       </button>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {words.length > 0 && phase !== 'done' && (
           <span className="text-sm text-gray-500">
-            {phase === 'choice' ? 'Chọn từ' : 'Gõ từ'} · Đã thuộc {mastered} / {words.length}
+            {t('vocab.progress', {
+              mode: phase === 'choice' ? t('vocab.modeChoice') : t('vocab.modeType'),
+              done: mastered,
+              total: words.length,
+            })}
           </span>
         )}
-        <button onClick={() => navigate(LEARN_PATH)} className="text-sm text-emerald-600 hover:text-emerald-800">
-          Học từ mới
+        <button onClick={() => navigate(BANK_PATH)} className="text-sm text-emerald-600 hover:text-emerald-800">
+          {t('wordBank')}
         </button>
         <button onClick={() => navigate('/review/vocab/words')} className="text-sm text-blue-600 hover:text-blue-800">
-          Danh sách từ
+          {t('vocab.wordList')}
         </button>
       </div>
     </div>
@@ -241,25 +247,23 @@ const VocabReview = () => {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
           <h2 className="text-lg font-bold text-gray-900 mb-1">
-            {pool.length === 0 ? 'Chưa có từ nào được lưu' : 'Không có từ nào cần ôn tập!'}
+            {pool.length === 0 ? t('vocab.noSavedTitle') : t('vocab.noDueTitle')}
           </h2>
           <p className="text-sm text-gray-500">
-            {pool.length === 0
-              ? 'Nhấp đúp vào một từ bất kỳ để tra nghĩa, rồi bấm "Lưu từ".'
-              : 'Các từ đã lưu của bạn chưa đến hạn ôn lại.'}
+            {pool.length === 0 ? t('vocab.noSavedBody') : t('vocab.noDueBody')}
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <button
-              onClick={() => navigate(LEARN_PATH)}
+              onClick={() => navigate(BANK_PATH)}
               className="inline-flex items-center gap-1 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
             >
-              <Layers className="w-4 h-4" /> Học từ mới
+              <Layers className="w-4 h-4" /> {t('wordBank')}
             </button>
             <button
               onClick={() => navigate('/review/vocab/words', { state: { add: true } })}
               className="inline-flex items-center gap-1 px-5 py-2 border-2 border-blue-200 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-50 transition-colors"
             >
-              <Plus className="w-4 h-4" /> Thêm từ
+              <Plus className="w-4 h-4" /> {t('vocab.addWord')}
             </button>
           </div>
         </div>
@@ -275,13 +279,13 @@ const VocabReview = () => {
         {header}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
           <RotateCcw className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Hoàn thành!</h2>
-          <p className="text-sm text-gray-500 mb-4">Đúng cả hai phần: {correct}/{total} từ.</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{t('doneTitle')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('vocab.doneScore', { correct, total })}</p>
           <button
             onClick={() => navigate('/')}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
           >
-            Về trang chủ
+            {t('common:backHome')}
           </button>
         </div>
       </div>
@@ -311,11 +315,11 @@ const VocabReview = () => {
         <div className="px-6 pt-6 pb-5 bg-gradient-to-b from-blue-50 to-white border-b border-gray-100">
           <div className="flex items-center gap-2 mb-4">
             <span className="px-2.5 py-1 rounded-full bg-blue-600 text-white text-xs font-semibold">
-              Câu {index + 1}
+              {t('vocab.question', { n: index + 1 })}
             </span>
             {isRetry && (
               <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
-                <RotateCcw className="w-3 h-3" /> Thử lại
+                <RotateCcw className="w-3 h-3" /> {t('vocab.retry')}
               </span>
             )}
             {current.part_of_speech && (
@@ -325,7 +329,7 @@ const VocabReview = () => {
             )}
           </div>
           <p className="text-sm font-medium text-gray-500 mb-2">
-            {phase === 'choice' ? 'Từ nào có nghĩa sau?' : 'Gõ từ tiếng Anh có nghĩa sau:'}
+            {phase === 'choice' ? t('vocab.promptChoice') : t('vocab.promptType')}
           </p>
           <p data-no-lookup className="text-xl sm:text-2xl font-semibold text-gray-900 leading-snug">
             {maskWord(current.definition, current.word)}
@@ -415,7 +419,7 @@ const VocabReview = () => {
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
-                placeholder="Gõ từ tiếng Anh..."
+                placeholder={t('vocab.typePlaceholder')}
                 className={`w-full px-4 py-3.5 rounded-xl border-2 outline-none transition-colors text-lg text-center font-medium ${
                   revealed
                     ? lastCorrect ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-400 bg-red-50 text-red-700 line-through'
@@ -433,7 +437,9 @@ const VocabReview = () => {
             >
               <p className={`flex items-center gap-2 font-semibold ${wasCorrect ? 'text-green-700' : 'text-red-700'}`}>
                 {wasCorrect ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                {wasCorrect ? (usedHint && phase === 'type' ? 'Chính xác! (có dùng gợi ý)' : 'Chính xác!') : <>Chưa đúng — đáp án là <span className="underline">{current.word}</span></>}
+                {wasCorrect
+                  ? (usedHint && phase === 'type' ? t('vocab.correctWithHint') : t('vocab.correct'))
+                  : <>{t('vocab.wrongAnswerIs')} <span className="underline">{current.word}</span></>}
               </p>
               {current.example && (
                 <p className="mt-1.5 text-sm text-gray-600 italic">&ldquo;{current.example}&rdquo;</p>
@@ -449,7 +455,7 @@ const VocabReview = () => {
                 disabled={hintCount >= current.word.length - 1}
                 className="mr-auto flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-amber-200 text-amber-700 font-medium hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Lightbulb className="w-4 h-4" /> Gợi ý
+                <Lightbulb className="w-4 h-4" /> {t('vocab.hint')}
               </button>
             )}
             {!revealed ? (
@@ -459,7 +465,7 @@ const VocabReview = () => {
                   disabled={!typed.trim()}
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Trả lời
+                  {t('answer')}
                 </button>
               )
             ) : (
@@ -469,7 +475,7 @@ const VocabReview = () => {
                   wasCorrect ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Tiếp theo <span className="ml-1 text-xs opacity-70">↵</span>
+                {t('next')} <span className="ml-1 text-xs opacity-70">↵</span>
               </button>
             )}
           </div>

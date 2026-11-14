@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 // Step-by-step spotlight tour.
 // Each step: { target?: 'data-tour value', title, body }. A step without a target
@@ -22,6 +23,7 @@ const findTarget = (key) => {
 }
 
 const OnboardingTour = ({ steps, onClose }) => {
+  const { t } = useTranslation()
   const [index, setIndex] = useState(0)
   const [rect, setRect] = useState(null)
   const step = steps[index]
@@ -65,7 +67,7 @@ const OnboardingTour = ({ steps, onClose }) => {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose()
-      // Enter is handled by the autofocused "Tiếp" button, so it isn't listed here (would double-step)
+      // Enter is handled by the autofocused Next button, so it isn't listed here (would double-step)
       else if (e.key === 'ArrowRight') next()
       else if (e.key === 'ArrowLeft') back()
     }
@@ -138,7 +140,7 @@ const OnboardingTour = ({ steps, onClose }) => {
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-          aria-label="Đóng hướng dẫn"
+          aria-label={t('tour.close')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -160,11 +162,11 @@ const OnboardingTour = ({ steps, onClose }) => {
           <div className="flex items-center gap-2">
             {index > 0 ? (
               <button onClick={back} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800">
-                Quay lại
+                {t('tour.back')}
               </button>
             ) : (
               <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-600">
-                Bỏ qua
+                {t('tour.skip')}
               </button>
             )}
             <button
@@ -172,7 +174,7 @@ const OnboardingTour = ({ steps, onClose }) => {
               onClick={next}
               className="px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
-              {isLast ? 'Bắt đầu học!' : 'Tiếp'}
+              {isLast ? t('tour.start') : t('tour.next')}
             </button>
           </div>
         </div>

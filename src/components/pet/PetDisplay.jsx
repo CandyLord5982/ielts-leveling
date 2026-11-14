@@ -54,7 +54,7 @@ import { assetUrl } from '../../hooks/useBranding';
 import { fetchPvpSchedule, checkPvpAvailability } from '../../utils/pvpSchedule';
 import { getSettings, getSetting } from '../../utils/siteSettings';
 import { normalizeDashWords } from '../../utils/petDash';
-import { fetchLearnedBankWords, MIN_LEARNED_WORDS, LEARN_PATH } from '../../utils/vocabDecks';
+import { fetchLearnedBankWords, MIN_LEARNED_WORDS, BANK_PATH } from '../../utils/vocabDecks';
 import { useNavigate } from 'react-router-dom';
 import { WILD_ZONES, DEFAULT_ZONE_ID, getZone } from '../../utils/wildZones';
 
@@ -157,7 +157,7 @@ const PetDisplay = () => {
   const [dashStarting, setDashStarting] = useState(false);
   const [dashStartError, setDashStartError] = useState('');
   const [wordBank, setWordBank] = useState([]);
-  const [learnedWordCount, setLearnedWordCount] = useState(null); // null = unknown (query failed) → don't lock
+  const [learnedWords, setLearnedWords] = useState(null); // { added, reviewed } counts; null = unknown (query failed) → don't lock
   const [questionBank, setQuestionBank] = useState([]);
   const [enabledGames, setEnabledGames] = useState(['scramble', 'whackmole', 'astroblast', 'dash', 'matchgame', 'wordtype', 'bombparty', 'sayitright', 'quizrush', 'bossbattle', 'angrypet', 'catch', 'fishing']);
   const [competitionGame, setCompetitionGame] = useState(null); // game type with active competition
@@ -866,15 +866,15 @@ const PetDisplay = () => {
     setGameLeaderboards(prev => ({ ...prev, [gameType]: sorted }));
   };
 
-  // Games train on the words this student has learned (flashcards / saved words that are in
-  // the bank). Under MIN_LEARNED_WORDS the picker is locked; the whole bank is only the
-  // fallback for staff testing, the wild-area maze, and a failed learned-words query.
+  // Games train on bank words this student added to their list and has reviewed at least
+  // once. Under MIN_LEARNED_WORDS the picker is locked; the whole bank is only the fallback
+  // for staff testing, the wild-area maze, and a failed learned-words query.
   const fetchWordBank = async () => {
     const learned = user?.id ? await fetchLearnedBankWords(user.id) : null;
-    setLearnedWordCount(learned ? learned.length : null);
-    if (learned && learned.length >= MIN_LEARNED_WORDS) {
-      setWordBank(learned);
-      return learned;
+    setLearnedWords(learned ? { added: learned.added, reviewed: learned.reviewed.length } : null);
+    if (learned && learned.reviewed.length >= MIN_LEARNED_WORDS) {
+      setWordBank(learned.reviewed);
+      return learned.reviewed;
     }
 
     const userLevel = profile?.current_level || 1;
@@ -2326,24 +2326,27 @@ const PetDisplay = () => {
                   OK
                 </button>
               </div>
-            ) : !isStaff() && learnedWordCount != null && learnedWordCount < MIN_LEARNED_WORDS ? (
+            ) : !isStaff() && learnedWords != null && learnedWords.reviewed < MIN_LEARNED_WORDS ? (
               <div className="py-6">
                 <div className="text-5xl mb-3">📚</div>
                 <p className="text-base font-semibold text-gray-700 mb-1">Learn words to unlock training</p>
                 <p className="text-sm text-gray-500 mb-4">
-                  Your pet trains with the words you&apos;ve learned. Learn at least {MIN_LEARNED_WORDS} words first!
+                  Your pet trains with words you&apos;ve added and reviewed. Review at least {MIN_LEARNED_WORDS} words from the word bank first!
                 </p>
                 <div className="mx-auto mb-1 h-2 w-48 overflow-hidden rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(learnedWordCount / MIN_LEARNED_WORDS) * 100}%` }} />
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(learnedWords.reviewed / MIN_LEARNED_WORDS) * 100}%` }} />
                 </div>
-                <p className="text-xs text-gray-400 mb-5">{learnedWordCount} / {MIN_LEARNED_WORDS} words learned</p>
+                <p className="text-xs text-gray-400 mb-5">
+                  {learnedWords.reviewed} / {MIN_LEARNED_WORDS} words reviewed · {learnedWords.added} added
+                </p>
                 <div className="flex justify-center gap-2">
+                  {/* Enough words added → they just need to review them; otherwise add more first. */}
                   <button
-                    onClick={() => { setShowGame(null); navigate(LEARN_PATH); }}
+                    onClick={() => { setShowGame(null); navigate(learnedWords.added >= MIN_LEARNED_WORDS ? '/review/vocab' : BANK_PATH); }}
                     className="px-6 py-2 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
                     style={{ clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)' }}
                   >
-                    Learn words
+                    {learnedWords.added >= MIN_LEARNED_WORDS ? 'Review words' : 'Add words'}
                   </button>
                   <button
                     onClick={() => setShowGame(null)}

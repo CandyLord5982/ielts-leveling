@@ -1,0 +1,24 @@
+{
+  "cancel": "Hủy",
+  "save": "Lưu",
+  "add": "Thêm",
+  "edit": "Sửa",
+  "delete": "Xóa",
+  "next": "Tiếp theo",
+  "back": "Quay lại",
+  "home": "Trang chủ",
+  "backHome": "Về trang chủ",
+  "loading": "Đang tải…",
+  "tryAgainLater": "Thử lại sau nhé.",
+  "completed": "Hoàn thành",
+  "gems": "Gems",
+  "tapToClose": "Nhấn để đóng",
+  "close": "Đóng",
+  "tour": {
+    "back": "Quay lại",
+    "skip": "Bỏ qua",
+    "next": "Tiếp",
+    "start": "Bắt đầu học!",
+    "close": "Đóng hướng dẫn"
+  }
+}

@@ -33,6 +33,9 @@ import {
 } from 'lucide-react'
 import ClaimCelebration from '../ui/ClaimCelebration'
 import { FEATURES } from '../../config/features'
+import { useTranslation } from 'react-i18next'
+import { dateLocale } from '../../i18n'
+import LanguageSwitcher from '../ui/LanguageSwitcher'
 
 const CLIP_CARD = 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)'
 const CLIP_SM = 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)'
@@ -48,6 +51,7 @@ const CornerBrackets = () => (
 )
 
 const Profile = () => {
+  const { t } = useTranslation('profile')
   const { userId } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -442,19 +446,19 @@ const Profile = () => {
 
     // Validate file
     if (!file.type.startsWith('image/')) {
-      alert('Vui lòng chọn file ảnh (JPG, PNG, GIF)')
+      alert(t('upload.invalidType'))
       return
     }
     if (file.size > 2 * 1024 * 1024) {
-      alert('File ảnh không được vượt quá 2MB')
+      alert(t('upload.tooLarge'))
       return
     }
     if (customAvatars.length >= 20) {
-      alert('Bạn chỉ được tải tối đa 20 avatar. Vui lòng xóa avatar cũ trước khi tải ảnh mới.')
+      alert(t('upload.maxReached'))
       return
     }
     if (uploadCooldownDays > 0) {
-      alert(`Bạn chỉ được tải avatar 1 lần trong 7 ngày. Vui lòng chờ thêm ${uploadCooldownDays} ngày.`)
+      alert(t('upload.cooldown', { count: uploadCooldownDays }))
       return
     }
 
@@ -488,7 +492,7 @@ const Profile = () => {
       await fetchCustomAvatars()
     } catch (error) {
       console.error('Error uploading avatar:', error)
-      alert('Lỗi tải ảnh lên. Vui lòng thử lại.')
+      alert(t('upload.failed'))
     } finally {
       setUploadingAvatar(false)
       e.target.value = ''
@@ -512,7 +516,7 @@ const Profile = () => {
   }
 
   const handleDeleteCustomAvatar = async (uploadId) => {
-    if (!window.confirm('Xóa avatar này?')) return
+    if (!window.confirm(t('upload.confirmDelete'))) return
     try {
       // Find the avatar to get its image_url for storage deletion
       const avatarToDelete = customAvatars.find(a => a.id === uploadId)
@@ -694,10 +698,6 @@ const Profile = () => {
           ...achievement,
           isUnlocked,
           isClaimed,
-          unlockedDate: isUnlocked && userAchievement?.earned_at
-            ? new Date(userAchievement.earned_at).toLocaleDateString('vi-VN')
-            : (calculatedUnlocked ? 'Đã mở khóa' : null),
-          claimedDate: isClaimed ? new Date(userAchievement.claimed_at).toLocaleDateString('vi-VN') : null
         }
       })
 
@@ -778,7 +778,7 @@ const Profile = () => {
         setTimeout(() => setClaimMessage(''), 3000)
       }
     } catch (error) {
-      setClaimMessage('Có lỗi xảy ra khi nhận XP')
+      setClaimMessage(t('claimError'))
       setTimeout(() => setClaimMessage(''), 3000)
     } finally {
       setClaimingAchievement(prev => ({ ...prev, [achievementId]: false }))
@@ -797,22 +797,22 @@ const Profile = () => {
     const hours = Math.floor(ms / (1000 * 60 * 60))
     const days = Math.floor(hours / 24)
     const remainingHours = hours % 24
-    if (days > 0) return `${days} ngày ${remainingHours} giờ`
-    return `${remainingHours} giờ`
+    if (days > 0) return t('durationDaysHours', { days, hours: remainingHours })
+    return t('durationHours', { hours: remainingHours })
   }
 
   const handleSaveProfile = async () => {
     try {
       const trimmedName = (editData.full_name || '').trim()
       if (!trimmedName) {
-        alert('Tên không được để trống.')
+        alert(t('nameEmpty'))
         return
       }
       const nameChanged = trimmedName !== profile?.full_name
       if (nameChanged) {
         const remaining = getNameCooldownRemaining()
         if (remaining > 0) {
-          alert(`Bạn chỉ có thể đổi tên sau ${formatCooldown(remaining)} nữa.`)
+          alert(t('nameCooldown', { time: formatCooldown(remaining) }))
           return
         }
       }
@@ -859,23 +859,20 @@ const Profile = () => {
     return labels[type] || type
   }
 
-  const formatTimeAgo = (dateString) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInMinutes = Math.floor((now - date) / (1000 * 60))
-
-    if (diffInMinutes < 1) return 'Vừa xong'
-    if (diffInMinutes < 60) return `${diffInMinutes} phút trước`
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} giờ trước`
-    return `${Math.floor(diffInMinutes / 1440)} ngày trước`
-  }
-
   const formatPracticeTime = (minutes) => {
-    if (minutes < 60) return `${minutes} phút`
+    if (minutes < 60) return t('practiceMinutes', { count: minutes })
     const hours = Math.floor(minutes / 60)
     const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours} giờ`
+    return remainingMinutes > 0
+      ? t('practiceHoursMinutes', { hours, minutes: remainingMinutes })
+      : t('practiceHours', { count: hours })
   }
+
+  // "50 XP + 3 💎" — numbers and symbols only, so it reads the same in every language.
+  const rewardText = (achievement) => [
+    achievement.xp_reward > 0 ? `${achievement.xp_reward} XP` : null,
+    achievement.gem_reward > 0 ? `${achievement.gem_reward} 💎` : null,
+  ].filter(Boolean).join(' + ')
 
   const getTierIcon = (tier) => {
     const icons = {
@@ -949,7 +946,7 @@ const Profile = () => {
                   <div className="space-y-2">
                     <input
                       type="text"
-                      placeholder="Tên đầy đủ"
+                      placeholder={t('fullName')}
                       value={editData.full_name}
                       onChange={(e) => setEditData(prev => ({ ...prev, full_name: e.target.value }))}
                       className="px-3 py-1 text-gray-900 text-xl font-semibold border border-white/30"
@@ -958,7 +955,7 @@ const Profile = () => {
                     />
                     {getNameCooldownRemaining() > 0 && (
                       <p className="text-yellow-200 text-xs mt-1">
-                        Đổi tên sau {formatCooldown(getNameCooldownRemaining())}
+                        {t('renameIn', { time: formatCooldown(getNameCooldownRemaining()) })}
                       </p>
                     )}
                     {(profile?.role === 'admin' || profile?.role === 'teacher') && (
@@ -971,7 +968,7 @@ const Profile = () => {
                 ) : (
                   <div>
                     <h1 className="text-3xl font-semibold">
-                      {currentProfile?.full_name || 'Người dùng'}
+                      {currentProfile?.full_name || t('defaultName')}
                     </h1>
                     {(profile?.role === 'admin' || profile?.role === 'teacher') && (
                       <p className="text-blue-100 flex items-center space-x-2 mt-1">
@@ -989,16 +986,16 @@ const Profile = () => {
                 {isEditing ? (
                   <div className="space-x-2">
                     <button onClick={handleSaveProfile} className="px-4 py-2 text-sm font-medium text-white border border-white/50 hover:bg-white/20 transition-colors" style={{ clipPath: CLIP_BTN }}>
-                      Lưu
+                      {t('common:save')}
                     </button>
                     <button onClick={handleEditToggle} className="px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-colors" style={{ clipPath: CLIP_BTN }}>
-                      Hủy
+                      {t('common:cancel')}
                     </button>
                   </div>
                 ) : (
                   <button onClick={handleEditToggle} className="px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-colors" style={{ clipPath: CLIP_BTN }}>
                     <Edit3 className="w-4 h-4 mr-2 inline" />
-                    Edit
+                    {t('common:edit')}
                   </button>
                 )}
               </div>
@@ -1021,7 +1018,7 @@ const Profile = () => {
                   />
                 </div>
                 <div className="text-xs text-blue-100 mt-1 text-center">
-                  {levelProgress.xpNeeded} XP to unlock {nextBadge?.name}
+                  {t('xpToUnlock', { xp: levelProgress.xpNeeded, badge: nextBadge?.name })}
                 </div>
               </>
             ) : (
@@ -1032,7 +1029,7 @@ const Profile = () => {
             
             {isMaxLevel && (
               <div className="text-xs text-blue-100 mt-1 text-center">
-                🎉 You've reached the highest level!
+                {t('maxLevel')}
               </div>
             )}
           </div>
@@ -1048,7 +1045,7 @@ const Profile = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold flex items-center space-x-2 uppercase tracking-wide">
               <Trophy className="w-5 h-5 text-yellow-600" />
-              <span>Badges ({earnedBadges.length})</span>
+              <span>{t('badges', { count: earnedBadges.length })}</span>
             </h3>
             <button
               onClick={() => setShowBadgeModal(true)}
@@ -1056,7 +1053,7 @@ const Profile = () => {
               style={{ clipPath: CLIP_BTN }}
             >
               <Trophy className="w-4 h-4" />
-              <span>View All</span>
+              <span>{t('viewAll')}</span>
             </button>
           </div>
           <div className="h-[2px] w-12 bg-gradient-to-r from-yellow-400 to-transparent mt-1" />
@@ -1090,19 +1087,19 @@ const Profile = () => {
                   >
                     <span className="text-sm text-gray-600">+{earnedBadges.length - 6}</span>
                   </button>
-                  <div className="text-sm text-gray-600 text-center">More...</div>
+                  <div className="text-sm text-gray-600 text-center">{t('more')}</div>
                 </div>
               )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
               <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>No badges earned yet. Keep learning to unlock your first badge!</p>
+              <p>{t('noBadges')}</p>
               <button
                 onClick={() => setShowBadgeModal(true)}
                 className="mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
               >
-                View All Available Badges
+                {t('viewAllBadges')}
               </button>
             </div>
           )}
@@ -1116,7 +1113,7 @@ const Profile = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold flex items-center space-x-2 uppercase tracking-wide">
               <Award className="w-5 h-5 text-purple-600" />
-              <span>Achievements ({achievements.filter(a => a.isUnlocked).length})</span>
+              <span>{t('achievements', { count: achievements.filter(a => a.isUnlocked).length })}</span>
             </h3>
             <button
               onClick={() => setShowAchievementModal(true)}
@@ -1124,7 +1121,7 @@ const Profile = () => {
               style={{ clipPath: CLIP_BTN }}
             >
               <Award className="w-4 h-4" />
-              <span>View All</span>
+              <span>{t('viewAll')}</span>
             </button>
           </div>
           <div className="h-[2px] w-12 bg-gradient-to-r from-purple-400 to-transparent mt-1" />
@@ -1168,7 +1165,7 @@ const Profile = () => {
                       )}
                     </div>
                     {achievement.isClaimed && (
-                      <div className="text-xs text-green-600 mt-1">✓ Đã nhận</div>
+                      <div className="text-xs text-green-600 mt-1">{t('claimedMark')}</div>
                     )}
                     {!achievement.isClaimed && isOwnProfile && (achievement.xp_reward > 0 || achievement.gem_reward > 0) && (
                       <button
@@ -1177,12 +1174,7 @@ const Profile = () => {
                         className="mt-1 flex items-center justify-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50"
                       >
                         <Gift className="w-3 h-3" />
-                        {claimingAchievement[achievement.id]
-                          ? '...'
-                          : `Nhận ${[
-                              achievement.xp_reward > 0 ? `${achievement.xp_reward} XP` : null,
-                              achievement.gem_reward > 0 ? `${achievement.gem_reward} 💎` : null,
-                            ].filter(Boolean).join(' + ')}`}
+                        {claimingAchievement[achievement.id] ? '...' : t('claimReward', { reward: rewardText(achievement) })}
                       </button>
                     )}
                   </div>
@@ -1196,14 +1188,14 @@ const Profile = () => {
                   >
                     <span className="text-sm text-gray-600">+{achievements.filter(a => a.isUnlocked).length - 6}</span>
                   </button>
-                  <div className="text-sm text-gray-600 text-center">More...</div>
+                  <div className="text-sm text-gray-600 text-center">{t('more')}</div>
                 </div>
               )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
               <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>No achievements unlocked yet. Keep learning to unlock your first achievement!</p>
+              <p>{t('noAchievements')}</p>
             </div>
           )}
         </div>
@@ -1224,7 +1216,7 @@ const Profile = () => {
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-semibold flex items-center space-x-2 uppercase tracking-wide">
                   <span className="text-2xl">🐾</span>
-                  <span>Pets ({allUserPets.length})</span>
+                  <span>{t('pets', { count: allUserPets.length })}</span>
                 </h3>
               </div>
               <div className="h-[2px] w-12 bg-gradient-to-r from-blue-400 to-transparent mt-1" />
@@ -1262,9 +1254,11 @@ const Profile = () => {
                         <div className="text-sm font-medium text-gray-900 truncate">
                           {viewerOwnsPet ? (userPet.nickname || pet?.name) : '???'}
                         </div>
-                        <div className="text-xs text-gray-500 capitalize">{pet?.rarity}</div>
+                        <div className="text-xs text-gray-500 capitalize">
+                          {pet?.rarity && t(`rarity.${pet.rarity}`, { defaultValue: pet.rarity })}
+                        </div>
                         {userPet.is_active && (
-                          <div className="text-xs text-blue-600 font-medium">Active</div>
+                          <div className="text-xs text-blue-600 font-medium">{t('activePet')}</div>
                         )}
                       </div>
                     )
@@ -1273,13 +1267,13 @@ const Profile = () => {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <span className="text-5xl block mb-4">🐾</span>
-                  <p>{isOwnProfile ? 'No pets yet. Visit the Egg Shop to hatch your first companion!' : 'This user has no pets yet.'}</p>
+                  <p>{isOwnProfile ? t('noPetsOwn') : t('noPetsOther')}</p>
                   {isOwnProfile && (
                     <button
                       onClick={() => navigate('/shop?tab=egg')}
                       className="mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
                     >
-                      Visit Egg Shop
+                      {t('visitEggShop')}
                     </button>
                   )}
                 </div>
@@ -1296,7 +1290,7 @@ const Profile = () => {
             <img src={assetUrl('/icon/profile/XP.svg')} alt="XP" className="w-12 h-12" />
           </div>
           <div className="text-2xl font-semibold text-gray-900">{stats.totalXP}</div>
-          <div className="text-sm text-gray-500">Total XP</div>
+          <div className="text-sm text-gray-500">{t('totalXp')}</div>
           {currentBadge && (
             <div className="text-xs text-gray-400 mt-1">
               {currentBadge?.name}
@@ -1309,7 +1303,7 @@ const Profile = () => {
             <img src={assetUrl('/icon/profile/paper.svg')} alt="Exercises" className="w-12 h-12" />
           </div>
           <div className="text-2xl font-semibold text-gray-900">{stats.exercisesCompleted}</div>
-          <div className="text-sm text-gray-500">Bài tập hoàn thành</div>
+          <div className="text-sm text-gray-500">{t('exercisesDone')}</div>
         </div>
 
         <div className="relative bg-white border border-gray-200 text-center p-4 overflow-hidden" style={{ clipPath: CLIP_SM }}>
@@ -1317,7 +1311,7 @@ const Profile = () => {
             <img src={assetUrl('/icon/profile/streak.svg')} alt="Streak" className="w-12 h-12" />
           </div>
           <div className="text-2xl font-semibold text-gray-900">{stats.streakCount}</div>
-          <div className="text-sm text-gray-500">Chuỗi ngày học</div>
+          <div className="text-sm text-gray-500">{t('streak')}</div>
         </div>
 
         <div className="relative bg-white border border-gray-200 text-center p-4 overflow-hidden" style={{ clipPath: CLIP_SM }}>
@@ -1325,7 +1319,7 @@ const Profile = () => {
             <img src={assetUrl('/icon/profile/score%20metric.svg')} alt="Score" className="w-12 h-12" />
           </div>
           <div className="text-2xl font-semibold text-gray-900">{stats.averageScore}%</div>
-          <div className="text-sm text-gray-500">Điểm trung bình</div>
+          <div className="text-sm text-gray-500">{t('avgScore')}</div>
         </div>
       </div>
 
@@ -1338,7 +1332,7 @@ const Profile = () => {
           <div className="px-5 pt-4 pb-1">
             <h3 className="text-base font-semibold flex items-center space-x-2 uppercase tracking-wide">
               <Clock className="w-5 h-5" />
-              <span>Thời gian học tập</span>
+              <span>{t('studyTime')}</span>
             </h3>
             <div className="h-[2px] w-12 bg-gradient-to-r from-blue-400 to-transparent mt-1" />
           </div>
@@ -1346,7 +1340,7 @@ const Profile = () => {
             <div className="text-3xl font-semibold text-gray-900 mb-2">
               {formatPracticeTime(stats.totalPracticeTime)}
             </div>
-            <p className="text-gray-500 text-sm">Tổng thời gian luyện tập</p>
+            <p className="text-gray-500 text-sm">{t('totalPractice')}</p>
           </div>
         </div>
 
@@ -1355,15 +1349,15 @@ const Profile = () => {
           <div className="px-5 pt-4 pb-1">
             <h3 className="text-base font-semibold flex items-center space-x-2 uppercase tracking-wide">
               <Calendar className="w-5 h-5" />
-              <span>Tham gia từ</span>
+              <span>{t('joined')}</span>
             </h3>
             <div className="h-[2px] w-12 bg-gradient-to-r from-blue-400 to-transparent mt-1" />
           </div>
           <div className="p-4">
             <div className="text-lg font-medium text-gray-900 mb-2">
-              {currentProfile?.created_at ? new Date(currentProfile.created_at).toLocaleDateString('vi-VN') : 'N/A'}
+              {currentProfile?.created_at ? new Date(currentProfile.created_at).toLocaleDateString(dateLocale()) : t('notAvailable')}
             </div>
-            <p className="text-gray-500 text-sm">Ngày đăng ký tài khoản</p>
+            <p className="text-gray-500 text-sm">{t('signupDate')}</p>
           </div>
         </div>
       </div>
@@ -1374,7 +1368,7 @@ const Profile = () => {
           <div className="relative bg-white border border-gray-200 p-8 max-w-5xl w-full max-h-[90vh] overflow-y-auto" style={{ clipPath: CLIP_CARD }}>
             <CornerBrackets />
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold">Chọn Avatar - Thu thập XP để mở khóa</h3>
+              <h3 className="text-xl font-semibold">{t('chooseAvatar')}</h3>
               <button
                 onClick={() => setShowAvatarSelector(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -1403,7 +1397,7 @@ const Profile = () => {
                         title={
                           isUnlocked
                             ? `${avatar.name} - ${avatar.description}`
-                            : `${avatar.name} - Cần ${avatar.unlock_xp} XP để mở khóa`
+                            : t('needXp', { name: avatar.name, xp: avatar.unlock_xp })
                         }
                       >
                         {avatar.image_url.startsWith('http') ? (
@@ -1447,7 +1441,7 @@ const Profile = () => {
             {purchasedAvatars.length > 0 && (
               <>
                 <div className="mt-6 mb-4 border-t pt-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Avatar đã mua</h4>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('purchasedAvatars')}</h4>
                 </div>
                 <div className="grid grid-cols-3 md:grid-cols-8 lg:grid-cols-10 gap-6">
                   {purchasedAvatars.map((item) => {
@@ -1486,14 +1480,20 @@ const Profile = () => {
             {FEATURES.avatarUpload && (
             <div className="mt-6 mb-4 border-t pt-4">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-gray-700">Avatar tự tải lên</h4>
+                <h4 className="text-sm font-semibold text-gray-700">{t('uploadedAvatars')}</h4>
                 <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
                   uploadingAvatar || customAvatars.length >= 20 || uploadCooldownDays > 0
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}>
                   <Upload className="w-4 h-4" />
-                  {uploadingAvatar ? 'Đang tải...' : customAvatars.length >= 20 ? 'Tối đa 20 avatar' : uploadCooldownDays > 0 ? `Chờ ${uploadCooldownDays} ngày` : 'Tải ảnh lên'}
+                  {uploadingAvatar
+                    ? t('uploading')
+                    : customAvatars.length >= 20
+                      ? t('maxAvatars')
+                      : uploadCooldownDays > 0
+                        ? t('waitDays', { count: uploadCooldownDays })
+                        : t('uploadImage')}
                   <input
                     type="file"
                     accept="image/*"
@@ -1527,12 +1527,12 @@ const Profile = () => {
                             }`}
                             onClick={() => isApproved && handleCustomAvatarSelect(upload)}
                             title={
-                              isApproved ? 'Nhấn để chọn'
-                              : isPending ? 'Đang chờ admin duyệt'
-                              : `Bị từ chối${upload.reject_reason ? ': ' + upload.reject_reason : ''}`
+                              isApproved ? t('tapToSelect')
+                              : isPending ? t('pendingReview')
+                              : upload.reject_reason ? t('rejectedReason', { reason: upload.reject_reason }) : t('rejected')
                             }
                           >
-                            <img src={upload.image_url} alt="Custom avatar" className="w-full h-full object-cover rounded-full select-none pointer-events-none" draggable={false} onContextMenu={(e) => e.preventDefault()} />
+                            <img src={upload.image_url} alt={t('customAvatarAlt')} className="w-full h-full object-cover rounded-full select-none pointer-events-none" draggable={false} onContextMenu={(e) => e.preventDefault()} />
                           </div>
 
                           {/* Status badge */}
@@ -1549,7 +1549,7 @@ const Profile = () => {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteCustomAvatar(upload.id) }}
                               className="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-600 hover:bg-gray-700 rounded-full flex items-center justify-center"
-                              title="Xóa"
+                              title={t('common:delete')}
                             >
                               <X className="w-3 h-3 text-white" />
                             </button>
@@ -1559,7 +1559,7 @@ const Profile = () => {
                           <div className={`font-medium ${
                             isApproved ? 'text-green-600' : isPending ? 'text-yellow-600' : 'text-red-500'
                           }`}>
-                            {isApproved ? 'Đã duyệt' : isPending ? 'Chờ duyệt' : 'Từ chối'}
+                            {isApproved ? t('statusApproved') : isPending ? t('statusPending') : t('statusRejected')}
                           </div>
                         </div>
                       </div>
@@ -1568,7 +1568,7 @@ const Profile = () => {
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 text-center py-4">
-                  Tải ảnh lên để sử dụng làm avatar. Ảnh sẽ cần được admin duyệt trước khi sử dụng.
+                  {t('uploadHint')}
                 </p>
               )}
             </div>
@@ -1577,11 +1577,11 @@ const Profile = () => {
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200" style={{ clipPath: CLIP_SM }}>
               <div className="text-center">
                 <span className="text-lg font-semibold text-blue-900">
-                  XP hiện tại: {stats.totalXP}
+                  {t('currentXp', { xp: stats.totalXP })}
                 </span>
                 {currentLevel && (
                   <div className="text-sm text-blue-700 mt-1">
-                    Cấp {currentLevel.level_number} • {currentBadge?.name}
+                    {t('levelBadge', { level: currentLevel.level_number, badge: currentBadge?.name })}
                   </div>
                 )}
 
@@ -1598,7 +1598,7 @@ const Profile = () => {
             <CornerBrackets />
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 uppercase tracking-wide">Badge Collection</h2>
+                <h2 className="text-xl font-semibold text-gray-900 uppercase tracking-wide">{t('badgeCollection')}</h2>
                 <button
                   onClick={() => setShowBadgeModal(false)}
                   className="p-2 hover:bg-gray-100 transition-colors"
@@ -1616,7 +1616,7 @@ const Profile = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
                     <Trophy className="w-5 h-5 text-yellow-600" />
-                    <span>Earned Badges ({earnedBadges.length})</span>
+                    <span>{t('earnedBadges', { count: earnedBadges.length })}</span>
                   </h3>
                   <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4">
                     {earnedBadges.map((badge) => (
@@ -1646,7 +1646,7 @@ const Profile = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
                     <Target className="w-5 h-5 text-gray-600" />
-                    <span>Upcoming Badges ({upcomingBadges.length})</span>
+                    <span>{t('upcomingBadges', { count: upcomingBadges.length })}</span>
                   </h3>
                   <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4">
                     {upcomingBadges.map((badge) => (
@@ -1682,8 +1682,8 @@ const Profile = () => {
               {earnedBadges.length === 0 && upcomingBadges.length === 0 && (
                 <div className="text-center py-12 text-gray-500">
                   <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No badges available</h3>
-                  <p>Badge system is not configured yet.</p>
+                  <h3 className="text-lg font-medium mb-2">{t('noBadgesAvailable')}</h3>
+                  <p>{t('badgesNotConfigured')}</p>
                 </div>
               )}
             </div>
@@ -1699,7 +1699,7 @@ const Profile = () => {
             <CornerBrackets />
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 uppercase tracking-wide">Achievement Collection</h2>
+                <h2 className="text-xl font-semibold text-gray-900 uppercase tracking-wide">{t('achievementCollection')}</h2>
                 <button
                   onClick={() => setShowAchievementModal(false)}
                   className="p-2 hover:bg-gray-100 transition-colors"
@@ -1728,7 +1728,7 @@ const Profile = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
                     <Trophy className="w-5 h-5 text-purple-600" />
-                    <span>Đã đạt được ({achievements.filter(a => a.isUnlocked).length})</span>
+                    <span>{t('achieved', { count: achievements.filter(a => a.isUnlocked).length })}</span>
                   </h3>
                   <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4">
                     {achievements.filter(a => a.isUnlocked).map((achievement) => (
@@ -1747,7 +1747,7 @@ const Profile = () => {
                         <div className="text-sm font-medium text-gray-900">{achievement.title}</div>
                         <div className="text-xs text-gray-500">{achievement.description}</div>
                         {achievement.isClaimed && (
-                          <div className="text-xs text-green-600 mt-1">✓ Đã nhận</div>
+                          <div className="text-xs text-green-600 mt-1">{t('claimedMark')}</div>
                         )}
                         {!achievement.isClaimed && isOwnProfile && (achievement.xp_reward > 0 || achievement.gem_reward > 0) && (
                           <button
@@ -1756,12 +1756,7 @@ const Profile = () => {
                             className="mt-1 mx-auto flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50"
                           >
                             <Gift className="w-3 h-3" />
-                            {claimingAchievement[achievement.id]
-                              ? '...'
-                              : `Nhận ${[
-                                  achievement.xp_reward > 0 ? `${achievement.xp_reward} XP` : null,
-                                  achievement.gem_reward > 0 ? `${achievement.gem_reward} 💎` : null,
-                                ].filter(Boolean).join(' + ')}`}
+                            {claimingAchievement[achievement.id] ? '...' : t('claimReward', { reward: rewardText(achievement) })}
                           </button>
                         )}
                       </div>
@@ -1771,14 +1766,22 @@ const Profile = () => {
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No achievements unlocked yet</h3>
-                  <p>Keep learning to unlock your first achievement!</p>
+                  <h3 className="text-lg font-medium mb-2">{t('noAchievementsTitle')}</h3>
+                  <p>{t('keepLearning')}</p>
                 </div>
               )}
             </div>
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Settings: interface language (saved per device) */}
+      {isOwnProfile && (
+        <div className="relative bg-white border border-gray-200 overflow-hidden" style={{ clipPath: CLIP_CARD }}>
+          <CornerBrackets />
+          <LanguageSwitcher className="px-5 py-4" />
+        </div>
       )}
 
       {/* Log Out Button */}
@@ -1790,7 +1793,7 @@ const Profile = () => {
             style={{ clipPath: CLIP_SM }}
           >
             <LogOut className="w-5 h-5" />
-            Log Out
+            {t('nav:signOut')}
           </button>
         </div>
       )}

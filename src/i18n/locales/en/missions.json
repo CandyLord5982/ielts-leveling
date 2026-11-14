@@ -1,0 +1,36 @@
+{
+  "title": "Missions",
+  "loading": "Loading missions...",
+  "tabs": {
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "special": "Special"
+  },
+  "empty": {
+    "daily": "No daily missions",
+    "weekly": "No weekly missions",
+    "special": "No special missions"
+  },
+  "emptyHint": {
+    "daily": "Come back tomorrow!",
+    "weekly": "Come back next week!",
+    "special": "Wait for the next event!"
+  },
+  "progress": "{{tab}} progress",
+  "claimAllTitle_one": "{{count}} mission",
+  "claimAllTitle_other": "{{count}} missions",
+  "expired": "Expired",
+  "daysLeft_one": "{{count}} day left",
+  "daysLeft_other": "{{count}} days left",
+  "hoursLeft_one": "{{count}} hour left",
+  "hoursLeft_other": "{{count}} hours left",
+  "minutesLeft_one": "{{count}} minute left",
+  "minutesLeft_other": "{{count}} minutes left",
+  "claiming": "Claiming...",
+  "claim": "Claim",
+  "claimChest": "Claim chest",
+  "claimed": "Reward claimed",
+  "bonus": "Bonus",
+  "resetsIn": "Resets in",
+  "refreshing": "Refreshing..."
+}

@@ -1,0 +1,27 @@
+{
+  "tour": {
+    "welcome": { "title": "Welcome!", "body": "Let's take a quick look around the home page so you can get started." },
+    "stats": { "title": "Streak, XP and Gems", "body": "Study every day to keep your 🔥 streak. Finish exercises to earn XP and Gems — use them to level up and buy items." },
+    "courses": { "title": "Your courses", "body": "These are the courses you can study. Contact an admin to unlock advanced content." },
+    "review": { "title": "Review", "body": "Go over questions you got wrong and words you saved, scheduled with spaced repetition." },
+    "pet": { "title": "Pets", "body": "Look after your pet and play mini games to review vocabulary. Your pet also helps explain questions." },
+    "nav": { "title": "Navigation bar", "body": "Jump between home, leaderboard, profile and more from here." },
+    "tip": { "title": "Tip: quick word lookup", "body": "Double-click any English word to see its meaning and save it for review." }
+  },
+  "greeting": {
+    "morning": "Good morning — let's study! 🌅",
+    "afternoon": "Good afternoon — let's study! ☀️",
+    "evening": "Good evening — let's study! 🌙"
+  },
+  "hello": "Hi {{name}}! 👋",
+  "defaultName": "Student",
+  "showTour": "Show the guide",
+  "recentExercise": "Last exercise",
+  "continue": "Continue ✨",
+  "reviewQuestions": "Review mistakes",
+  "reviewQuestionsDesc": "Go over questions you got wrong",
+  "reviewVocab": "Vocabulary review",
+  "reviewVocabDesc": "Practice words you looked up and saved",
+  "dueDot": "You have items to review",
+  "progress": "Progress"
+}

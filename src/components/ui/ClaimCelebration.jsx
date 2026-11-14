@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X } from 'lucide-react'
 import { assetUrl } from '../../hooks/useBranding'
+import { useTranslation } from 'react-i18next'
 
 /* ── Animated number counter ── */
 const AnimatedNumber = ({ value, duration = 1200 }) => {
@@ -52,6 +53,7 @@ const Particle = ({ delay, color, style }) => (
 
 /* ── Celebration overlay ── */
 const ClaimCelebration = ({ result, onClose }) => {
+  const { t } = useTranslation()
   const [phase, setPhase] = useState('enter')
   const particles = useRef(
     Array.from({ length: 40 }, (_, i) => ({
@@ -115,15 +117,21 @@ const ClaimCelebration = ({ result, onClose }) => {
         <div className="flex justify-center mb-5">
           <div className="relative">
             <div className="absolute inset-0 animate-ping bg-amber-400/20 rounded-full scale-150" />
-            <div className="relative w-16 h-16 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.5)]">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
+            {result.image ? (
+              <div className="relative w-20 h-20 bg-white/10 ring-2 ring-amber-400/60 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
+                <img src={result.image} alt="" className="w-14 h-14 object-contain" />
+              </div>
+            ) : (
+              <div className="relative w-16 h-16 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.5)]">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+            )}
           </div>
         </div>
 
         <div className="text-center mb-6">
           <p className="text-amber-400/80 text-xs tracking-[0.3em] uppercase mb-1">
-            Hoàn thành
+            {t('completed')}
           </p>
           <h2 className="text-white text-lg font-bold tracking-wide">
             {result.title}
@@ -156,13 +164,13 @@ const ClaimCelebration = ({ result, onClose }) => {
               <span className="text-2xl font-black text-purple-400 tabular-nums">
                 <AnimatedNumber value={result.gems} />
               </span>
-              <span className="text-[10px] text-purple-400/60 tracking-widest uppercase">Gems</span>
+              <span className="text-[10px] text-purple-400/60 tracking-widest uppercase">{t('gems')}</span>
             </div>
           )}
         </div>
 
         <p className="text-center text-gray-600 text-[10px] mt-6 tracking-wider">
-          Nhấn để đóng
+          {t('tapToClose')}
         </p>
       </div>
     </div>,

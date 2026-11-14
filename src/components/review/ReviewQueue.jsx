@@ -8,6 +8,7 @@ import { nextSchedule, dueDateFromInterval, ratingFromCorrectness, RATING } from
 import { clearReviewDueCache } from '../../utils/reviewDue'
 import { playReviewCorrect, playReviewWrong } from '../../utils/reviewSounds'
 import { ArrowLeft, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 // Spaced-repetition review for previously-missed multiple-choice questions.
 // Source of truth for "what's missed" is question_attempts (no new write paths
@@ -15,6 +16,7 @@ import { ArrowLeft, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
 const BATCH_SIZE = 20
 
 const ReviewQueue = () => {
+  const { t } = useTranslation('review')
   const { user } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -226,7 +228,7 @@ const ReviewQueue = () => {
   const header = (
     <div className="flex items-center justify-between mb-6">
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="w-4 h-4" /> Trang chủ
+        <ArrowLeft className="w-4 h-4" /> {t('common:home')}
       </button>
       {queue.length > 0 && !sessionDone && (
         <span className="text-sm text-gray-500">{index + 1} / {queue.length}</span>
@@ -240,8 +242,8 @@ const ReviewQueue = () => {
         {header}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Không có gì cần ôn tập!</h2>
-          <p className="text-sm text-gray-500">Mọi câu hỏi bạn từng làm sai đã được ôn lại hoặc chưa đến hạn.</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{t('queue.emptyTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('queue.emptyBody')}</p>
         </div>
       </div>
     )
@@ -253,15 +255,15 @@ const ReviewQueue = () => {
         {header}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
           <RotateCcw className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Hoàn thành!</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{t('doneTitle')}</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Đúng {stats.correct}/{stats.total} câu.
+            {t('queue.doneScore', { correct: stats.correct, total: stats.total })}
           </p>
           <button
             onClick={() => navigate('/')}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
           >
-            Về trang chủ
+            {t('common:backHome')}
           </button>
         </div>
       </div>
@@ -363,7 +365,7 @@ const ReviewQueue = () => {
             <div className={`space-y-4 ${split ? 'md:col-span-2' : ''}`}>
               {explanation && (
                 <div className="p-4 md:p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">Giải thích:</h3>
+                  <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">{t('queue.explanation')}</h3>
                   <RichTextRenderer
                     content={explanation}
                     className="text-blue-800 text-sm md:text-base leading-relaxed"
@@ -380,14 +382,14 @@ const ReviewQueue = () => {
                     disabled={selected === null}
                     className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Trả lời
+                    {t('answer')}
                   </button>
                 ) : (
                   <button
                     onClick={handleNext}
                     className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
                   >
-                    Tiếp theo <span className="ml-1 text-xs opacity-70">↵</span>
+                    {t('next')} <span className="ml-1 text-xs opacity-70">↵</span>
                   </button>
                 )}
               </div>

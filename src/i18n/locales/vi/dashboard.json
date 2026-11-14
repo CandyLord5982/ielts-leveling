@@ -1,0 +1,27 @@
+{
+  "tour": {
+    "welcome": { "title": "Chào mừng bạn!", "body": "Cùng xem nhanh trang chủ để bắt đầu học nhé." },
+    "stats": { "title": "Chuỗi ngày, XP và Gems", "body": "Học mỗi ngày để giữ chuỗi 🔥. Làm bài để nhận XP và Gems, dùng để lên hạng và mua vật phẩm." },
+    "courses": { "title": "Khóa học của bạn", "body": "Đây là các khóa học bạn có thể học. Liên hệ admin để mở khóa content advanced." },
+    "review": { "title": "Ôn tập", "body": "Ôn lại các câu bạn từng làm sai và các từ vựng bạn đã lưu theo thuật toán spaced repetition." },
+    "pet": { "title": "Thú cưng", "body": "Chăm sóc thú cưng và chơi mini game ôn từ vựng. Thú cưng sẽ là trợ thủ giải thích câu hỏi." },
+    "nav": { "title": "Thanh điều hướng", "body": "Chuyển nhanh giữa trang chủ, bảng xếp hạng, hồ sơ và các mục khác ở đây." },
+    "tip": { "title": "Mẹo: tra từ nhanh", "body": "Nhấp đúp vào bất kỳ từ tiếng Anh nào để xem nghĩa và lưu lại để ôn tập." }
+  },
+  "greeting": {
+    "morning": "Buổi sáng vui vẻ, học thôi nào! 🌅",
+    "afternoon": "Buổi chiều vui vẻ, học thôi nào! ☀️",
+    "evening": "Buổi tối vui vẻ, học thôi nào! 🌙"
+  },
+  "hello": "Chào {{name}}! 👋",
+  "defaultName": "Học viên",
+  "showTour": "Xem hướng dẫn",
+  "recentExercise": "Bài gần nhất",
+  "continue": "Tiếp tục ✨",
+  "reviewQuestions": "Ôn tập câu sai",
+  "reviewQuestionsDesc": "Ôn lại các câu bạn từng làm sai",
+  "reviewVocab": "Ôn tập từ vựng",
+  "reviewVocabDesc": "Ôn lại các từ bạn đã tra và lưu",
+  "dueDot": "Có mục cần ôn tập",
+  "progress": "Tiến độ"
+}

@@ -1,0 +1,24 @@
+{
+  "cancel": "Cancel",
+  "save": "Save",
+  "add": "Add",
+  "edit": "Edit",
+  "delete": "Delete",
+  "next": "Next",
+  "back": "Back",
+  "home": "Home",
+  "backHome": "Back to home",
+  "loading": "Loading…",
+  "tryAgainLater": "Please try again later.",
+  "completed": "Completed",
+  "gems": "Gems",
+  "tapToClose": "Tap to close",
+  "close": "Close",
+  "tour": {
+    "back": "Back",
+    "skip": "Skip",
+    "next": "Next",
+    "start": "Start learning!",
+    "close": "Close guide"
+  }
+}

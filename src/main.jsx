@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './i18n' // before App so translations are ready when any module loads
 import App from './App.jsx'
 import './index.css'
 

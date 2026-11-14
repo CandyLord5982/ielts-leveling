@@ -1,8 +1,10 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import { useAuth } from './useAuth'
 import { supabase } from '../supabase/client'
 
-const MissionsContext = createContext({})
+const EMPTY_MISSIONS = { daily: [], weekly: [], special: [] }
+
+const MissionsContext = createContext(null)
 
 export const useMissions = () => {
   const context = useContext(MissionsContext)
@@ -14,7 +16,7 @@ export const useMissions = () => {
 
 export const MissionsProvider = ({ children }) => {
   const { user, fetchUserProfile } = useAuth()
-  const [missions, setMissions] = useState({ daily: [], weekly: [], special: [] })
+  const [missions, setMissions] = useState(EMPTY_MISSIONS)
   const [loading, setLoading] = useState(false)
 
   const fetchMissions = useCallback(async () => {
@@ -25,7 +27,12 @@ export const MissionsProvider = ({ children }) => {
         p_user_id: user.id
       })
       if (error) throw error
-      setMissions(data || { daily: [], weekly: [], special: [] })
+      // Fill in any missing section so consumers can always spread/filter
+      setMissions({
+        daily: data?.daily || [],
+        weekly: data?.weekly || [],
+        special: data?.special || []
+      })
     } catch (error) {
       console.error('Error fetching missions:', error)
     } finally {
@@ -61,8 +68,7 @@ export const MissionsProvider = ({ children }) => {
       })
       if (error) throw error
       if (data?.success) {
-        await fetchUserProfile(user.id)
-        await fetchMissions()
+        await Promise.all([fetchUserProfile(user.id), fetchMissions()])
       }
       return data
     } catch (error) {
@@ -79,8 +85,7 @@ export const MissionsProvider = ({ children }) => {
       })
       if (error) throw error
       if (data?.success && data.claimed_count > 0) {
-        await fetchUserProfile(user.id)
-        await fetchMissions()
+        await Promise.all([fetchUserProfile(user.id), fetchMissions()])
       }
       return data
     } catch (error) {
@@ -90,10 +95,13 @@ export const MissionsProvider = ({ children }) => {
   }, [user, fetchMissions, fetchUserProfile])
 
   // Count completed but unclaimed missions
-  const unclaimedCount = [...missions.daily, ...missions.weekly, ...missions.special]
-    .filter(m => m.status === 'completed').length
+  const unclaimedCount = useMemo(
+    () => [...missions.daily, ...missions.weekly, ...missions.special]
+      .filter(m => m.status === 'completed').length,
+    [missions]
+  )
 
-  const value = {
+  const value = useMemo(() => ({
     missions,
     loading,
     unclaimedCount,
@@ -101,7 +109,7 @@ export const MissionsProvider = ({ children }) => {
     updateProgress,
     claimReward,
     claimAllRewards
-  }
+  }), [missions, loading, unclaimedCount, fetchMissions, updateProgress, claimReward, claimAllRewards])
 
   return (
     <MissionsContext.Provider value={value}>

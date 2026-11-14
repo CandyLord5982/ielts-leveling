@@ -16,6 +16,7 @@ import { FEATURES } from '../../config/features'
 import { useMissions } from '../../hooks/useMissions'
 import { useNotifications } from '../../hooks/useNotifications'
 import NotificationPanel from '../notifications/NotificationPanel'
+import { useTranslation } from 'react-i18next'
 
 import { assetUrl, useBranding } from '../../hooks/useBranding'
 
@@ -65,6 +66,7 @@ const Tooltip = ({ label, children }) => {
 }
 
 const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
+  const { t } = useTranslation('nav')
   const { user, profile, signOut, isAdmin, isTeacher } = useAuth()
   const { branding } = useBranding()
   const { currentBadge } = useStudentLevels()
@@ -104,12 +106,12 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
   }, [showNotifPanel])
 
   const navItems = [
-    { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: 'Trang chủ' },
-    { path: '/leaderboard', imageSrc: assetUrl('/icon/navigation/leaderboard.svg'), label: 'Xếp hạng' },
-    FEATURES.inventory && { path: '/inventory', imageSrc: assetUrl('/icon/navigation/inventory.svg'), label: 'Kho đồ', badge: newItemCount },
-    FEATURES.missions && { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: 'Nhiệm vụ', badge: missionBadge },
-    { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: 'Tiến độ' },
-    FEATURES.shop && { path: '/shop', imageSrc: assetUrl('/icon/navigation/shop.svg'), label: 'Cửa hàng' },
+    { path: '/', imageSrc: assetUrl('/icon/navigation/home.svg'), label: t('home') },
+    { path: '/leaderboard', imageSrc: assetUrl('/icon/navigation/leaderboard.svg'), label: t('leaderboard') },
+    FEATURES.inventory && { path: '/inventory', imageSrc: assetUrl('/icon/navigation/inventory.svg'), label: t('inventory'), badge: newItemCount },
+    FEATURES.missions && { path: '/missions', imageSrc: assetUrl('/icon/navigation/mission.svg'), label: t('missions'), badge: missionBadge },
+    { path: '/progress', imageSrc: assetUrl('/icon/navigation/progress.svg'), label: t('progress') },
+    FEATURES.shop && { path: '/shop', imageSrc: assetUrl('/icon/navigation/shop.svg'), label: t('shop') },
   ].filter(Boolean)
 
   const handleSignOut = async () => {
@@ -233,7 +235,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
           {/* Nút toggle */}
           <button
             onClick={toggleCollapsed}
-            title={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
             className={`flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 bg-white shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:shadow-md transition-all`}
           >
             {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -249,7 +251,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
           {/* Admin Panel Link */}
           {isAdmin() && (
             collapsed ? (
-              <Tooltip label="Admin">
+              <Tooltip label={t('admin')}>
                 <Link
                   to="/admin"
                   className={`flex items-center justify-center w-full py-2.5 px-0 transition-all ${
@@ -273,7 +275,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
                 style={{ clipPath: CLIP_CARD }}
               >
                 <Shield size={22} />
-                <span className="font-medium text-sm">Admin</span>
+                <span className="font-medium text-sm">{t('admin')}</span>
               </Link>
             )
           )}
@@ -281,7 +283,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
           {/* Teacher Dashboard Link */}
           {(isTeacher() || isAdmin()) && (
             collapsed ? (
-              <Tooltip label="Teacher">
+              <Tooltip label={t('teacher')}>
                 <Link
                   to="/teacher"
                   className={`flex items-center justify-center w-full py-2.5 px-0 transition-all ${
@@ -305,7 +307,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
                 style={{ clipPath: CLIP_CARD }}
               >
                 <GraduationCap size={22} />
-                <span className="font-medium text-sm">Teacher</span>
+                <span className="font-medium text-sm">{t('teacher')}</span>
               </Link>
             )
           )}
@@ -367,7 +369,7 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
           <div className="relative" ref={notifRef}>
             <ActionButton
               onClick={() => setShowNotifPanel(!showNotifPanel)}
-              label="Thông báo"
+              label={t('notifications')}
               className={showNotifPanel ? 'bg-blue-50 text-blue-700 font-medium !border-blue-200' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'}
               iconEl={
                 <div className="relative flex-shrink-0">
@@ -405,14 +407,14 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
 
           <ActionButton
             onClick={onOpenReport}
-            label="Báo cáo"
+            label={t('report')}
             className="text-orange-600 hover:bg-orange-50"
             iconEl={<MessageSquarePlus size={22} className="flex-shrink-0" />}
           />
 
           {/* Profile link */}
           {collapsed ? (
-            <Tooltip label="Hồ sơ">
+            <Tooltip label={t('profile')}>
               <Link
                 to="/profile"
                 className={`flex items-center justify-center w-full py-2.5 px-0 transition-all ${
@@ -448,14 +450,14 @@ const LeftSidebar = ({ onOpenReport, onCollapsedChange }) => {
                 height={22}
                 className={location.pathname.startsWith('/profile') ? '' : 'grayscale opacity-70'}
               />
-              <span className="font-medium text-sm">Hồ sơ</span>
+              <span className="font-medium text-sm">{t('profile')}</span>
             </Link>
           )}
 
           {!user?.is_anonymous && (
             <ActionButton
               onClick={handleSignOut}
-              label="Đăng xuất"
+              label={t('signOut')}
               className="text-red-600 hover:bg-red-50"
               iconEl={<LogOut size={22} className="flex-shrink-0" />}
             />

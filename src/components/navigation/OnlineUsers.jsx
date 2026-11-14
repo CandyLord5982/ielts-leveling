@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import PvPChallengeModal from '../pvp/PvPChallengeModal'
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import { withFakePresence, loadFakeAvatarPool } from '../../utils/fakePresence'
+import { useTranslation } from 'react-i18next'
 
 // Key lưu trạng thái collapsed
 const RIGHT_SIDEBAR_COLLAPSED_KEY = 'right_sidebar_collapsed'
@@ -52,6 +53,7 @@ const ProfileLink = ({ user: u, className, children }) => (
 )
 
 const OnlineUsers = ({ onCollapsedChange }) => {
+  const { t } = useTranslation('nav')
   const { user, profile } = useAuth()
   const [onlineUsers, setOnlineUsers] = useState([])
   const [offlineUsers, setOfflineUsers] = useState([])
@@ -163,12 +165,12 @@ const OnlineUsers = ({ onCollapsedChange }) => {
           {!collapsed && (
             <span className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
               <Users size={16} className="text-blue-500" />
-              <span>Cộng đồng</span>
+              <span>{t('community')}</span>
             </span>
           )}
           <button
             onClick={toggleCollapsed}
-            title={collapsed ? 'Mở rộng' : 'Thu gọn'}
+            title={collapsed ? t('expand') : t('collapse')}
             className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 bg-white shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:shadow-md transition-all"
           >
             {collapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
@@ -179,7 +181,7 @@ const OnlineUsers = ({ onCollapsedChange }) => {
         <div className={`flex-1 overflow-y-auto ${collapsed ? 'px-1 py-2' : 'p-4'}`}>
           {onlineUsers.length === 0 && offlineUsers.length === 0 ? (
             <div className={`text-center text-gray-400 ${collapsed ? 'text-xs mt-4' : 'text-sm mt-4'}`}>
-              {collapsed ? <Users size={20} className="mx-auto opacity-50" /> : 'Không có ai online'}
+              {collapsed ? <Users size={20} className="mx-auto opacity-50" /> : t('nobodyOnline')}
             </div>
           ) : (
             <>
@@ -235,7 +237,7 @@ const OnlineUsers = ({ onCollapsedChange }) => {
                             <button
                               onClick={() => setChallengeTarget(u)}
                               className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${pendingState ? (pendingState === 'received' ? 'opacity-100 animate-pulse text-red-500 hover:bg-red-50' : 'opacity-100 text-gray-400 hover:bg-gray-100') : 'opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50'}`}
-                              title={pendingState === 'received' ? 'Có lời mời!' : pendingState === 'sent' ? 'Đã gửi lời mời' : 'Thách đấu PvP!'}
+                              title={pendingState === 'received' ? t('inviteReceived') : pendingState === 'sent' ? t('inviteSent') : t('challengePvp')}
                             >
                               <img src={assetUrl('/icon/dashboard/pvp.png')} alt="PvP" className="w-4 h-4" />
                             </button>
@@ -302,7 +304,7 @@ const OnlineUsers = ({ onCollapsedChange }) => {
                             <button
                               onClick={() => setChallengeTarget(u)}
                               className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${pendingState === 'received' ? 'opacity-100 animate-pulse text-red-500 hover:bg-red-50' : 'opacity-100 text-gray-400 hover:bg-gray-100'}`}
-                              title={pendingState === 'received' ? 'Có lời mời!' : 'Đã gửi lời mời'}
+                              title={pendingState === 'received' ? t('inviteReceived') : t('inviteSent')}
                             >
                               <img src={assetUrl('/icon/dashboard/pvp.png')} alt="PvP" className="w-4 h-4" />
                             </button>

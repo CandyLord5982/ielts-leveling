@@ -1,0 +1,32 @@
+{
+  "title": "Nhiệm vụ",
+  "loading": "Đang tải nhiệm vụ...",
+  "tabs": {
+    "daily": "Hàng ngày",
+    "weekly": "Hàng tuần",
+    "special": "Đặc biệt"
+  },
+  "empty": {
+    "daily": "Không có nhiệm vụ hàng ngày",
+    "weekly": "Không có nhiệm vụ hàng tuần",
+    "special": "Không có nhiệm vụ đặc biệt"
+  },
+  "emptyHint": {
+    "daily": "Quay lại vào ngày mai!",
+    "weekly": "Quay lại vào tuần sau!",
+    "special": "Hãy chờ sự kiện tiếp theo!"
+  },
+  "progress": "Tiến độ {{tab}}",
+  "claimAllTitle_other": "{{count}} nhiệm vụ",
+  "expired": "Đã hết hạn",
+  "daysLeft_other": "Còn {{count}} ngày",
+  "hoursLeft_other": "Còn {{count}} giờ",
+  "minutesLeft_other": "Còn {{count}} phút",
+  "claiming": "Đang nhận...",
+  "claim": "Nhận",
+  "claimChest": "Nhận rương thưởng",
+  "claimed": "Đã nhận thưởng",
+  "bonus": "Bonus",
+  "resetsIn": "Làm mới sau",
+  "refreshing": "Đang làm mới..."
+}

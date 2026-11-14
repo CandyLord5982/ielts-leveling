@@ -9,6 +9,10 @@ import { Trophy, Medal, Award, Crown, Star, RefreshCw } from 'lucide-react'
 import AvatarWithFrame from '../ui/AvatarWithFrame'
 import { assetUrl } from '../../hooks/useBranding';
 import { getSettings } from '../../utils/siteSettings';
+import { useTranslation } from 'react-i18next'
+import { dateLocale } from '../../i18n'
+
+const ENDED = 'ended' // countdown sentinel; translated at render
 
 const CLIP_CARD = 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)'
 const CLIP_SM = 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)'
@@ -24,6 +28,7 @@ const CornerBrackets = () => (
 )
 
 const Leaderboard = () => {
+  const { t } = useTranslation('leaderboard')
   const navigate = useNavigate()
   const [timeframe, setTimeframe] = useState(null) // set after settings load
   const [leaderboardData, setLeaderboardData] = useState([])
@@ -153,7 +158,7 @@ const Leaderboard = () => {
 
         // If competition is not active, hide training tab
         if (!active) {
-          tabs = tabs.filter(t => t !== 'training')
+          tabs = tabs.filter(tab => tab !== 'training')
         }
 
         setVisibleTabs(tabs)
@@ -326,7 +331,7 @@ const Leaderboard = () => {
         }
         const diff = end - now
         if (diff <= 0) {
-          setCountdownText('Đã kết thúc')
+          setCountdownText(ENDED)
           return
         }
         setCountdownText(formatCountdown(diff))
@@ -466,7 +471,7 @@ const Leaderboard = () => {
 
     } catch (err) {
       console.error('Error fetching leaderboard:', err)
-      setError('Không thể tải dữ liệu bảng xếp hạng')
+      setError('loadFailed') // translation key
     } finally {
       setLoading(false)
     }
@@ -832,9 +837,9 @@ const Leaderboard = () => {
     return (
       <div className="space-y-8">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">Bảng xếp hạng</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">{t('title')}</h1>
           <div className="h-[2px] w-20 mx-auto bg-gradient-to-r from-transparent via-blue-400 to-transparent mb-2" />
-          <p className="text-gray-500 text-sm">Đang tải dữ liệu...</p>
+          <p className="text-gray-500 text-sm">{t('loading')}</p>
         </div>
         <div className="flex justify-center">
           <div className="relative w-10 h-10">
@@ -850,21 +855,26 @@ const Leaderboard = () => {
     return (
       <div className="space-y-8">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">Bảng xếp hạng</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">{t('title')}</h1>
           <div className="h-[2px] w-20 mx-auto bg-gradient-to-r from-transparent via-blue-400 to-transparent mb-2" />
-          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-600 text-sm">{t(error)}</p>
           <button
             onClick={fetchLeaderboardData}
             className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
             style={{ clipPath: CLIP_BTN }}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Thử lại
+            {t('retry')}
           </button>
         </div>
       </div>
     )
   }
+
+  const countdownLabel = countdownText === ENDED ? t('ended') : countdownText
+  const competitionLabel = GAME_LABELS[competitionGameType] || t('competition')
+  // Item competitions rank by how many you own (a bare number); game ones by points.
+  const competitionScore = (value) => (competitionType === 'items' ? value : t('points', { count: value }))
 
   const renderChampionBanner = (rewards) => {
     if (!rewards || rewards.length === 0) return null
@@ -937,7 +947,7 @@ const Leaderboard = () => {
           <div className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-400"
             style={{ clipPath: CLIP_SM }}
           >
-            {countdownText}
+            {countdownLabel}
           </div>
         )}
       </div>
@@ -948,7 +958,7 @@ const Leaderboard = () => {
     <div className="space-y-8">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">Bảng xếp hạng</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1 uppercase tracking-wide">{t('title')}</h1>
         <div className="h-[2px] w-20 mx-auto bg-gradient-to-r from-transparent via-blue-400 to-transparent" />
       </div>
 
@@ -956,13 +966,13 @@ const Leaderboard = () => {
       <div className="flex justify-center">
         <div className="flex gap-1 p-1 bg-gray-50 border border-gray-200" style={{ clipPath: CLIP_SM }}>
           {[
-            { key: 'week', label: 'Tuần này' },
-            { key: 'month', label: 'Tháng này' },
+            { key: 'week', label: t('tabs.week') },
+            { key: 'month', label: t('tabs.month') },
             { key: 'training', label: competitionType === 'items' && competitionItemInfo
               ? competitionItemInfo.name
-              : GAME_LABELS[competitionGameType] || 'Competition' }
+              : competitionLabel }
           ].filter(option => visibleTabs.includes(option.key)).concat([
-            { key: 'pvp', label: 'PvP' }
+            { key: 'pvp', label: t('tabs.pvp') }
           ]).map((option) => (
             <button
               key={option.key}
@@ -1020,7 +1030,7 @@ const Leaderboard = () => {
                       <strong className="text-yellow-600 inline-flex items-center gap-0.5">{totalXp}<img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-3.5 h-3.5" /></strong>
                     )}
                     {reward.shop_items?.length > 0 && (
-                      <span className="text-purple-600 font-medium">+{reward.shop_items.length} item</span>
+                      <span className="text-purple-600 font-medium">{t('itemCount', { count: reward.shop_items.length })}</span>
                     )}
                   </div>
                 );
@@ -1029,21 +1039,23 @@ const Leaderboard = () => {
                 <div className="inline-flex items-center gap-1 bg-green-50 border border-green-200 px-2.5 py-1.5 text-green-700"
                   style={{ clipPath: CLIP_BTN }}
                 >
-                  {rewardThreshold}+ điểm: <strong className="inline-flex items-center gap-0.5">+{rewardXP}<img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-3.5 h-3.5" /></strong>
+                  {t('qualifier', { points: rewardThreshold })} <strong className="inline-flex items-center gap-0.5">+{rewardXP}<img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-3.5 h-3.5" /></strong>
                 </div>
               )}
               {maxAttempts > 0 && (
                 <div className={`inline-flex items-center gap-1 px-2.5 py-1.5 ${
                   usedAttempts >= maxAttempts ? 'bg-red-50 border border-red-200 text-red-600' : 'bg-blue-50 border border-blue-200 text-blue-600'
                 }`} style={{ clipPath: CLIP_BTN }}>
-                  {usedAttempts >= maxAttempts ? `Hết lượt (${maxAttempts}/${maxAttempts})` : `${maxAttempts - usedAttempts}/${maxAttempts} lượt`}
+                  {usedAttempts >= maxAttempts
+                    ? t('outOfAttempts', { max: maxAttempts })
+                    : t('attemptsLeft', { left: maxAttempts - usedAttempts, max: maxAttempts })}
                 </div>
               )}
               {countdownText && (
                 <div className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 px-2.5 py-1.5 text-gray-500"
                   style={{ clipPath: CLIP_BTN }}
                 >
-                  {countdownText}
+                  {countdownLabel}
                 </div>
               )}
             </div>
@@ -1052,7 +1064,7 @@ const Leaderboard = () => {
               <div className="relative text-center py-8 text-gray-400 bg-white border border-gray-200" style={{ clipPath: CLIP_CARD }}>
                 <CornerBrackets />
                 <Trophy className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">{competitionType === 'items' ? 'Chưa có ai sở hữu vật phẩm này' : 'Chưa có ai chơi tuần này'}</p>
+                <p className="text-sm">{competitionType === 'items' ? t('noOwners') : t('noPlayers')}</p>
               </div>
             ) : (
               <>
@@ -1072,7 +1084,7 @@ const Leaderboard = () => {
                           {trainingData[1].name}
                         </div>
                         <div className="text-sm md:text-lg font-semibold text-gray-700 mt-1 md:mt-2 relative z-10">
-                          {trainingData[1].xp}{competitionType !== 'items' && ' điểm'}
+                          {competitionScore(trainingData[1].xp)}
                         </div>
                       </div>
                     </div>
@@ -1092,13 +1104,13 @@ const Leaderboard = () => {
                           {trainingData[0].name}
                         </div>
                         <div className="text-sm md:text-xl font-semibold text-gray-900 mt-1 md:mt-2 relative z-10">
-                          {trainingData[0].xp}{competitionType !== 'items' && ' điểm'}
+                          {competitionScore(trainingData[0].xp)}
                         </div>
                         <div className="hidden md:flex items-center justify-center mt-2 text-yellow-600 relative z-10">
                           <Star size={16} fill="currentColor" />
                           <span className="ml-1 text-sm">{competitionType === 'items' && competitionItemInfo
-                            ? `Vua ${competitionItemInfo.name}`
-                            : `Vua ${GAME_LABELS[competitionGameType] || 'Competition'}`}</span>
+                            ? t('kingOf', { name: competitionItemInfo.name })
+                            : t('kingOf', { name: competitionLabel })}</span>
                         </div>
                       </div>
                     </div>
@@ -1117,7 +1129,7 @@ const Leaderboard = () => {
                           {trainingData[2].name}
                         </div>
                         <div className="text-sm md:text-lg font-semibold text-gray-700 mt-1 md:mt-2 relative z-10">
-                          {trainingData[2].xp}{competitionType !== 'items' && ' điểm'}
+                          {competitionScore(trainingData[2].xp)}
                         </div>
                       </div>
                     </div>
@@ -1142,7 +1154,7 @@ const Leaderboard = () => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-sm text-gray-900">{entry.xp}{competitionType !== 'items' && ' điểm'}</div>
+                          <div className="font-semibold text-sm text-gray-900">{competitionScore(entry.xp)}</div>
                         </div>
                       </div>
                     ))}
@@ -1157,11 +1169,11 @@ const Leaderboard = () => {
                       <div className="flex items-center space-x-4">
                         <AvatarWithFrame avatarUrl={currentTrainingRank.avatar} frameUrl={currentTrainingRank.frame} frameRatio={currentTrainingRank.frameRatio} size={48} fallback={currentTrainingRank.name.charAt(0).toUpperCase()} />
                         <div>
-                          <div className="font-semibold text-gray-900">Bạn ({currentTrainingRank.name})</div>
-                          <span className="text-sm text-gray-600">Hạng #{currentTrainingRank.rank}</span>
+                          <div className="font-semibold text-gray-900">{t('you', { name: currentTrainingRank.name })}</div>
+                          <span className="text-sm text-gray-600">{t('rank', { rank: currentTrainingRank.rank })}</span>
                         </div>
                       </div>
-                      <div className="font-semibold text-lg text-gray-900">{currentTrainingRank.xp}{competitionType !== 'items' && ' điểm'}</div>
+                      <div className="font-semibold text-lg text-gray-900">{competitionScore(currentTrainingRank.xp)}</div>
                     </div>
                   </div>
                 )}
@@ -1186,13 +1198,13 @@ const Leaderboard = () => {
             <div className="relative text-center py-8 text-gray-400 bg-white border border-gray-200" style={{ clipPath: CLIP_CARD }}>
               <CornerBrackets />
               <Trophy className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">Chưa có trận PvP nào kết thúc</p>
+              <p className="text-sm">{t('noPvp')}</p>
             </div>
           </>
         ) : (
           <>
             {renderChampionBanner(pvpChampionRewards)}
-            <p className="text-center text-xs text-gray-500">Tuần này · tối đa 1 trận thắng/thua mỗi đối thủ mỗi ngày</p>
+            <p className="text-center text-xs text-gray-500">{t('pvpRule')}</p>
 
             {/* Top 3 Podium */}
             <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-8 items-end">
@@ -1238,7 +1250,7 @@ const Leaderboard = () => {
                     </div>
                     <div className="hidden md:flex items-center justify-center mt-2 text-yellow-600 relative z-10">
                       <Star size={16} fill="currentColor" />
-                      <span className="ml-1 text-sm">Vua PvP</span>
+                      <span className="ml-1 text-sm">{t('pvpKing')}</span>
                     </div>
                   </div>
                 </div>
@@ -1303,8 +1315,8 @@ const Leaderboard = () => {
                   <div className="flex items-center space-x-4">
                     <AvatarWithFrame avatarUrl={currentPvpRank.avatar} frameUrl={currentPvpRank.frame} frameRatio={currentPvpRank.frameRatio} size={48} fallback={currentPvpRank.name.charAt(0).toUpperCase()} />
                     <div>
-                      <div className="font-semibold text-gray-900">Bạn ({currentPvpRank.name})</div>
-                      <span className="text-sm text-gray-600">Hạng #{currentPvpRank.rank}</span>
+                      <div className="font-semibold text-gray-900">{t('you', { name: currentPvpRank.name })}</div>
+                      <span className="text-sm text-gray-600">{t('rank', { rank: currentPvpRank.rank })}</span>
                     </div>
                   </div>
                   <div className="font-semibold text-lg">
@@ -1325,17 +1337,17 @@ const Leaderboard = () => {
                 <div className="relative bg-white border border-gray-200 overflow-hidden" style={{ clipPath: CLIP_CARD }}>
                   <CornerBrackets />
                   <div className="px-5 pt-4 pb-1">
-                    <h3 className="text-base font-semibold text-gray-900 uppercase tracking-wide">Top PvP tuần trước</h3>
+                    <h3 className="text-base font-semibold text-gray-900 uppercase tracking-wide">{t('prevPvpTop')}</h3>
                     <div className="h-[2px] w-12 bg-gradient-to-r from-yellow-400 to-transparent mt-1" />
                   </div>
                   <div className="divide-y divide-gray-100">
                     {pvpPrev.map((champion, index) => {
                       const earnedDate = new Date(champion.earned_at)
-                      const dateStr = earnedDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
+                      const dateStr = earnedDate.toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
                       const matchedReward = pvpChampionRewards.find(r => r.achievement_id === champion.achievement_id)
                       const rank = matchedReward?.rank || 1
                       const rankIcon = rank === 3 ? '🥉' : rank === 2 ? '🥈' : '🏆'
-                      const rankLabel = `Top ${rank}`
+                      const rankLabel = t('topN', { rank })
                       return (
                         <div key={index} className="flex items-center justify-between px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -1347,7 +1359,7 @@ const Leaderboard = () => {
                               fallback={champion.users?.full_name?.charAt(0)?.toUpperCase() || '?'}
                             />
                             <div>
-                              <div className="font-medium text-gray-900">{champion.users?.full_name || 'Unknown'}</div>
+                              <div className="font-medium text-gray-900">{champion.users?.full_name || t('unknown')}</div>
                               <div className="text-xs text-gray-400">{dateStr}</div>
                             </div>
                           </div>
@@ -1473,7 +1485,7 @@ const Leaderboard = () => {
                 </div>
                 <div className="hidden md:flex items-center justify-center mt-2 text-yellow-600 relative z-10">
                   <Star size={16} fill="currentColor" />
-                  <span className="ml-1 text-sm">Vua học tập</span>
+                  <span className="ml-1 text-sm">{t('studyKing')}</span>
                 </div>
               </div>
             </div>
@@ -1593,9 +1605,9 @@ const Leaderboard = () => {
                 fallback={currentUserRank.name.charAt(0).toUpperCase()}
               />
               <div>
-                <div className="font-semibold text-gray-900">Bạn ({currentUserRank.name})</div>
+                <div className="font-semibold text-gray-900">{t('you', { name: currentUserRank.name })}</div>
                 <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-sm text-gray-600">Hạng #{currentUserRank.rank}</span>
+                  <span className="text-sm text-gray-600">{t('rank', { rank: currentUserRank.rank })}</span>
                   <div
                     title={currentUserRank.badge.name}
                     onClick={() => handleBadgeClick(currentUserRank.badge)}
@@ -1621,7 +1633,7 @@ const Leaderboard = () => {
         <div className="relative bg-white border border-gray-200 overflow-hidden" style={{ clipPath: CLIP_CARD }}>
           <CornerBrackets />
           <div className="px-5 pt-4 pb-1">
-            <h3 className="text-base font-semibold text-gray-900 uppercase tracking-wide">Mục tiêu tiếp theo</h3>
+            <h3 className="text-base font-semibold text-gray-900 uppercase tracking-wide">{t('nextGoals')}</h3>
             <div className="h-[2px] w-12 bg-gradient-to-r from-blue-400 to-transparent mt-1" />
           </div>
           <div className="p-4 space-y-3">
@@ -1629,11 +1641,11 @@ const Leaderboard = () => {
             <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100" style={{ clipPath: CLIP_SM }}>
               <div className="flex items-center space-x-3">
                 <Award className="w-5 h-5 text-orange-600" />
-                <span className="text-sm text-gray-900">Lên cấp {getNextLevelNumber(currentUserRank.xp)}</span>
+                <span className="text-sm text-gray-900">{t('reachLevel', { level: getNextLevelNumber(currentUserRank.xp) })}</span>
               </div>
               <span className="text-sm text-gray-600">
                 <div className="flex items-center gap-1">
-                  Cần thêm {getNextLevelXpRequired(currentUserRank.xp).toLocaleString()}
+                  {t('needMore', { xp: getNextLevelXpRequired(currentUserRank.xp).toLocaleString() })}
                   <img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-4 h-4" />
                 </div>
               </span>
@@ -1645,12 +1657,12 @@ const Leaderboard = () => {
                 <div className="flex items-center space-x-3">
                   <Medal className="w-5 h-5 text-gray-600" />
                   <span className="text-sm text-gray-900">
-                    Vượt qua {leaderboardData[currentUserRank.rank - 2].name}
+                    {t('passUser', { name: leaderboardData[currentUserRank.rank - 2].name })}
                   </span>
                 </div>
                 <span className="text-sm text-gray-600">
                   <div className="flex items-center gap-1">
-                    Cần thêm {(leaderboardData[currentUserRank.rank - 2].xp - currentUserRank.xp + 1).toLocaleString()}
+                    {t('needMore', { xp: (leaderboardData[currentUserRank.rank - 2].xp - currentUserRank.xp + 1).toLocaleString() })}
                     <img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-4 h-4" />
                   </div>
                 </span>
@@ -1662,16 +1674,16 @@ const Leaderboard = () => {
               <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100" style={{ clipPath: CLIP_SM }}>
                 <div className="flex items-center space-x-3">
                   <Trophy className="w-5 h-5 text-yellow-600" />
-                  <span className="text-sm text-gray-900">Vào top 10</span>
+                  <span className="text-sm text-gray-900">{t('top10')}</span>
                 </div>
                 <div className="text-sm text-gray-600 flex items-center gap-1">
                   {leaderboardData[9] ? (
                     <>
-                      Cần thêm {Math.max(1, leaderboardData[9].xp - currentUserRank.xp + 1).toLocaleString()}
+                      {t('needMore', { xp: Math.max(1, leaderboardData[9].xp - currentUserRank.xp + 1).toLocaleString() })}
                       <img src={assetUrl('/image/study/xp.png')} alt="XP" className="w-4 h-4" />
                     </>
                   ) : (
-                    'Đang tính toán...'
+                    t('calculating')
                   )}
                 </div>
               </div>
@@ -1686,7 +1698,7 @@ const Leaderboard = () => {
           <CornerBrackets />
           <div className="px-5 pt-4 pb-1">
             <h3 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
-              {timeframe === 'week' ? 'Top tuần trước' : 'Top tháng trước'}
+              {timeframe === 'week' ? t('prevWeekTop') : t('prevMonthTop')}
             </h3>
             <div className="h-[2px] w-12 bg-gradient-to-r from-yellow-400 to-transparent mt-1" />
           </div>
@@ -1699,12 +1711,12 @@ const Leaderboard = () => {
               })
               .map((champion, index) => {
                 const earnedDate = new Date(champion.earned_at)
-                const dateStr = earnedDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
+                const dateStr = earnedDate.toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
                 const rewards = timeframe === 'week' ? weeklyChampionRewards : monthlyChampionRewards
                 const matchedReward = rewards.find(r => r.achievement_id === champion.achievement_id)
                 const rank = matchedReward?.rank || 1
                 const rankIcon = rank === 3 ? '🥉' : rank === 2 ? '🥈' : '🏆'
-                const rankLabel = `Top ${rank}`
+                const rankLabel = t('topN', { rank })
                 return (
                   <div key={index} className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -1716,7 +1728,7 @@ const Leaderboard = () => {
                         fallback={champion.users?.full_name?.charAt(0)?.toUpperCase() || '?'}
                       />
                       <div>
-                        <div className="font-medium text-gray-900">{champion.users?.full_name || 'Unknown'}</div>
+                        <div className="font-medium text-gray-900">{champion.users?.full_name || t('unknown')}</div>
                         <div className="text-xs text-gray-400">{dateStr}</div>
                       </div>
                     </div>
@@ -1746,14 +1758,14 @@ const Leaderboard = () => {
                 {showBadgeInfo.name}
               </h3>
               <p className="text-sm text-gray-600">
-                Tier: {showBadgeInfo.tier.charAt(0).toUpperCase() + showBadgeInfo.tier.slice(1)}
+                {t('tier', { tier: showBadgeInfo.tier.charAt(0).toUpperCase() + showBadgeInfo.tier.slice(1) })}
               </p>
               <button
                 onClick={() => setShowBadgeInfo(null)}
                 className="mt-4 px-6 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                 style={{ clipPath: CLIP_BTN }}
               >
-                Đóng
+                {t('common:close')}
               </button>
             </div>
           </div>

@@ -1,5 +1,19 @@
 import React from 'react'
+import DOMPurify from 'dompurify'
 import AudioPlayer from './AudioPlayer'
+
+// Content is authored by admins AND teachers (exercise bank RLS lets teachers
+// write), so everything rendered via innerHTML must go through DOMPurify.
+// DOMPurify strips event handlers, script/iframe/object/embed, javascript:/
+// vbscript: URLs, etc. We additionally forbid tags that can restyle or hijack
+// the whole page.
+const PURIFY_CONFIG = {
+  ADD_ATTR: ['target', 'loading'],
+  FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'frame', 'object', 'embed', 'base', 'link', 'meta'],
+  FORBID_ATTR: ['srcdoc', 'formaction'],
+}
+
+const purify = (html) => DOMPurify.sanitize(html, PURIFY_CONFIG)
 
 // Rich Text Renderer Component for Multiple Choice Questions
 // Supports HTML formatting: bold, italic, underline, images, etc.
@@ -133,7 +147,7 @@ const RichTextRenderer = ({
 
   if (!hasHTMLTags) {
     // Plain text - convert line breaks to <br> tags
-    const contentWithBreaks = content.replace(/\n/g, '<br>')
+    const contentWithBreaks = purify(content.replace(/\n/g, '<br>'))
     return (
       <div
         className={className}
@@ -170,14 +184,10 @@ const RichTextRenderer = ({
     // Convert line breaks to <br> tags (simpler approach)
     processedHtml = processedHtml.replace(/\n/g, '<br>')
 
-    // Basic sanitization - remove dangerous attributes and scripts
+    // Audio is rendered separately by RichTextWithAudio's AudioPlayer
     let sanitized = processedHtml
-      .replace(/<script[^>]*>.*?<\/script>/gis, '')
       .replace(/<audio[^>]*>.*?<\/audio>/gis, '')
       .replace(/<audio[^>]*\/?>/gi, '')
-      .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-      .replace(/javascript:/gi, '')
-      .replace(/vbscript:/gi, '')
 
     // Process images if allowed
     if (allowImages) {
@@ -194,7 +204,8 @@ const RichTextRenderer = ({
       )
     }
 
-    return sanitized
+    // Sanitize last so markdown-generated and rewritten tags are covered too
+    return purify(sanitized)
   }
 
   const processedContent = sanitizeHTML(content)

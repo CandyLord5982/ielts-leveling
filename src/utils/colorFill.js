@@ -1,7 +1,8 @@
 // Shared helpers for the color_fill exercise type.
 // Answers are stored as { [region_id]: color_id, [text_field_id]: typed text }.
 // Every region and every text box is one graded item with the same weight.
-// Attempt rows use question_index = region index, then regions.length + text box index.
+// Attempt rows use question_id = region / text box id and question_index = region index, then
+// regions.length + text box index.
 
 import { splitAnswers } from './splitAnswers'
 

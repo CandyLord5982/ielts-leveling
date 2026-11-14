@@ -4,6 +4,8 @@ import { supabase } from '../../supabase/client'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
+import { savedAnswersByQuestion } from '../../utils/attemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import { usePet } from '../../hooks/usePet'
 import { saveRecentExercise } from '../../utils/recentExercise'
@@ -44,6 +46,9 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const sessionId = urlParams.get('sessionId')
   const challengeId = urlParams.get('challengeId') || null
   const isChallenge = urlParams.get('isChallenge') === 'true'
+  // Saves this try's answers for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
+  const questionShownAtRef = useRef(Date.now())
   const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback()
   const { activePet, drainPetEnergy, userEnergy } = usePet()
   const [exercise, setExercise] = useState(null)
@@ -62,14 +67,12 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const [retryMode, setRetryMode] = useState(false)
   const [retryQuestions, setRetryQuestions] = useState([])
   const [isBatmanMoving, setIsBatmanMoving] = useState(false)
-  const [attemptNumber, setAttemptNumber] = useState(1)
   const [challengeStartTime, setChallengeStartTime] = useState(null)
   const [session, setSession] = useState(null)
   const [colorTheme, setColorTheme] = useState('blue')
   const [hasPlayedPassAudio, setHasPlayedPassAudio] = useState(false)
   const [xpAwarded, setXpAwarded] = useState(0)
   const [wrongQuestionIndices, setWrongQuestionIndices] = useState([])
-  const [startTime, setStartTime] = useState(Date.now())
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
 
   // Pet tutor state
@@ -82,6 +85,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const questions = exercise?.content?.questions || []
   const currentQuestion = questions[currentQuestionIndex]
   const showAllQuestions = exercise?.content?.settings?.show_all_questions || false
+  attemptRecorder.setExpectedCount(questions.reduce((n, q) => n + (q.blanks?.length || 0), 0))
 
   // Extract audio data from question content
   const extractAudioUrls = (htmlContent) => {
@@ -156,34 +160,10 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     loadExercise()
   }, [])
 
-  // Fetch max attempt_number from database to continue from where we left off
+  // Time per question starts when it is shown
   useEffect(() => {
-    if (testMode) return
-    const fetchMaxAttemptNumber = async () => {
-      if (!exerciseId || !user) return
-
-      try {
-        const { data, error } = await supabase
-          .from('question_attempts')
-          .select('attempt_number')
-          .eq('user_id', user.id)
-          .eq('exercise_id', exerciseId)
-          .order('attempt_number', { ascending: false })
-          .limit(1)
-
-        if (error) throw error
-
-        if (data && data.length > 0) {
-          // Start from the next attempt number
-          setAttemptNumber(data[0].attempt_number + 1)
-        }
-      } catch (err) {
-        console.log('Could not fetch attempt number:', err.message)
-      }
-    }
-
-    fetchMaxAttemptNumber()
-  }, [exerciseId, user])
+    questionShownAtRef.current = Date.now()
+  }, [currentQuestionIndex])
 
   useEffect(() => {
     if (testMode) return
@@ -252,6 +232,39 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
       setUserAnswers(initialAnswers)
     }
   }, [questions])
+
+  // Continue an unfinished try saved in the database (closed tab, reload, another device):
+  // put back the answers of the questions already checked and carry on after them
+  const resumeCheckedRef = useRef(false)
+  useEffect(() => {
+    if (resumeCheckedRef.current || !exercise || !user || testMode || isTeacherView || showAllQuestions) return
+    resumeCheckedRef.current = true
+    ;(async () => {
+      const found = await attemptRecorder.findUnfinished(user.id)
+      if (!found) return
+      const done = savedAnswersByQuestion(found.rows, questions)
+      if (done.length === 0 || !attemptRecorder.continueTry(found)) return
+
+      const answers = {}
+      const scores = done.map((rows, qIndex) => {
+        const blanks = questions[qIndex].blanks
+        answers[qIndex] = blanks.map((_, bi) => rows.find(r => r.item_index === bi)?.selected_answer || '')
+        return blanks.length ? (rows.filter(r => r.is_correct).length / blanks.length) * 100 : 0
+      })
+      setUserAnswers(prev => ({ ...prev, ...answers }))
+
+      if (done.length < questions.length) {
+        setQuestionScores(scores)
+        setCurrentQuestionIndex(done.length)
+      } else {
+        // Every question was checked but the exercise wasn't finished: show the last one, checked
+        setQuestionScores(scores.slice(0, -1))
+        setCurrentQuestionIndex(done.length - 1)
+        setScore(scores[scores.length - 1])
+        setShowResults(true)
+      }
+    })()
+  }, [exercise, user])
 
   useEffect(() => {
     // Auto-focus the first blank when entering a question
@@ -340,6 +353,35 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     }
   }
 
+  // One attempt row per blank of a question. `timed` adds the time spent on the question shown now.
+  const toBlankItems = (qIndex, { timed = false } = {}) => {
+    const question = questions[qIndex]
+    if (!question) return []
+    return question.blanks.map((blank, blankIndex) => {
+      const answer = (userAnswers[qIndex]?.[blankIndex] || '').trim()
+      const accepted = splitAnswers(blank.answer)
+      const isCorrect = blank.case_sensitive
+        ? accepted.some(a => answer === a)
+        : accepted.some(a => answer.toLowerCase() === a.toLowerCase())
+      return {
+        questionId: question.id || `q${qIndex}`,
+        questionIndex: qIndex,
+        itemKey: `blank${blankIndex}`,
+        itemIndex: blankIndex,
+        selected: answer,
+        correct: blank.answer,
+        isCorrect,
+        responseMs: timed ? Date.now() - questionShownAtRef.current : undefined
+      }
+    })
+  }
+
+  // Close this try with every blank's final answer (after a retry this includes the ones already right)
+  const saveAttempt = () => {
+    attemptRecorder.record(questions.flatMap((_, qIndex) => toBlankItems(qIndex)))
+    attemptRecorder.submit()
+  }
+
   const getBlankStatus = (blankIndex) => {
     if (!showResults) return 'neutral'
     return checkAnswer(blankIndex) ? 'correct' : 'incorrect'
@@ -377,37 +419,8 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     // Play feedback based on score
     playFeedback(questionScore >= 80)
 
-    // Save question attempt to database (one row per blank for per-blank override)
-    try {
-      const urlParams = new URLSearchParams(location.search)
-      const exerciseId = urlParams.get('exerciseId')
-
-      if (exerciseId && user) {
-        const blankAttempts = currentQuestion.blanks.map((blank, blankIndex) => {
-          const userAnswer = (userAnswers[currentQuestionIndex]?.[blankIndex] || '').trim()
-          const correctAnswersList = splitAnswers(blank.answer)
-          const isBlankCorrect = blank.case_sensitive
-            ? correctAnswersList.some(a => userAnswer === a)
-            : correctAnswersList.some(a => userAnswer.toLowerCase() === a.toLowerCase())
-          return {
-            exercise_id: exerciseId,
-            exercise_type: 'fill_blank',
-            question_id: currentQuestion.id || `q${currentQuestionIndex}`,
-            question_index: currentQuestionIndex * 100 + blankIndex,
-            user_id: user.id,
-            selected_answer: userAnswer,
-            correct_answer: blank.answer,
-            is_correct: isBlankCorrect,
-            attempt_number: attemptNumber,
-            response_time: Date.now() - startTime
-          }
-        })
-        const { error: insertError } = await supabase.from('question_attempts').insert(blankAttempts)
-        if (insertError) console.error('⚠️ Fill blank insert error:', insertError)
-      }
-    } catch (err) {
-      console.error('⚠️ Could not save question attempt:', err.message)
-    }
+    // Buffered; sent in batches and on completion
+    attemptRecorder.record(toBlankItems(currentQuestionIndex, { timed: true }))
   }
 
   const handleKeyDown = (e, questionIndex, blankIndex) => {
@@ -516,36 +529,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     const urlParams = new URLSearchParams(location.search)
     const exerciseId = urlParams.get('exerciseId')
 
-    // Save all question attempts to database
-    if (exerciseId && user) {
-      try {
-        const attempts = questions.flatMap((question, qIndex) =>
-          question.blanks.map((blank, blankIndex) => {
-            const userAnswer = (userAnswers[qIndex]?.[blankIndex] || '').trim()
-            const correctAnswersList = splitAnswers(blank.answer)
-            const isBlankCorrect = blank.case_sensitive
-              ? correctAnswersList.some(a => userAnswer === a)
-              : correctAnswersList.some(a => userAnswer.toLowerCase() === a.toLowerCase())
-            return {
-              exercise_id: exerciseId,
-              exercise_type: 'fill_blank',
-              question_id: question.id || `q${qIndex}`,
-              question_index: qIndex * 100 + blankIndex,
-              user_id: user.id,
-              selected_answer: userAnswer,
-              correct_answer: blank.answer,
-              is_correct: isBlankCorrect,
-              attempt_number: attemptNumber,
-              response_time: Date.now() - startTime
-            }
-          })
-        )
-        const { error: insertError } = await supabase.from('question_attempts').insert(attempts)
-        if (insertError) console.error('⚠️ Fill blank submitAll insert error:', insertError)
-      } catch (err) {
-        console.error('⚠️ Could not save question attempts:', err.message)
-      }
-    }
+    saveAttempt()
 
     // Save progress
     try {
@@ -579,6 +563,9 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     ).length
     const questionScore = (correctAnswers / currentQuestion.blanks.length) * 100
     setScore(questionScore)
+
+    // The edited answers replace this question's rows in the current try
+    attemptRecorder.record(toBlankItems(currentQuestionIndex, { timed: true }))
   }
 
   const handleShowAnswers = () => {
@@ -666,6 +653,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
         setExerciseCompleted(true)
         setRetryMode(false)
         setRetryQuestions([])
+        saveAttempt()
 
         // Update user_progress with the new score after retry
         const urlParams = new URLSearchParams(location.search)
@@ -719,6 +707,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
       setExerciseCompleted(true)
       setShowResults(false)
       setShowExplanation(false)
+      saveAttempt()
 
       // Play celebration if passed
       if (averageScore >= 80) {
@@ -748,7 +737,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
         console.error('Error marking fill_blank exercise completed:', err)
       }
     }
-  }, [score, retryMode, questionScores, currentQuestionIndex, retryQuestions, questions.length, location.search, exercise?.xp_reward, user, completeExerciseWithXP, playCelebration])
+  }, [score, retryMode, questionScores, currentQuestionIndex, retryQuestions, questions, userAnswers, attemptRecorder, location.search, exercise?.xp_reward, user, completeExerciseWithXP, playCelebration])
 
   useEffect(() => {
     // Handle Enter key to move to next question when results are showing
@@ -839,8 +828,7 @@ const FillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersCol
 
   const handleRetryWrongQuestions = () => {
     if (wrongQuestionsForRetry.length > 0) {
-      setAttemptNumber(prev => prev + 1)
-
+      // The previous try was submitted on completion, so these answers start a new try
       const newScores = [...questionScores]
       wrongQuestionsForRetry.forEach(qIndex => {
         newScores[qIndex] = 0

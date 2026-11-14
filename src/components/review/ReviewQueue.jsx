@@ -37,22 +37,16 @@ const ReviewQueue = () => {
   const loadQueue = async () => {
     setLoading(true)
     try {
-      // 1. Latest multiple-choice attempt per question, keep the ones currently wrong
-      const { data: attempts, error: attemptsErr } = await supabase
-        .from('question_attempts')
+      // 1. Multiple-choice questions whose latest answer is wrong (the view keeps only the latest)
+      const { data: wrongAttempts, error: attemptsErr } = await supabase
+        .from('question_latest_results')
         .select('exercise_id, question_id, is_correct, created_at')
         .eq('user_id', user.id)
         .eq('exercise_type', 'multiple_choice')
+        .eq('is_correct', false)
         .order('created_at', { ascending: false })
 
       if (attemptsErr) throw attemptsErr
-
-      const latestByKey = new Map()
-      for (const a of attempts || []) {
-        const key = `${a.exercise_id}:${a.question_id}`
-        if (!latestByKey.has(key)) latestByKey.set(key, a)
-      }
-      const wrongAttempts = [...latestByKey.values()].filter((a) => a.is_correct === false)
 
       if (wrongAttempts.length === 0) {
         setQueue([])
@@ -170,17 +164,18 @@ const ReviewQueue = () => {
         { onConflict: 'user_id,exercise_id,question_id' },
       )
 
-      // Keep this consistent with the rest of the app's analytics trail
-      await supabase.from('question_attempts').insert({
+      // Review answers count as the question's latest result but aren't part of an exercise try
+      const { error: attemptErr } = await supabase.from('question_attempts').insert({
         user_id: user.id,
         exercise_id: current.exerciseId,
         exercise_type: 'multiple_choice',
+        source: 'review',
         question_id: current.questionId,
         selected_answer: current.options[selected],
         correct_answer: current.options[current.correctAnswer],
         is_correct: isCorrect,
-        attempt_number: current.schedule.repetitions + 1,
       })
+      if (attemptErr) throw attemptErr
     } catch (err) {
       console.error('Error saving review result:', err)
     }

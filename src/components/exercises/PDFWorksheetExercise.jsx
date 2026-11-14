@@ -11,6 +11,7 @@ import Button3D from '../ui/Button3D'
 import CelebrationScreen from '../ui/CelebrationScreen'
 import { useAuth } from '../../hooks/useAuth'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import ExerciseHeader from '../ui/ExerciseHeader'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -52,8 +53,11 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
   const { playFeedback, showMeme, currentMeme, playCelebration, playLose, passGif } = useFeedback()
   const { canCreateContent } = usePermissions()
   const isTeacherView = canCreateContent()
+  // Saves each submitted try for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
 
   const [exercise, setExercise] = useState(null)
+  attemptRecorder.setExpectedCount((exercise?.content?.pages || []).reduce((n, p) => n + (p.fields?.length || 0), 0))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [teacherMode, setTeacherMode] = useState('review')
@@ -427,33 +431,20 @@ const PDFWorksheetExercise = ({ testMode = false, exerciseData = null, onAnswers
     const totalXP = baseXP + bonusXP
     const timeSpent = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0
 
-    // Save question_attempts for each field (so teacher reports can review them)
-    if (user && !isTeacherView) {
-      try {
-        const attempts = []
-        const allPages = exercise.content?.pages || []
-        allPages.forEach(page => {
-          const fields = page.fields || []
-          fields.forEach((field) => {
-            const fieldAnswer = userAnswers[field.id]
-            attempts.push({
-              user_id: user.id,
-              exercise_id: exerciseId,
-              question_id: field.id,
-              exercise_type: 'pdf_worksheet',
-              selected_answer: fieldAnswer != null ? String(fieldAnswer) : null,
-              correct_answer: field.type === 'dropdown' ? String(field.correct_option) : field.correct_answer,
-              is_correct: newFeedback[field.id]?.correct || false,
-            })
-          })
-        })
-        if (attempts.length > 0) {
-          await supabase.from('question_attempts').insert(attempts)
-        }
-      } catch (err) {
-        console.log('⚠️ Could not save question attempts:', err.message)
-      }
+    // Each submit is one try: one row per field, with readable answers (option text, not index)
+    const readable = (field, value) => {
+      if (value === null || value === undefined || value === '') return null
+      if (field.type === 'dropdown') return field.options?.[value] ?? String(value)
+      return String(value)
     }
+    attemptRecorder.record(allFields.map((field, index) => ({
+      questionId: field.id,
+      questionIndex: index,
+      selected: readable(field, userAnswers[field.id]),
+      correct: field.type === 'dropdown' ? readable(field, field.correct_option) : field.correct_answer,
+      isCorrect: newFeedback[field.id]?.correct || false
+    })))
+    attemptRecorder.submit()
 
     if (user && !hasEarnedXP && !isTeacherView) {
       const result = await completeExerciseWithXP(exerciseId, totalXP, {

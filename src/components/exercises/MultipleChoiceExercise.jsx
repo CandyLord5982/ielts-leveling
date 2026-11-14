@@ -4,13 +4,13 @@ import { saveRecentExercise } from '../../utils/recentExercise'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import { usePet } from '../../hooks/usePet'
 import { supabase } from '../../supabase/client'
 import Button from '../ui/Button'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import RichTextRenderer, { RichTextWithAudio } from '../ui/RichTextRenderer'
-import { exerciseSignature, loadProgress, saveProgress, clearProgress } from '../../utils/mcProgress'
 import EditExerciseModal from '../admin/ExerciseBank/EditExerciseModal'
 import { CheckCircle, XCircle, ArrowRight, ArrowLeft, Star, MessageCircle, Pencil } from 'lucide-react'
 import Button3D from '../ui/Button3D'
@@ -69,7 +69,6 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   const [wrongQuestions, setWrongQuestions] = useState([])
   const [firstAttemptResults, setFirstAttemptResults] = useState([]) // Store first attempt results for merging after retry
   const [isRetryMode, setIsRetryMode] = useState(false)
-  const [attemptNumber, setAttemptNumber] = useState(1)
   const [startTime, setStartTime] = useState(null)
   const [challengeStartTime, setChallengeStartTime] = useState(null)
   const [xpAwarded, setXpAwarded] = useState(0)
@@ -78,6 +77,26 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   // View mode state - read from exercise settings (force all-at-once in testMode)
   const isTeacherView = canCreateContent()
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
+
+  // Saves this try's answers for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
+  attemptRecorder.setExpectedCount(exercise?.content?.questions?.length)
+
+  // One attempt row for a question: position and option text come from the exercise as stored
+  const toAttemptItem = (question, answerIndex, isCorrect, responseMs) => {
+    if (!question) return null
+    const all = exercise?.content?.questions || []
+    let position = all.findIndex(q => q.id != null && q.id === question.id)
+    if (position < 0) position = all.findIndex(q => q.question === question.question)
+    return {
+      questionId: question.id ?? `q${position}`,
+      questionIndex: position >= 0 ? position : null,
+      selected: question.options?.[answerIndex],
+      correct: question.options?.[question.correct_answer],
+      isCorrect,
+      responseMs
+    }
+  }
 
   // Admin-only: edit this exercise without going back to the exercise bank
   const { isAdmin } = useAuth()
@@ -183,67 +202,58 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     initExercise()
   }, [exerciseId, user])
 
-  // Persist one-by-one progress after each answer / next; clear it once the quiz is done.
+  // Continue an unfinished one-by-one try saved in the database (closed tab, reload, another
+  // device). Answered questions move to the front with their answers; the student continues with
+  // the rest. Options keep this load's shuffle; saved answers are matched by option text.
+  const resumeCheckedRef = useRef(false)
   useEffect(() => {
-    if (testMode || isTeacherView || !user || !exerciseId || !exercise || loading) return
-    if (viewMode !== 'one-by-one') return
-    if (isQuizComplete) {
-      clearProgress(user.id, exerciseId)
-      return
-    }
-    // Nothing worth resuming yet
-    if (questionResults.length === 0 && !isRetryMode) return
-    // Skip the brief window where an answer is selected but its result isn't recorded yet
-    if (selectedAnswer !== null && questionResults.length <= currentQuestionIndex) return
-    saveProgress(user.id, exerciseId, {
-      signature: exerciseSignature(exercise),
-      updatedAt: exercise.updated_at || null,
-      answered: questionResults.length,
-      total: questions.length,
-      questions,
-      originalQuestions,
-      currentQuestionIndex,
-      selectedAnswer,
-      showExplanation,
-      questionResults,
-      wrongQuestions,
-      firstAttemptResults,
-      isRetryMode,
-    })
-  }, [
-    testMode, isTeacherView, user, exerciseId, exercise, loading, viewMode, isQuizComplete,
-    questions, originalQuestions, currentQuestionIndex, selectedAnswer, showExplanation,
-    questionResults, wrongQuestions, firstAttemptResults, isRetryMode,
-  ])
+    if (resumeCheckedRef.current || !exercise || !user || testMode || isTeacherView || questions.length === 0) return
+    resumeCheckedRef.current = true
+    if ((exercise.content?.settings?.view_mode || 'one-by-one') !== 'one-by-one') return
+    ;(async () => {
+      const found = await attemptRecorder.findUnfinished(user.id)
+      if (!found) return
+      const rowById = new Map(found.rows.map(r => [r.question_id, r]))
+      const answered = []
+      const rest = []
+      questions.forEach(q => {
+        const row = rowById.get(toAttemptItem(q, 0, false)?.questionId)
+        if (row) answered.push({ question: q, row })
+        else rest.push(q)
+      })
+      if (answered.length === 0 || !attemptRecorder.continueTry(found)) return
 
-  // Fetch max attempt_number from database to continue from where we left off
-  useEffect(() => {
-    if (testMode) return
-    const fetchMaxAttemptNumber = async () => {
-      if (!exerciseId || !user) return
+      const ordered = [...answered.map(a => a.question), ...rest]
+      const results = answered.map(({ question, row }, i) => ({
+        questionId: question.id,
+        questionIndex: i,
+        question: question.question,
+        isCorrect: row.is_correct,
+        selectedAnswer: question.options.findIndex(opt => opt === row.selected_answer),
+        correctAnswer: question.correct_answer,
+        explanation: question.explanation,
+        responseMs: row.response_ms
+      }))
 
-      try {
-        const { data, error } = await supabase
-          .from('question_attempts')
-          .select('attempt_number')
-          .eq('user_id', user.id)
-          .eq('exercise_id', exerciseId)
-          .order('attempt_number', { ascending: false })
-          .limit(1)
-
-        if (error) throw error
-
-        if (data && data.length > 0) {
-          // Start from the next attempt number
-          setAttemptNumber(data[0].attempt_number + 1)
-        }
-      } catch (err) {
-        console.log('Could not fetch attempt number:', err.message)
+      setQuestions(ordered)
+      setOriginalQuestions(ordered)
+      setQuestionResults(results)
+      setWrongQuestions(answered
+        .map(({ question, row }, i) => (row.is_correct ? null : { ...question, originalIndex: i }))
+        .filter(Boolean))
+      if (rest.length > 0) {
+        setCurrentQuestionIndex(answered.length)
+        setSelectedAnswer(null)
+        setShowExplanation(false)
+      } else {
+        // Every question was answered but the quiz wasn't finished: show the last one answered
+        setCurrentQuestionIndex(answered.length - 1)
+        setSelectedAnswer(results[results.length - 1].selectedAnswer)
+        setShowExplanation(true)
       }
-    }
-
-    fetchMaxAttemptNumber()
-  }, [exerciseId, user])
+      setStartTime(Date.now())
+    })()
+  }, [exercise, user, questions])
 
   // Allow scrolling on all devices
   useEffect(() => {
@@ -358,24 +368,9 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
           }
         }
 
-        // Resume a half-finished one-by-one run (students only; teachers/admins preview fresh)
-        const snap = user && !isTeacherView && exerciseViewMode === 'one-by-one'
-          ? loadProgress(user.id, exerciseId, exerciseSignature(data))
-          : null
-        if (snap) {
-          setQuestions(snap.questions)
-          setOriginalQuestions(snap.originalQuestions)
-          setCurrentQuestionIndex(snap.currentQuestionIndex)
-          setSelectedAnswer(snap.selectedAnswer)
-          setShowExplanation(snap.showExplanation)
-          setQuestionResults(snap.questionResults)
-          setWrongQuestions(snap.wrongQuestions)
-          setFirstAttemptResults(snap.firstAttemptResults)
-          setIsRetryMode(snap.isRetryMode)
-        } else {
-          setQuestions(processedQuestions)
-          setOriginalQuestions(processedQuestions) // Store original questions for retry
-        }
+        // A half-finished try is put back by the resume effect once these are set
+        setQuestions(processedQuestions)
+        setOriginalQuestions(processedQuestions) // Store original questions for retry
 
         // Save recent exercise
         try {
@@ -423,25 +418,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     // Play feedback (meme + sound)
     playFeedback(isCorrect)
 
-    // Save question attempt to database (optional - for detailed analytics)
-    if (user && exerciseId) {
-      try {
-        await supabase.from('question_attempts').insert({
-          user_id: user.id,
-          exercise_id: exerciseId,
-          exercise_type: 'multiple_choice',
-          question_id: currentQuestion.id,
-          selected_answer: currentQuestion.options[answerIndex],
-          correct_answer: currentQuestion.options[currentQuestion.correct_answer],
-          is_correct: isCorrect,
-          attempt_number: attemptNumber,
-          response_time: responseTime
-        })
-      } catch (err) {
-        // This is optional analytics - don't break the exercise if it fails
-        console.log('⚠️ Could not save question attempt (table may not exist):', err.message)
-      }
-    }
+    // Buffered; sent in batches and on completion
+    attemptRecorder.record(toAttemptItem(currentQuestion, answerIndex, isCorrect, responseTime))
 
     // Update question results
     const newResult = {
@@ -451,7 +429,8 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
       isCorrect,
       selectedAnswer: answerIndex,
       correctAnswer: currentQuestion.correct_answer,
-      explanation: currentQuestion.explanation
+      explanation: currentQuestion.explanation,
+      responseMs: responseTime
     }
 
     const updatedResults = [...questionResults, newResult]
@@ -529,30 +508,10 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
       console.log(`🔄 Retry merge (all-at-once): ${finalResults.filter(r => r.isCorrect).length}/${finalResults.length} correct`)
     }
 
+    // Answers are saved by markExerciseCompleted once the quiz is complete
     setQuestionResults(finalResults)
     setWrongQuestions(isRetryMode ? [] : wrongQuestionsList)
     setIsQuizComplete(true)
-
-    // Save all question attempts to database
-    if (user && exerciseId) {
-      try {
-        const attempts = results.map(result => ({
-          user_id: user.id,
-          exercise_id: exerciseId,
-          exercise_type: 'multiple_choice',
-          question_id: result.questionId,
-          selected_answer: questions[result.questionIndex].options[result.selectedAnswer],
-          correct_answer: questions[result.questionIndex].options[result.correctAnswer],
-          is_correct: result.isCorrect,
-          attempt_number: attemptNumber,
-          response_time: Date.now() - startTime
-        }))
-
-        await supabase.from('question_attempts').insert(attempts)
-      } catch (err) {
-        console.log('⚠️ Could not save question attempts (table may not exist):', err.message)
-      }
-    }
   }
 
   // Handle asking pet for tutoring help
@@ -632,7 +591,18 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
     setPetTutorMessage('')
   }
 
+  // Close this try with every question's final answer. After a retry, questionResults is the merged
+  // list, so the retry try also carries the answers that were already right.
+  const saveAttempt = () => {
+    attemptRecorder.record(questionResults.map((r, i) => {
+      const question = originalQuestions.find(q => q.id != null && q.id === r.questionId) || originalQuestions[i]
+      return toAttemptItem(question, r.selectedAnswer, r.isCorrect, r.responseMs)
+    }))
+    attemptRecorder.submit()
+  }
+
   const markExerciseCompleted = async () => {
+    saveAttempt()
     if (!user || !exerciseId || isTeacherView) return
 
     console.log(`🔍 markExerciseCompleted called - isRetryMode: ${isRetryMode}, questionResults.length: ${questionResults.length}`)
@@ -688,8 +658,7 @@ const MultipleChoiceExercise = ({ testMode = false, exerciseData = null, onAnswe
   const handleRetryWrongQuestions = () => {
     if (wrongQuestions.length === 0) return
 
-    // Increment attempt number for retry
-    setAttemptNumber(prev => prev + 1)
+    // The previous try was submitted on completion, so these answers start a new try
 
     // Save first attempt results before resetting so we can merge after retry
     setFirstAttemptResults(questionResults)

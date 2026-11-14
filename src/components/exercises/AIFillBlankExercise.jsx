@@ -4,6 +4,7 @@ import { supabase } from '../../supabase/client'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import { ArrowLeft, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react'
 import LoadingSpinner from '../ui/LoadingSpinner'
@@ -82,6 +83,24 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
   const searchParams = new URLSearchParams(location.search)
   const exerciseId = searchParams.get('exerciseId')
   const sessionId = searchParams.get('sessionId')
+
+  // Saves this try's answers for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
+  attemptRecorder.setExpectedCount(exercise?.content?.questions?.length)
+
+  // One attempt row per question; counted correct at an AI score of 70+
+  const toAttemptItem = (questionIndex, aiResult, responseMs) => {
+    const question = exercise?.content?.questions?.[questionIndex]
+    if (!question) return null
+    return {
+      questionId: question.id || `q${questionIndex}`,
+      questionIndex,
+      selected: userAnswers[questionIndex] || '',
+      correct: (question.expected_answers || []).join(', '),
+      isCorrect: (aiResult?.score || 0) >= 70,
+      responseMs
+    }
+  }
 
   useEffect(() => {
     if (testMode) return
@@ -230,27 +249,8 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
         [questionIndex]: true
       }))
 
-      // Save question attempt to database
-      if (user && exerciseId) {
-        try {
-          const responseTime = Date.now() - questionStartTime
-          const expectedAnswers = (question.expected_answers || []).join(', ')
-
-          await supabase.from('question_attempts').insert({
-            user_id: user.id,
-            exercise_id: exerciseId,
-            exercise_type: 'ai_fill_blank',
-            question_id: question.id || `q${questionIndex}`,
-            selected_answer: userAnswer,
-            correct_answer: expectedAnswers,
-            is_correct: aiResult.score >= 70,
-            attempt_number: 1,
-            response_time: responseTime
-          })
-        } catch (err) {
-          console.log('⚠️ Could not save question attempt:', err.message)
-        }
-      }
+      // Buffered; sent in batches and on completion. Checking again replaces the row.
+      attemptRecorder.record(toAttemptItem(questionIndex, aiResult, Date.now() - questionStartTime))
 
     } catch (error) {
       console.error('Error checking answer:', error)
@@ -275,6 +275,10 @@ const AIFillBlankExercise = ({ testMode = false, exerciseData = null, onAnswersC
         // Play celebration if passed
         if (averageScore >= 70) playCelebration()
         else playLose()
+
+        // Close this try; questions never checked count as wrong, like in the score above
+        attemptRecorder.record(exercise.content.questions.map((_, qi) => toAttemptItem(qi, aiScores[qi])))
+        attemptRecorder.submit()
 
         try {
           const roundedScore = Math.round(averageScore)

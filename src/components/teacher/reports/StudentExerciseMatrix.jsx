@@ -6,6 +6,20 @@ import SingleExerciseReview from './SingleExerciseReview';
 
 const VIDEO_TYPES = ['video', 'video_upload', 'speaking', 'speaking_assessment'];
 
+// The try a cell represents: the best submitted try (latest one on a tie), like user_progress keeps
+// the best score. A student with only unfinished tries shows the latest unfinished one.
+const pickShownTry = (tries) => {
+  const submitted = tries.filter(t => t.status === 'submitted');
+  const pool = submitted.length > 0 ? submitted : tries;
+  return pool.reduce((best, t) => {
+    if (!best) return t;
+    const tScore = t.score ?? -1;
+    const bestScore = best.score ?? -1;
+    if (tScore !== bestScore) return tScore > bestScore ? t : best;
+    return t.attempt_number > best.attempt_number ? t : best;
+  }, null);
+};
+
 const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
   const { user, isAdmin } = useAuth();
   const [units, setUnits] = useState([]);
@@ -17,7 +31,9 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
   const [progressMatrix, setProgressMatrix] = useState(new Map());
   const [loading, setLoading] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [questionAttempts, setQuestionAttempts] = useState([]);
+  const [questionAttempts, setQuestionAttempts] = useState([]); // rows of the try shown in the modal
+  const [cellTries, setCellTries] = useState([]); // exercise_attempts of the selected cell, newest first
+  const [selectedTryId, setSelectedTryId] = useState(null);
   const [loadingAttempts, setLoadingAttempts] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
   const [averageMode, setAverageMode] = useState('all'); // 'all' or 'attempted'
@@ -271,73 +287,35 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
         matrix.set(key, progress);
       });
 
-      // Fetch question_attempts to calculate scores based on latest attempts (like the modal)
-      // Batch by exercise to avoid query size limits
-      const attemptsByCell = new Map();
+      // Each cell shows the student's best try (see pickShownTry) and how many tries they
+      // submitted. One row per try, with correct/total counts kept up to date by the database.
+      const { data: tries, error: triesError } = await supabase
+        .from('exercise_attempts')
+        .select('user_id, exercise_id, attempt_number, status, correct_count, total_count, score')
+        .in('user_id', studentIds)
+        .in('exercise_id', limitedExerciseIds);
 
-      for (const exerciseId of limitedExerciseIds) {
-        const { data: exerciseAttempts, error: attemptsError } = await supabase
-          .from('question_attempts')
-          .select('user_id, exercise_id, question_id, is_correct, selected_answer, correct_answer, exercise_type, created_at')
-          .in('user_id', studentIds)
-          .eq('exercise_id', exerciseId);
+      if (triesError) throw triesError;
 
-        if (attemptsError) {
-          console.error('Error fetching attempts for exercise:', exerciseId, attemptsError);
-          continue;
-        }
+      const triesByCell = new Map();
+      (tries || []).forEach(t => {
+        const key = `${t.user_id}-${t.exercise_id}`;
+        if (!triesByCell.has(key)) triesByCell.set(key, []);
+        triesByCell.get(key).push(t);
+      });
 
-        // Expand old fill_blank attempts (single row with comma-separated answers) into per-blank rows
-        const expandedAttempts = [];
-        (exerciseAttempts || []).forEach(attempt => {
-          if (attempt.exercise_type === 'fill_blank' && attempt.question_index == null) {
-            const selected = (attempt.selected_answer || '').split(',').map(s => s.trim());
-            const correct = (attempt.correct_answer || '').split(',').map(s => s.trim());
-            if (selected.length > 1) {
-              selected.forEach((sel, bi) => {
-                const corr = correct[bi] || '';
-                expandedAttempts.push({
-                  ...attempt,
-                  question_index: bi,
-                  selected_answer: sel,
-                  correct_answer: corr,
-                  is_correct: corr ? corr.toLowerCase() === sel.toLowerCase() : attempt.is_correct
-                });
-              });
-              return;
-            }
-          }
-          expandedAttempts.push(attempt);
+      triesByCell.forEach((cellTryList, key) => {
+        const shown = pickShownTry(cellTryList);
+        if (!shown?.total_count) return;
+        const progress = matrix.get(key) || {};
+        matrix.set(key, {
+          ...progress,
+          score: shown.correct_count,
+          max_score: shown.total_count,
+          // Replaces user_progress.attempts, which counts completions (including ones from
+          // before tries were recorded), not tries
+          attempts: cellTryList.filter(t => t.status === 'submitted').length || null,
         });
-
-        // Group attempts by student-exercise, then by question+blank, keeping latest attempt
-        expandedAttempts.forEach(attempt => {
-          const key = `${attempt.user_id}-${attempt.exercise_id}`;
-          if (!attemptsByCell.has(key)) {
-            attemptsByCell.set(key, new Map());
-          }
-          const questionMap = attemptsByCell.get(key);
-          const attemptKey = `${attempt.question_id}_${attempt.question_index ?? 'x'}`;
-          const existing = questionMap.get(attemptKey);
-          if (!existing || new Date(attempt.created_at) > new Date(existing.created_at)) {
-            questionMap.set(attemptKey, attempt);
-          }
-        });
-      }
-
-      // Override progress scores with calculated scores from latest attempts
-      attemptsByCell.forEach((questionMap, key) => {
-        const latestAttempts = Array.from(questionMap.values());
-        const correctCount = latestAttempts.filter(a => a.is_correct).length;
-        const totalCount = latestAttempts.length;
-
-        let progress = matrix.get(key);
-        if (!progress) {
-          progress = {};
-          matrix.set(key, progress);
-        }
-        progress.score = correctCount;
-        progress.max_score = totalCount;
       });
 
       setProgressMatrix(matrix);
@@ -415,92 +393,53 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
     return Math.round(totalPercentage / count);
   };
 
-  const fetchQuestionAttempts = async (studentId, studentName, exerciseId, exerciseTitle) => {
+  // Opens a cell: the student's tries for the exercise, then the answers of one try
+  // (tryId, or by default the same try the cell shows)
+  const fetchQuestionAttempts = async (studentId, studentName, exerciseId, exerciseTitle, tryId = null) => {
     setLoadingAttempts(true);
     setSelectedCell({ studentId, studentName, exerciseId, exerciseTitle });
     setIsVideoExercise(false);
     setVideoSubmissions([]);
 
     try {
-      // Fetch question attempts
-      const { data: attemptsData, error: attemptsError } = await supabase
-        .from('question_attempts')
-        .select('*')
-        .eq('user_id', studentId)
-        .eq('exercise_id', exerciseId)
-        .order('created_at', { ascending: false });
+      const [triesRes, exerciseRes] = await Promise.all([
+        supabase
+          .from('exercise_attempts')
+          .select('id, attempt_number, status, correct_count, total_count, score, started_at, submitted_at')
+          .eq('user_id', studentId)
+          .eq('exercise_id', exerciseId)
+          .order('attempt_number', { ascending: false }),
+        supabase
+          .from('exercises')
+          .select('content, description, exercise_type, difficulty_level, xp_reward, estimated_duration')
+          .eq('id', exerciseId)
+          .single()
+      ]);
 
-      if (attemptsError) throw attemptsError;
+      if (triesRes.error) throw triesRes.error;
+      if (exerciseRes.error) throw exerciseRes.error;
 
-      // Fetch exercise content and details
-      const { data: exerciseData, error: exerciseError } = await supabase
-        .from('exercises')
-        .select('content, description, exercise_type, difficulty_level, xp_reward, estimated_duration')
-        .eq('id', exerciseId)
-        .single();
+      const tries = triesRes.data || [];
+      setCellTries(tries);
+      setExerciseDetail(exerciseRes.data);
 
-      if (exerciseError) throw exerciseError;
+      const shown = tries.find(t => t.id === tryId) || pickShownTry(tries);
+      setSelectedTryId(shown?.id || null);
 
-      setExerciseDetail(exerciseData);
-
-      // Expand old fill_blank attempts (single row with comma-separated answers) into per-blank rows
-      let processedAttempts = attemptsData || [];
-      if (exerciseData?.exercise_type === 'fill_blank' && exerciseData?.content?.questions) {
-        const expanded = [];
-        processedAttempts.forEach(attempt => {
-          const hasIndex = attempt.question_index != null;
-          const selected = (attempt.selected_answer || '').split(',').map(s => s.trim());
-          const correct = (attempt.correct_answer || '').split(',').map(s => s.trim());
-          if (!hasIndex && selected.length > 1) {
-            const qi = exerciseData.content.questions.findIndex(q => q.id === attempt.question_id);
-            const qIdx = qi >= 0 ? qi : 0;
-            selected.forEach((sel, bi) => {
-              const corr = correct[bi] || '';
-              expanded.push({
-                ...attempt,
-                question_index: qIdx * 100 + bi,
-                selected_answer: sel,
-                correct_answer: corr,
-                is_correct: corr ? corr.toLowerCase() === sel.toLowerCase() : attempt.is_correct
-              });
-            });
-          } else {
-            expanded.push(attempt);
-          }
-        });
-        processedAttempts = expanded;
+      if (!shown) {
+        setQuestionAttempts([]);
+        return;
       }
 
-      // Group by question_id + question_index to show latest attempt for each question/blank
-      const latestAttempts = {};
-      (processedAttempts).forEach(attempt => {
-        const key = `${attempt.question_id}_${attempt.question_index ?? 'x'}`;
-        if (!latestAttempts[key] ||
-            new Date(attempt.created_at) > new Date(latestAttempts[key].created_at)) {
-          latestAttempts[key] = attempt;
-        }
-      });
+      const { data: rows, error: rowsError } = await supabase
+        .from('question_attempts')
+        .select('*')
+        .eq('attempt_id', shown.id)
+        .order('question_index', { ascending: true })
+        .order('item_index', { ascending: true });
 
-      // Match attempts with actual question text from exercise content
-      const attemptsWithQuestions = Object.values(latestAttempts).map(attempt => {
-        let questionText = 'Question not found';
-
-        // Try to find the question in exercise content
-        if (exerciseData?.content?.questions) {
-          const question = exerciseData.content.questions.find(q => q.id === attempt.question_id);
-          if (question) {
-            // Remove HTML tags and trim for cleaner display
-            questionText = question.question?.replace(/<[^>]*>/g, '').trim() || question.question || 'Question not found';
-          }
-        }
-
-        return {
-          ...attempt,
-          questionText
-        };
-      });
-
-      setQuestionAttempts(attemptsWithQuestions);
+      if (rowsError) throw rowsError;
+      setQuestionAttempts(rows || []);
     } catch (err) {
       console.error('Error fetching question attempts:', err);
     } finally {
@@ -511,6 +450,8 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
   const closeModal = () => {
     setSelectedCell(null);
     setQuestionAttempts([]);
+    setCellTries([]);
+    setSelectedTryId(null);
     setExerciseDetail(null);
     setVideoSubmissions([]);
     setIsVideoExercise(false);
@@ -527,18 +468,27 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
 
     setResetting(true);
     try {
-      // Delete question_attempts first, then user_progress
-      await supabase
+      // Tries (their question rows go with them), review answers, then the summary row
+      const { error: triesError } = await supabase
+        .from('exercise_attempts')
+        .delete()
+        .eq('user_id', studentId)
+        .eq('exercise_id', exerciseId);
+      if (triesError) throw triesError;
+
+      const { error: rowsError } = await supabase
         .from('question_attempts')
         .delete()
         .eq('user_id', studentId)
         .eq('exercise_id', exerciseId);
+      if (rowsError) throw rowsError;
 
-      await supabase
+      const { error: progressError } = await supabase
         .from('user_progress')
         .delete()
         .eq('user_id', studentId)
         .eq('exercise_id', exerciseId);
+      if (progressError) throw progressError;
 
       // Refresh matrix data and close modal
       closeModal();
@@ -663,18 +613,19 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
 
       if (updateError) throw updateError;
 
-      // Recalculate the score for this exercise
+      // The try's correct/total counts are updated by the database; refresh the best score
       await recalculateExerciseScore(
         selectedCell.studentId,
         selectedCell.exerciseId
       );
 
-      // Refresh the question attempts to show updated data
+      // Refresh the same try to show updated data
       await fetchQuestionAttempts(
         selectedCell.studentId,
         selectedCell.studentName,
         selectedCell.exerciseId,
-        selectedCell.exerciseTitle
+        selectedCell.exerciseTitle,
+        selectedTryId
       );
 
       // Refresh the matrix to show updated scores
@@ -688,31 +639,22 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
     }
   };
 
+  // user_progress keeps the best score, so after an override it becomes the best of the
+  // student's submitted tries
   const recalculateExerciseScore = async (studentId, exerciseId) => {
     try {
-      // Get all question attempts for this student and exercise
-      const { data: attempts, error: attemptsError } = await supabase
-        .from('question_attempts')
-        .select('question_id, is_correct')
+      const { data: tries, error: triesError } = await supabase
+        .from('exercise_attempts')
+        .select('score')
         .eq('user_id', studentId)
-        .eq('exercise_id', exerciseId);
+        .eq('exercise_id', exerciseId)
+        .eq('status', 'submitted')
+        .not('score', 'is', null);
 
-      if (attemptsError) throw attemptsError;
+      if (triesError) throw triesError;
+      if (!tries || tries.length === 0) return;
 
-      // Get unique questions (latest attempt for each)
-      const uniqueQuestions = {};
-      attempts.forEach(attempt => {
-        if (!uniqueQuestions[attempt.question_id]) {
-          uniqueQuestions[attempt.question_id] = attempt;
-        }
-      });
-
-      const totalQuestions = Object.keys(uniqueQuestions).length;
-      const correctAnswers = Object.values(uniqueQuestions).filter(
-        attempt => attempt.is_correct
-      ).length;
-
-      const newScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+      const newScore = Math.max(...tries.map(t => t.score));
       const maxScore = 100;
       const meetingRequirement = newScore >= 75;
 
@@ -1401,6 +1343,28 @@ const StudentExerciseMatrix = ({ selectedCourse, initialSessionId }) => {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* One chip per try, newest first */}
+                  {cellTries.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-gray-500">Tries:</span>
+                      {cellTries.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => fetchQuestionAttempts(selectedCell.studentId, selectedCell.studentName, selectedCell.exerciseId, selectedCell.exerciseTitle, t.id)}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                            t.id === selectedTryId
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title={new Date(t.submitted_at || t.started_at).toLocaleString()}
+                        >
+                          Try {t.attempt_number} · {t.score ?? 0}%
+                          {t.status !== 'submitted' && <span className="ml-1 text-gray-400">(unfinished)</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Summary Stats */}
                   <div className="flex items-center gap-3 mb-4 text-sm">
                     <span className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 font-bold">

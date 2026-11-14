@@ -8,7 +8,6 @@ import { useProgress } from "../../hooks/useProgress";
 import Button from "../ui/Button";
 import AssignExerciseModal from "./modals/AssignExerciseModal";
 import EditExerciseModal from "../admin/ExerciseBank/EditExerciseModal";
-import { getProgressSummary } from "../../utils/mcProgress";
 import {
   DndContext,
   closestCenter,
@@ -218,6 +217,8 @@ const ExerciseList = () => {
   const { canCreateContent } = usePermissions();
   const { userProgress, fetchUserProgress } = useProgress();
   const { exerciseStats: exerciseClassStats } = useClassStats(courseId);
+  // exercise id -> { answered, total } for the student's unfinished try (from exercise_attempts)
+  const [unfinishedTries, setUnfinishedTries] = useState({});
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -680,6 +681,47 @@ const ExerciseList = () => {
     }
   }, [userProgress]);
 
+  // How far the student got in exercises they started but didn't finish: one request, only when
+  // this session has such exercises. Uses the latest try per exercise if it is unfinished.
+  const startedExerciseIds = exercises
+    .filter((ex) => userProgress.some((p) => p.exercise_id === ex.id && p.status === "in_progress"))
+    .map((ex) => ex.id)
+    .join(",");
+  useEffect(() => {
+    if (!user || canCreateContent() || !startedExerciseIds) {
+      setUnfinishedTries({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("exercise_attempts")
+        .select("exercise_id, attempt_number, status, total_count, expected_count")
+        .eq("user_id", user.id)
+        .in("exercise_id", startedExerciseIds.split(","))
+        .order("attempt_number", { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        console.error("Error fetching unfinished tries:", error);
+        return;
+      }
+      const latest = {};
+      (data || []).forEach((t) => {
+        if (!latest[t.exercise_id]) latest[t.exercise_id] = t;
+      });
+      const map = {};
+      Object.values(latest).forEach((t) => {
+        if (t.status === "in_progress" && t.expected_count) {
+          map[t.exercise_id] = { answered: Math.min(t.total_count, t.expected_count), total: t.expected_count };
+        }
+      });
+      setUnfinishedTries(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, startedExerciseIds]);
+
   // Bottom nav Back: go back to unit view (session list)
   useEffect(() => {
     const handleBottomNavBack = () => {
@@ -904,15 +946,11 @@ const ExerciseList = () => {
     };
   };
 
-  // Started-but-unfinished marker for students. Multiple choice shows how far they got, read from
-  // the local resume snapshot (same device only); other types / other devices just get a label.
-  // compact = small pill for map nodes.
+  // Started-but-unfinished marker for students: how far they got in their unfinished try, or just
+  // a label when nothing was saved yet. compact = small pill for map nodes.
   const renderUnfinished = (exercise, status, compact = false) => {
     if (canCreateContent() || status !== "in_progress") return null;
-    const resume =
-      exercise.exercise_type === "multiple_choice" && user
-        ? getProgressSummary(user.id, exercise.id, exercise.updated_at)
-        : null;
+    const resume = unfinishedTries[exercise.id] || null;
     if (compact) {
       return (
         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 md:mt-2 px-1.5 py-0.5 rounded-full bg-white/90 shadow text-[9px] md:text-xs font-bold text-amber-600 whitespace-nowrap">

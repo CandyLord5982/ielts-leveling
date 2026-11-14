@@ -1,27 +1,86 @@
 import React from 'react'
+import DOMPurify from 'dompurify'
 import { CheckCircle, XCircle, Edit3, RefreshCw } from 'lucide-react'
+
+// Shows one try of one exercise. `questionAttempts` are that try's question_attempts rows:
+// one row per graded item (question, blank, dropdown, drop zone, region, worksheet field),
+// with readable selected/correct answers and is_correct already reflecting teacher overrides.
+
+// Question text is authored HTML (teachers can write it), so sanitize before rendering
+const safeHtml = (html) => ({ __html: DOMPurify.sanitize(html || '') })
+
+// Same fallback id the exercise components use when a question has no id
+const questionKey = (question, index) => question.id || `q${index}`
+
+const byItemIndex = (a, b) => (a.item_index || 0) - (b.item_index || 0)
+
+const OverrideButton = ({ row, onOverride, overriding, compact = false }) => {
+  if (!row || !onOverride) return null
+  const busy = overriding === row.id
+  if (compact) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onOverride(row.id, row.is_correct) }}
+        disabled={busy}
+        className="ml-1 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+        title={row.is_correct ? 'Mark incorrect' : 'Mark correct'}
+      >
+        {busy ? <RefreshCw size={10} className="animate-spin" /> : <Edit3 size={10} />}
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={() => onOverride(row.id, row.is_correct)}
+      disabled={busy}
+      className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50 shrink-0"
+    >
+      {busy ? <RefreshCw size={11} className="animate-spin" /> : <Edit3 size={11} />}
+      {row.is_correct ? 'Mark incorrect' : 'Mark correct'}
+    </button>
+  )
+}
+
+const OverriddenBadge = ({ row }) => row?.manually_overridden ? (
+  <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full flex items-center gap-1 shrink-0">
+    <Edit3 size={9} /> Overridden
+  </span>
+) : null
+
+// One answer line: ✓/✗, optional label, student answer, → correct answer when wrong, override
+const AnswerRow = ({ row, label, onOverride, overriding }) => {
+  const ok = row.is_correct
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+      {ok ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
+      {label && <span className="text-gray-500 shrink-0">{label}:</span>}
+      <span className={`font-medium ${ok ? 'text-green-800' : 'text-red-800'}`}>{row.selected_answer || '(no answer)'}</span>
+      {!ok && row.correct_answer && (
+        <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{firstAccepted(row.correct_answer)}</span></>
+      )}
+      <OverriddenBadge row={row} />
+      <OverrideButton row={row} onOverride={onOverride} overriding={overriding} />
+    </div>
+  )
+}
+
+// Fill-blank answers may list several accepted answers separated by |
+const firstAccepted = (answer) => String(answer).split('|')[0].trim()
 
 // --- Type-specific renderers ---
 
-const MultipleChoiceReview = ({ question, attempt }) => {
+const MultipleChoiceReview = ({ question, row }) => {
   const options = question.options || []
   const correct = question.correct_answer
+  const selected = options.findIndex(opt => opt === row.selected_answer)
 
-  // Try index first, then fall back to matching by option text
-  let selected = typeof attempt.selected_answer === 'number'
-    ? attempt.selected_answer
-    : parseInt(attempt.selected_answer)
-  if (isNaN(selected)) {
-    selected = options.findIndex(opt => opt === attempt.selected_answer)
-  }
-
-  if (!options.length) return <GenericReview attempt={attempt} />
+  if (!options.length) return <AnswerRow row={row} />
 
   return (
     <div className="space-y-2">
       {question.question && (
         <div className="text-sm text-gray-800 leading-relaxed mb-2"
-          dangerouslySetInnerHTML={{ __html: question.question }} />
+          dangerouslySetInnerHTML={safeHtml(question.question)} />
       )}
       <div className="grid grid-cols-2 gap-1.5">
         {options.map((opt, i) => {
@@ -59,39 +118,34 @@ const MultipleChoiceReview = ({ question, attempt }) => {
   )
 }
 
-const FillBlankReview = ({ question, attempt }) => {
-  // selected_answer stored as "ans1, ans2, ans3" (one per blank)
-  const selectedParts = (attempt.selected_answer || '').split(', ')
-  const correctParts = (attempt.correct_answer || '').split(', ')
-
-  const isBlankCorrect = (ans, correctRaw) =>
-    (correctRaw || '').split('|').some(a => a.trim().toLowerCase() === (ans || '').trim().toLowerCase())
-
-  // Reconstruct sentence inline if question has _____ markers
+// Blanks shown inside the sentence when it has _____ markers, otherwise as a list
+const FillBlankReview = ({ question, rows, onOverride, overriding }) => {
   const parts = (question.question || '').split(/_{3,}/)
+
   if (parts.length > 1) {
     return (
       <div className="space-y-2">
         <p className="text-sm text-gray-800 leading-loose">
           {parts.map((part, i) => {
-            const studentAns = selectedParts[i]
-            const correctAns = correctParts[i]
-            if (i >= parts.length - 1) return <span key={i} dangerouslySetInnerHTML={{ __html: part }} />
-            const ok = isBlankCorrect(studentAns, correctAns)
+            if (i >= parts.length - 1) return <span key={i} dangerouslySetInnerHTML={safeHtml(part)} />
+            const row = rows.find(r => r.item_index === i)
+            const ok = !!row?.is_correct
             return (
               <React.Fragment key={i}>
-                <span dangerouslySetInnerHTML={{ __html: part }} />
+                <span dangerouslySetInnerHTML={safeHtml(part)} />
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded font-medium ${
                   ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                 }`}>
-                  {studentAns || '—'}
-                  {!ok && correctAns && (
-                    <span className="text-green-700">→ {correctAns.split('|')[0].trim()}</span>
+                  {row?.selected_answer || '—'}
+                  {!ok && row?.correct_answer && (
+                    <span className="text-green-700 ml-1">→ {firstAccepted(row.correct_answer)}</span>
                   )}
                   {ok
                     ? <CheckCircle size={11} className="text-green-500 shrink-0" />
                     : <XCircle size={11} className="text-red-500 shrink-0" />
                   }
+                  {row?.manually_overridden && <Edit3 size={9} className="text-orange-500 shrink-0" />}
+                  <OverrideButton row={row} onOverride={onOverride} overriding={overriding} compact />
                 </span>
               </React.Fragment>
             )
@@ -105,473 +159,174 @@ const FillBlankReview = ({ question, attempt }) => {
       </div>
     )
   }
-
-  // Fallback list
-  return (
-    <div className="space-y-2">
-      {question.question && <p className="text-sm text-gray-700 leading-relaxed">{question.question}</p>}
-      {selectedParts.map((ans, i) => {
-        const correctAns = correctParts[i]
-        const ok = isBlankCorrect(ans, correctAns)
-        return (
-          <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-            {ok ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-            <span className={`font-medium ${ok ? 'text-green-800' : 'text-red-800'}`}>{ans || '—'}</span>
-            {!ok && correctAns && <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{correctAns.split('|')[0].trim()}</span></>}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-const FillBlankReviewWithOverride = ({ question, attempt, blankAttempts, onOverride, overriding }) => {
-  const selectedParts = (attempt.selected_answer || '').split(', ')
-  const correctParts = (attempt.correct_answer || '').split(', ')
-  const hasPerBlankAttempts = blankAttempts && blankAttempts.length > 0
-  // For old format (single DB row), use the attempt itself for override
-  const getOverrideTarget = (i) => hasPerBlankAttempts ? blankAttempts[i] : attempt
-
-  const isBlankCorrect = (ans, correctRaw) =>
-    (correctRaw || '').split('|').some(a => a.trim().toLowerCase() === (ans || '').trim().toLowerCase())
-
-  const parts = (question.question || '').split(/_{3,}/)
-
-  if (parts.length > 1) {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-gray-800 leading-loose">
-          {parts.map((part, i) => {
-            const studentAns = selectedParts[i]
-            const correctAns = correctParts[i]
-            if (i >= parts.length - 1) return <span key={i} dangerouslySetInnerHTML={{ __html: part }} />
-            const ok = isBlankCorrect(studentAns, correctAns)
-            const target = getOverrideTarget(i)
-            return (
-              <React.Fragment key={i}>
-                <span dangerouslySetInnerHTML={{ __html: part }} />
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded font-medium ${
-                  ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {studentAns || '—'}
-                  {!ok && correctAns && (
-                    <span className="text-green-700 ml-1">→ {correctAns.split('|')[0].trim()}</span>
-                  )}
-                  {ok
-                    ? <CheckCircle size={11} className="text-green-500 shrink-0" />
-                    : <XCircle size={11} className="text-red-500 shrink-0" />
-                  }
-                  {target && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onOverride(target.id, target.is_correct) }}
-                      disabled={overriding === target.id}
-                      className="ml-1 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
-                      title={hasPerBlankAttempts ? (ok ? 'Mark incorrect' : 'Mark correct') : 'Override entire question'}
-                    >
-                      {overriding === target.id
-                        ? <RefreshCw size={10} className="animate-spin" />
-                        : <Edit3 size={10} />
-                      }
-                    </button>
-                  )}
-                </span>
-              </React.Fragment>
-            )
-          })}
-        </p>
-        {question.explanation && (
-          <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
-            <strong>Explanation:</strong> {question.explanation}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // Fallback list with override buttons
-  return (
-    <div className="space-y-2">
-      {question.question && <p className="text-sm text-gray-700 leading-relaxed">{question.question}</p>}
-      {selectedParts.map((ans, i) => {
-        const correctAns = correctParts[i]
-        const ok = isBlankCorrect(ans, correctAns)
-        const target = getOverrideTarget(i)
-        return (
-          <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-            {ok ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-            <span className={`font-medium ${ok ? 'text-green-800' : 'text-red-800'}`}>{ans || '—'}</span>
-            {!ok && correctAns && <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{correctAns.split('|')[0].trim()}</span></>}
-            {target && (
-              <button
-                onClick={() => onOverride(target.id, target.is_correct)}
-                disabled={overriding === target.id}
-                className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-              >
-                {overriding === target.id
-                  ? <RefreshCw size={11} className="animate-spin" />
-                  : <Edit3 size={11} />
-                }
-                {ok ? 'Mark incorrect' : 'Mark correct'}
-              </button>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-const DragDropReview = ({ question, attempt }) => {
-  const items = question.items || []
-  const dropZones = question.drop_zones || []
-  const correctOrder = question.correct_order || []
-
-  const getItemText = (itemId) => items.find(it => it.id === itemId)?.text || itemId
-
-  let userPlacements = {}
-  try {
-    userPlacements = typeof attempt.selected_answer === 'object'
-      ? attempt.selected_answer
-      : JSON.parse(attempt.selected_answer || '{}')
-  } catch { userPlacements = {} }
-
-  const hasDropZonePlaceholders = question.question?.includes('[DROP_ZONE_')
-
-  if (hasDropZonePlaceholders) {
-    const parts = question.question.split(/\[DROP_ZONE_([^\]]+)\]/)
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-gray-800 leading-loose">
-          {parts.map((part, i) => {
-            if (i % 2 === 0) return <span key={i} dangerouslySetInnerHTML={{ __html: part }} />
-            const zoneId = part
-            const zoneIndex = dropZones.findIndex(z => z.id === zoneId)
-            const studentItemId = userPlacements[zoneId]
-            const correctItemId = correctOrder[zoneIndex]
-            const isCorrect = studentItemId === correctItemId
-            return (
-              <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded font-medium ${
-                isCorrect ? 'bg-green-100 text-green-800' : studentItemId ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {studentItemId ? getItemText(studentItemId) : '—'}
-                {!isCorrect && correctItemId && <span className="text-green-700">→ {getItemText(correctItemId)}</span>}
-                {isCorrect ? <CheckCircle size={11} className="text-green-500 shrink-0" /> : <XCircle size={11} className="text-red-500 shrink-0" />}
-              </span>
-            )
-          })}
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-2">
-      {question.question && <p className="text-sm text-gray-800 mb-2">{question.question}</p>}
-      <div className="space-y-1.5">
-        {dropZones.map((zone, i) => {
-          const studentItemId = userPlacements[zone.id]
-          const correctItemId = correctOrder[i]
-          const isCorrect = studentItemId === correctItemId
-          return (
-            <div key={zone.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${
-              isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-            }`}>
-              {isCorrect ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-              <span className="text-gray-500 shrink-0">{zone.label || `Zone ${i + 1}`}:</span>
-              <span className={`font-medium ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
-                {studentItemId ? getItemText(studentItemId) : '(empty)'}
-              </span>
-              {!isCorrect && correctItemId && (
-                <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{getItemText(correctItemId)}</span></>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-const DragDropZoneReview = ({ question, attempt, zoneIndex }) => {
-  const items = question.items || []
-  const dropZones = question.drop_zones || []
-  const zone = dropZones[zoneIndex]
-  const getItemText = (itemId) => items.find(it => it.id === itemId)?.text || itemId
-  const studentItemId = attempt.selected_answer
-  const correctItemId = attempt.correct_answer
-  const isCorrect = attempt.is_correct
-
-  return (
-    <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${
-      isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-    }`}>
-      {isCorrect ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-      <span className="text-gray-500 shrink-0">{zone?.label || `Blank ${zoneIndex + 1}`}:</span>
-      <span className={`font-medium ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
-        {studentItemId ? getItemText(studentItemId) : '(empty)'}
-      </span>
-      {!isCorrect && correctItemId && (
-        <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{getItemText(correctItemId)}</span></>
-      )}
-    </div>
-  )
-}
-
-const DropdownReview = ({ question, attempt }) => {
-  const boldBrackets = (text) => text.replace(/(\[[^\]]+\])/g, '<strong>$1</strong>')
-  const selectedParts = (attempt.selected_answer || '').split(', ')
 
   return (
     <div className="space-y-2">
       {question.question && (
+        <div className="text-sm text-gray-700 leading-relaxed" dangerouslySetInnerHTML={safeHtml(question.question)} />
+      )}
+      {rows.map(row => (
+        <AnswerRow key={row.id} row={row} label={`Blank ${row.item_index + 1}`} onOverride={onOverride} overriding={overriding} />
+      ))}
+    </div>
+  )
+}
+
+const DropdownReview = ({ question, rows, onOverride, overriding }) => {
+  const boldBrackets = (text) => text.replace(/(\[[^\]]+\])/g, '<strong>$1</strong>')
+  return (
+    <div className="space-y-2">
+      {question.question && (
         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"
-          dangerouslySetInnerHTML={{ __html: boldBrackets(question.question) }} />
+          dangerouslySetInnerHTML={safeHtml(boldBrackets(question.question))} />
       )}
       <div className="space-y-1.5">
-        {(question.dropdowns || []).map((dd, i) => {
-          const studentAns = (selectedParts[i] || '').trim()
-          const correctAns = (dd.correct_answer || '').trim()
-          const isCorrect = studentAns === correctAns
-          return (
-            <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-              {isCorrect ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-              {dd.label && <span className="text-gray-500">{dd.label}:</span>}
-              <span className={`font-medium ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>{studentAns || '(none)'}</span>
-              {!isCorrect && correctAns && <><span className="text-gray-400">→</span><span className="font-medium text-green-800">{correctAns}</span></>}
-            </div>
-          )
-        })}
+        {rows.map(row => (
+          <AnswerRow
+            key={row.id}
+            row={row}
+            label={question.dropdowns?.[row.item_index]?.label || `Dropdown ${row.item_index + 1}`}
+            onOverride={onOverride}
+            overriding={overriding}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
-const GenericReview = ({ attempt }) => {
-  const fmt = (val) => {
-    if (!val) return '(no answer)'
-    if (typeof val === 'object') return JSON.stringify(val, null, 2)
-    return String(val)
-  }
-  return (
-    <div className="space-y-2">
-      <div className={`p-3 rounded-lg border ${attempt.is_correct ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
-        <span className="text-xs font-medium text-gray-500 block mb-1">Your answer</span>
-        <pre className="text-sm whitespace-pre-wrap font-sans">{fmt(attempt.selected_answer)}</pre>
-      </div>
-      {!attempt.is_correct && attempt.correct_answer && (
-        <div className="p-3 rounded-lg border border-green-300 bg-green-50">
-          <span className="text-xs font-medium text-green-700 block mb-1">Correct answer</span>
-          <pre className="text-sm whitespace-pre-wrap font-sans">{fmt(attempt.correct_answer)}</pre>
-        </div>
-      )}
+const DragDropReview = ({ question, rows, onOverride, overriding }) => (
+  <div className="space-y-2">
+    {question.question && (
+      <div className="text-sm text-gray-800 mb-2"
+        dangerouslySetInnerHTML={safeHtml(question.question.replace(/\[DROP_ZONE_[^\]]+\]/g, '_____'))} />
+    )}
+    <div className="space-y-1.5">
+      {rows.map(row => {
+        const zone = (question.drop_zones || []).find(z => z.id === row.item_key)
+        return (
+          <AnswerRow
+            key={row.id}
+            row={row}
+            label={zone?.label || `Blank ${row.item_index + 1}`}
+            onOverride={onOverride}
+            overriding={overriding}
+          />
+        )
+      })}
     </div>
-  )
-}
+  </div>
+)
 
 // --- Main component ---
 
 const SingleExerciseReview = ({ exercise, questionAttempts, onOverride, overriding }) => {
-  const questions = exercise?.content?.questions || []
   const type = exercise?.exercise_type
+  const questions = exercise?.content?.questions || []
 
-  const reviewItems = []
-  questions.forEach(q => {
-    if (type === 'drag_drop') {
-      const dropZones = q.drop_zones || []
-      // Check for per-zone attempts (new format: {q.id}_zone0, _zone1, ...)
-      const zoneAttempts = dropZones.map((zone, zi) =>
-        questionAttempts.find(a => a.question_id === `${q.id}_zone${zi}`)
-      )
-      if (zoneAttempts.some(a => a)) {
-        // New format: one attempt per zone
-        zoneAttempts.forEach((attempt, zi) => {
-          if (attempt) {
-            reviewItems.push({ question: q, attempt, zoneIndex: zi })
-          }
-        })
-      } else {
-        // Old format: one attempt per question
-        const attempt = questionAttempts.find(a => a.question_id === q.id)
-        if (attempt) {
-          // Expand old attempt into per-zone virtual items
-          let userPlacements = {}
-          try {
-            userPlacements = typeof attempt.selected_answer === 'object'
-              ? attempt.selected_answer
-              : JSON.parse(attempt.selected_answer || '{}')
-          } catch { userPlacements = {} }
-          let correctOrder = []
-          try {
-            correctOrder = typeof attempt.correct_answer === 'object'
-              ? attempt.correct_answer
-              : JSON.parse(attempt.correct_answer || '[]')
-          } catch { correctOrder = [] }
+  const rowsFor = (id) => questionAttempts.filter(a => a.question_id === id).sort(byItemIndex)
+  const used = new Set()
+  const sections = []
 
-          if (typeof userPlacements === 'object' && !Array.isArray(userPlacements)) {
-            dropZones.forEach((zone, zi) => {
-              const studentItemId = userPlacements[zone.id]
-              const correctItemId = Array.isArray(correctOrder) ? correctOrder[zi] : null
-              reviewItems.push({
-                question: q,
-                attempt: {
-                  ...attempt,
-                  selected_answer: studentItemId || null,
-                  correct_answer: correctItemId || null,
-                  is_correct: !!(studentItemId && studentItemId === correctItemId)
-                },
-                zoneIndex: zi
-              })
-            })
-          } else {
-            reviewItems.push({ question: q, attempt })
-          }
-        }
-      }
-    } else if (type === 'fill_blank') {
-      const blankAttempts = questionAttempts
-        .filter(a => a.question_id === q.id)
-        .sort((a, b) => (a.question_index || 0) - (b.question_index || 0))
-      if (blankAttempts.length > 1) {
-        // New format: multiple DB rows per question — store all for inline rendering
-        const combined = {
-          ...blankAttempts[0],
-          selected_answer: blankAttempts.map(a => a.selected_answer || '').join(', '),
-          correct_answer: blankAttempts.map(a => a.correct_answer || '').join(', '),
-          is_correct: blankAttempts.every(a => a.is_correct)
-        }
-        reviewItems.push({ question: q, attempt: combined, blankAttempts })
-      } else if (blankAttempts.length === 1) {
-        reviewItems.push({ question: q, attempt: blankAttempts[0] })
-      }
-    } else {
-      const attempt = questionAttempts.find(a => a.question_id === q.id)
-      if (attempt) reviewItems.push({ question: q, attempt })
-    }
-  })
-
-  // For pdf_worksheet: build review items from pages/fields instead of questions
   if (type === 'pdf_worksheet') {
-    const allPages = exercise?.content?.pages || []
-    allPages.forEach(page => {
-      const fields = page.fields || []
-      fields.forEach((field) => {
-        const attempt = questionAttempts.find(a => a.question_id === field.id)
-        if (attempt) {
-          reviewItems.push({ field, attempt, pageNumber: page.page_number })
-        }
+    let n = 0
+    ;(exercise?.content?.pages || []).forEach(page => {
+      (page.fields || []).forEach(field => {
+        n++
+        const row = questionAttempts.find(a => a.question_id === field.id)
+        if (!row) return
+        used.add(row.id)
+        sections.push({
+          key: row.id,
+          title: `Field ${n}`,
+          body: <AnswerRow row={row} label={field.label || field.type} onOverride={onOverride} overriding={overriding} />
+        })
       })
+    })
+  } else {
+    questions.forEach((question, qi) => {
+      const rows = rowsFor(questionKey(question, qi))
+      if (rows.length === 0) return
+      rows.forEach(r => used.add(r.id))
+
+      let body
+      switch (type) {
+        case 'multiple_choice':
+          body = <MultipleChoiceReview question={question} row={rows[0]} />
+          break
+        case 'fill_blank':
+          body = <FillBlankReview question={question} rows={rows} onOverride={onOverride} overriding={overriding} />
+          break
+        case 'dropdown':
+          body = <DropdownReview question={question} rows={rows} onOverride={onOverride} overriding={overriding} />
+          break
+        case 'drag_drop':
+          body = <DragDropReview question={question} rows={rows} onOverride={onOverride} overriding={overriding} />
+          break
+        default:
+          body = (
+            <div className="space-y-2">
+              {question.question && (
+                <div className="text-sm text-gray-800" dangerouslySetInnerHTML={safeHtml(question.question)} />
+              )}
+              {rows.map(row => <AnswerRow key={row.id} row={row} onOverride={onOverride} overriding={overriding} />)}
+            </div>
+          )
+      }
+
+      // Single-answer questions get their override button in the header; multi-part ones per item
+      const single = type === 'multiple_choice'
+      sections.push({ key: rows[0].id, title: `Question ${qi + 1}`, body, headerRow: single ? rows[0] : null })
     })
   }
 
-  const renderQuestion = (question, attempt, zoneIndex, blankAttempts) => {
-    switch (type) {
-      case 'multiple_choice': return <MultipleChoiceReview question={question} attempt={attempt} />
-      case 'fill_blank': return <FillBlankReviewWithOverride question={question} attempt={attempt} blankAttempts={blankAttempts} onOverride={onOverride} overriding={overriding} />
-      case 'dropdown': return <DropdownReview question={question} attempt={attempt} />
-      case 'drag_drop':
-        if (zoneIndex !== undefined) {
-          return <DragDropZoneReview question={question} attempt={attempt} zoneIndex={zoneIndex} />
-        }
-        return <DragDropReview question={question} attempt={attempt} />
-      default: return <GenericReview attempt={attempt} />
-    }
+  // Anything not matched to the exercise content (color-fill regions, edited/removed questions)
+  const leftovers = questionAttempts.filter(a => !used.has(a.id))
+    .sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0) || byItemIndex(a, b))
+  if (leftovers.length > 0) {
+    sections.push({
+      key: 'other',
+      title: type === 'color_fill' ? 'Answers' : 'Other answers',
+      body: (
+        <div className="space-y-1.5">
+          {leftovers.map(row => (
+            <AnswerRow
+              key={row.id}
+              row={row}
+              label={`${(row.question_index ?? 0) + 1}${row.item_key ? `.${row.item_index + 1}` : ''}`}
+              onOverride={onOverride}
+              overriding={overriding}
+            />
+          ))}
+        </div>
+      )
+    })
   }
 
-  const renderPDFWorksheetField = (field, attempt) => {
-    let correctDisplay = ''
-    let studentDisplay = ''
-
-    if (field.type === 'text') {
-      correctDisplay = field.correct_answer || ''
-      studentDisplay = attempt.selected_answer || '(no answer)'
-    } else if (field.type === 'dropdown') {
-      const idx = parseInt(attempt.selected_answer)
-      studentDisplay = !isNaN(idx) ? (field.options?.[idx] || '(no answer)') : '(no answer)'
-      correctDisplay = field.options?.[field.correct_option] || ''
-    } else if (field.type === 'checkbox') {
-      studentDisplay = attempt.selected_answer === 'true' ? 'Checked' : 'Unchecked'
-      correctDisplay = field.correct_answer === 'true' ? 'Checked' : 'Unchecked'
-    }
-
-    return (
-      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${
-        attempt.is_correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-      }`}>
-        {attempt.is_correct
-          ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-          : <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-        }
-        <span className="text-xs text-gray-500 shrink-0 w-24 truncate" title={field.label}>
-          {field.label || 'Field'}
-        </span>
-        <span className={`font-medium ${attempt.is_correct ? 'text-green-800' : 'text-red-800'}`}>
-          {studentDisplay}
-        </span>
-        {!attempt.is_correct && correctDisplay && (
-          <>
-            <span className="text-gray-400">→</span>
-            <span className="font-medium text-green-800">{correctDisplay}</span>
-          </>
-        )}
-        <span className="text-xs text-gray-400 ml-auto capitalize">({field.type})</span>
-      </div>
-    )
-  }
-
-  if (!reviewItems.length) {
+  if (!sections.length) {
     return <p className="text-gray-500 text-sm text-center py-4">No question attempts to review.</p>
   }
 
   return (
     <div className="space-y-6">
-      {reviewItems.map((item, i) => {
-        const isFillBlank = type === 'fill_blank' && !item.field
-        return (
-          <div key={`${item.attempt.id}_${item.zoneIndex ?? ''}`}>
-            <div className="flex items-center justify-between gap-2 mb-3">
-              {reviewItems.length > 1
-                ? <span className="text-base font-semibold text-gray-700">
-                    {item.field
-                      ? `Field ${i + 1}`
-                      : item.zoneIndex !== undefined
-                        ? `Blank ${i + 1}`
-                        : `Question ${i + 1}`
-                    }
-                  </span>
-                : <span />
-              }
-              {/* Hide top-level override for fill_blank — handled per-blank inside the component */}
-              {!isFillBlank && (
-                <div className="flex items-center gap-2">
-                  {item.attempt.manually_overridden && (
-                    <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full flex items-center gap-1">
-                      <Edit3 size={9} /> Overridden
-                    </span>
-                  )}
-                  <button
-                    onClick={() => onOverride(item.attempt.id, item.attempt.is_correct)}
-                    disabled={overriding === item.attempt.id}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                  >
-                    {overriding === item.attempt.id
-                      ? <RefreshCw size={11} className="animate-spin" />
-                      : <Edit3 size={11} />
-                    }
-                    {item.attempt.is_correct ? 'Mark incorrect' : 'Mark correct'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {item.field
-              ? renderPDFWorksheetField(item.field, item.attempt)
-              : renderQuestion(item.question, item.attempt, item.zoneIndex, item.blankAttempts)
+      {sections.map((section, i) => (
+        <div key={section.key}>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            {sections.length > 1
+              ? <span className="text-base font-semibold text-gray-700">{section.title}</span>
+              : <span />
             }
-
-            {i < reviewItems.length - 1 && <hr className="border-gray-100 mt-4" />}
+            {section.headerRow && (
+              <div className="flex items-center gap-2">
+                <OverriddenBadge row={section.headerRow} />
+                <OverrideButton row={section.headerRow} onOverride={onOverride} overriding={overriding} />
+              </div>
+            )}
           </div>
-        )
-      })}
+          {section.body}
+          {i < sections.length - 1 && <hr className="border-gray-100 mt-4" />}
+        </div>
+      ))}
     </div>
   )
 }

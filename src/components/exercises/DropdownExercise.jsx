@@ -4,6 +4,8 @@ import { supabase } from '../../supabase/client'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
+import { savedAnswersByQuestion } from '../../utils/attemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import { saveRecentExercise } from '../../utils/recentExercise'
 import LoadingSpinner from '../ui/LoadingSpinner'
@@ -46,6 +48,9 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const challengeId = new URLSearchParams(location.search).get('challengeId') || null
   const isChallenge = new URLSearchParams(location.search).get('isChallenge') === 'true'
   const sessionId = new URLSearchParams(location.search).get('sessionId')
+  // Saves this try's answers for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
+  const questionShownAtRef = useRef(Date.now())
   const { playCelebration, playLose, passGif } = useFeedback()
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -70,10 +75,10 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const [challengeStartTime, setChallengeStartTime] = useState(null)
   const shuffledOptionsRef = useRef({})
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
-  const [attemptNumber, setAttemptNumber] = useState(1)
 
   const questions = exercise?.content?.questions || []
   const currentQuestion = questions[currentQuestionIndex]
+  attemptRecorder.setExpectedCount(questions.reduce((n, q) => n + (q.dropdowns?.length || 0), 0))
 
   // Play celebration when exercise is completed and passed
   useEffect(() => {
@@ -163,27 +168,10 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     initExercise()
   }, [user])
 
-  // Fetch max attempt number for question_attempts tracking
+  // Time per question starts when it is shown
   useEffect(() => {
-    const fetchMaxAttemptNumber = async () => {
-      if (!exerciseId || !user) return
-      try {
-        const { data } = await supabase
-          .from('question_attempts')
-          .select('attempt_number')
-          .eq('user_id', user.id)
-          .eq('exercise_id', exerciseId)
-          .order('attempt_number', { ascending: false })
-          .limit(1)
-        if (data && data.length > 0) {
-          setAttemptNumber(data[0].attempt_number + 1)
-        }
-      } catch (err) {
-        console.log('Could not fetch attempt number:', err.message)
-      }
-    }
-    fetchMaxAttemptNumber()
-  }, [exerciseId, user])
+    questionShownAtRef.current = Date.now()
+  }, [currentQuestionIndex])
 
   useEffect(() => {
     // Initialize user answers when questions change
@@ -197,6 +185,39 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     // Reset shuffled options cache when questions change
     shuffledOptionsRef.current = {}
   }, [questions])
+
+  // Continue an unfinished try saved in the database (closed tab, reload, another device):
+  // put back the answers of the questions already checked and carry on after them
+  const resumeCheckedRef = useRef(false)
+  useEffect(() => {
+    if (resumeCheckedRef.current || !exercise || !user || testMode || isTeacherView) return
+    resumeCheckedRef.current = true
+    ;(async () => {
+      const found = await attemptRecorder.findUnfinished(user.id)
+      if (!found) return
+      const done = savedAnswersByQuestion(found.rows, questions)
+      if (done.length === 0 || !attemptRecorder.continueTry(found)) return
+
+      const answers = {}
+      const scores = done.map((rows, qIndex) => {
+        const dropdowns = questions[qIndex].dropdowns
+        answers[qIndex] = dropdowns.map((_, di) => rows.find(r => r.item_index === di)?.selected_answer || '')
+        return dropdowns.length ? (rows.filter(r => r.is_correct).length / dropdowns.length) * 100 : 0
+      })
+      setUserAnswers(prev => ({ ...prev, ...answers }))
+
+      if (done.length < questions.length) {
+        setQuestionScores(scores)
+        setCurrentQuestionIndex(done.length)
+      } else {
+        // Every question was checked but the exercise wasn't finished: show the last one, checked
+        setQuestionScores(scores.slice(0, -1))
+        setCurrentQuestionIndex(done.length - 1)
+        setScore(scores[scores.length - 1])
+        setShowResults(true)
+      }
+    })()
+  }, [exercise, user])
 
   // Get shuffled options for a dropdown, cached so order stays stable
   const getShuffledOptions = (qIndex, dIndex, options) => {
@@ -275,6 +296,32 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     return userAnswer === correctAnswer
   }
 
+  // One attempt row per dropdown of a question. `timed` adds the time spent on the question shown now.
+  const toDropdownItems = (qIndex, { timed = false } = {}) => {
+    const question = questions[qIndex]
+    if (!question) return []
+    return question.dropdowns.map((dropdown, dropdownIndex) => {
+      const answer = (userAnswers[qIndex]?.[dropdownIndex] || '').trim()
+      const correct = (dropdown.correct_answer || '').trim()
+      return {
+        questionId: question.id || `q${qIndex}`,
+        questionIndex: qIndex,
+        itemKey: `dd${dropdownIndex}`,
+        itemIndex: dropdownIndex,
+        selected: answer,
+        correct,
+        isCorrect: answer === correct,
+        responseMs: timed ? Date.now() - questionShownAtRef.current : undefined
+      }
+    })
+  }
+
+  // Close this try with every dropdown's final answer (after a retry this includes the ones already right)
+  const saveAttempt = () => {
+    attemptRecorder.record(questions.flatMap((_, qIndex) => toDropdownItems(qIndex)))
+    attemptRecorder.submit()
+  }
+
   const getDropdownStatus = (dropdownIndex) => {
     if (!showResults) return 'neutral'
     return checkAnswer(dropdownIndex) ? 'correct' : 'incorrect'
@@ -292,30 +339,8 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     const questionScore = (correctAnswers / currentQuestion.dropdowns.length) * 100
     setScore(questionScore)
 
-    // Save question attempt
-    if (user && exerciseId) {
-      try {
-        const selectedAnswers = currentQuestion.dropdowns.map((_, i) =>
-          (userAnswers[currentQuestionIndex]?.[i] || '').trim()
-        ).join(', ')
-        const correctAnswersList = currentQuestion.dropdowns.map(d =>
-          (d.correct_answer || '').trim()
-        ).join(', ')
-
-        supabase.from('question_attempts').insert({
-          user_id: user.id,
-          exercise_id: exerciseId,
-          exercise_type: 'dropdown',
-          question_id: currentQuestion.id || `q${currentQuestionIndex}`,
-          selected_answer: selectedAnswers,
-          correct_answer: correctAnswersList,
-          is_correct: questionScore === 100,
-          attempt_number: attemptNumber,
-        }).then(() => {})
-      } catch (err) {
-        console.log('Could not save question attempt:', err.message)
-      }
-    }
+    // Buffered; sent in batches and on completion
+    attemptRecorder.record(toDropdownItems(currentQuestionIndex, { timed: true }))
   }
 
   const handleRecheck = () => {
@@ -327,6 +352,9 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
     ).length
     const questionScore = (correctAnswers / currentQuestion.dropdowns.length) * 100
     setScore(questionScore)
+
+    // The edited answers replace this question's rows in the current try
+    attemptRecorder.record(toDropdownItems(currentQuestionIndex, { timed: true }))
   }
 
   const handleShowAnswers = () => {
@@ -368,6 +396,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
         setExerciseCompleted(true)
         setRetryMode(false)
         setRetryQuestions([])
+        saveAttempt()
         return
       }
     }
@@ -392,6 +421,7 @@ const DropdownExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       setExerciseCompleted(true)
       setShowResults(false)
       setShowExplanation(false)
+      saveAttempt()
 
       // Mark exercise completed with XP
       try {

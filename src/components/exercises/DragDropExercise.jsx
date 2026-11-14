@@ -7,6 +7,8 @@ import Button3D from '../ui/Button3D'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
+import { savedAnswersByQuestion } from '../../utils/attemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import ExerciseHeader from '../ui/ExerciseHeader'
 import RichTextRenderer, { RichTextWithAudio } from '../ui/RichTextRenderer'
@@ -153,6 +155,10 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
   const { startExercise, completeExerciseWithXP } = useProgress()
   const isTeacherView = canCreateContent()
   const [teacherMode, setTeacherMode] = useState('review') // 'review' or 'do'
+  // Saves this try's answers for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
+  attemptRecorder.setExpectedCount((exercise?.content?.questions || []).reduce((n, q) => n + (q.drop_zones?.length || 0), 0))
+  const questionShownAtRef = useRef(Date.now())
   const { currentMeme, showMeme, playFeedback, playCelebration, playLose, passGif } = useFeedback()
   const [showResultScreen, setShowResultScreen] = useState(false)
   const [questionResults, setQuestionResults] = useState([]) // Track results for each question
@@ -277,6 +283,52 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       }
     }
   }, [exercise?.id, currentQuestionIndex])
+
+  // Continue an unfinished try saved in the database (closed tab, reload, another device):
+  // put back the checked questions (rows hold item text, mapped back to item ids) and carry on
+  const resumeCheckedRef = useRef(false)
+  useEffect(() => {
+    if (resumeCheckedRef.current || !exercise || !user || testMode || isTeacherView) return
+    resumeCheckedRef.current = true
+    ;(async () => {
+      const questions = exercise.content?.questions || []
+      const found = await attemptRecorder.findUnfinished(user.id)
+      if (!found) return
+      const done = savedAnswersByQuestion(found.rows, questions)
+      if (done.length === 0 || !attemptRecorder.continueTry(found)) return
+
+      const answers = {}
+      const checked = {}
+      const feedback = {}
+      const results = done.map((rows, qIndex) => {
+        const question = questions[qIndex]
+        const usedItemIds = new Set()
+        answers[qIndex] = {}
+        feedback[qIndex] = {}
+        rows.forEach(row => {
+          const zone = (question.drop_zones || []).find(z => z.id === row.item_key)
+          const item = zone && row.selected_answer != null
+            ? question.items.find(i => i.text === row.selected_answer && !usedItemIds.has(i.id))
+            : null
+          if (!item) return
+          usedItemIds.add(item.id)
+          answers[qIndex][zone.id] = item.id
+          feedback[qIndex][zone.id] = row.is_correct ? 'correct' : 'incorrect'
+        })
+        checked[qIndex] = true
+        const correctZones = rows.filter(r => r.is_correct).length
+        const totalZones = (question.drop_zones || []).length
+        return { questionIndex: qIndex, questionId: question.id, isCorrect: correctZones === totalZones, correctZones, totalZones }
+      })
+
+      setUserAnswers(prev => ({ ...prev, ...answers }))
+      setQuestionsChecked(checked)
+      setItemFeedback(feedback)
+      setQuestionResults(results)
+      // Next question to do, or the last one if all were checked (the student can press Finish)
+      setCurrentQuestionIndex(Math.min(done.length, questions.length - 1))
+    })()
+  }, [exercise, user])
 
   const fetchExercise = async () => {
     try {
@@ -628,15 +680,47 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       }]
     })
 
+    // Buffered; sent in batches and when the exercise is finished
+    attemptRecorder.record(toZoneItems(questionIndex, { timed: true }))
+
     // Save progress on every question check, but don't increment attempts here
     if (user) {
-      await saveProgress(questionIndex, isAnswerCorrect)
+      await saveProgress()
     }
 
     return isAnswerCorrect
   }
 
-  const saveProgress = async (questionIndex, isCorrect) => {
+  // One attempt row per drop zone, with item text (what the student saw) and graded by text like
+  // the on-screen check. `timed` adds the time spent on the question shown now.
+  const toZoneItems = (qIndex, { timed = false } = {}) => {
+    const question = exercise?.content?.questions?.[qIndex]
+    if (!question) return []
+    const userAnswer = userAnswers[qIndex] || {}
+    const textOf = (itemId) => (itemId ? question.items.find(i => i.id === itemId)?.text ?? null : null)
+    return (question.drop_zones || []).map((zone, zoneIndex) => {
+      const selected = textOf(userAnswer[zone.id])
+      const correct = textOf((question.correct_order || [])[zoneIndex])
+      return {
+        questionId: question.id || `q${qIndex}`,
+        questionIndex: qIndex,
+        itemKey: zone.id,
+        itemIndex: zoneIndex,
+        selected,
+        correct,
+        isCorrect: selected !== null && selected === correct,
+        responseMs: timed ? Date.now() - questionShownAtRef.current : undefined
+      }
+    })
+  }
+
+  // Time per question starts when it is shown
+  useEffect(() => {
+    questionShownAtRef.current = Date.now()
+  }, [currentQuestionIndex])
+
+  // Awards XP once every question is answered correctly (answers are saved by attemptRecorder)
+  const saveProgress = async () => {
     if (!user || !exercise) return
 
     try {
@@ -687,34 +771,6 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       const scorePercentage = totalAllZones > 0 ? Math.round((totalCorrectZones / totalAllZones) * 100) : 0
       const score = allQuestionsCompleted ? scorePercentage : 0
 
-      // Save question attempt per drop zone
-      if (exerciseId) {
-        try {
-          const q = exercise.content.questions[questionIndex]
-          const userAnswer = userAnswers[questionIndex] || {}
-          const rows = (q.drop_zones || []).map((zone, zi) => {
-            const studentItemId = userAnswer[zone.id]
-            const correctItemId = (q.correct_order || [])[zi]
-            return {
-              user_id: user.id,
-              exercise_id: exerciseId,
-              exercise_type: 'drag_drop',
-              question_id: `${q.id || `q${questionIndex}`}_zone${zi}`,
-              selected_answer: studentItemId || null,
-              correct_answer: correctItemId || null,
-              is_correct: !!(studentItemId && studentItemId === correctItemId),
-              attempt_number: 1,
-              response_time: totalTimeSpent
-            }
-          })
-          if (rows.length > 0) {
-            await supabase.from('question_attempts').insert(rows)
-          }
-        } catch (err) {
-          console.log('⚠️ Could not save question attempt:', err.message)
-        }
-      }
-
       // If exercise is completed, use proper XP awarding system
       if (allQuestionsCompleted && !isTeacherView) {
         const result = await completeExerciseWithXP(
@@ -750,9 +806,13 @@ const DragDropExercise = ({ testMode = false, exerciseData = null, onAnswersColl
       return
     }
 
+    // Close this try with every drop zone's final answer
+    attemptRecorder.record((exercise?.content?.questions || []).flatMap((_, qIndex) => toZoneItems(qIndex)))
+    attemptRecorder.submit()
+
     // Trigger final save progress to complete the exercise
     if (user && exercise) {
-      await saveProgress(currentQuestionIndex, true)
+      await saveProgress()
     }
 
     // Show result screen instead of navigating away

@@ -14,21 +14,15 @@ export const clearReviewDueCache = (userId) => {
 // Same rule as ReviewQueue: latest multiple-choice attempt per question is wrong, and the
 // question was never scheduled or its due date has passed
 const hasDueQuestions = async (userId) => {
-  const { data: attempts, error } = await supabase
-    .from('question_attempts')
-    .select('exercise_id, question_id, is_correct')
+  // question_latest_results keeps only each question's latest answer
+  const { data: wrong, error } = await supabase
+    .from('question_latest_results')
+    .select('exercise_id, question_id')
     .eq('user_id', userId)
     .eq('exercise_type', 'multiple_choice')
-    .order('created_at', { ascending: false })
+    .eq('is_correct', false)
   if (error) throw error
-
-  const latest = new Map()
-  for (const a of attempts || []) {
-    const key = `${a.exercise_id}:${a.question_id}`
-    if (!latest.has(key)) latest.set(key, a)
-  }
-  const wrong = [...latest.values()].filter(a => a.is_correct === false)
-  if (wrong.length === 0) return false
+  if (!wrong || wrong.length === 0) return false
 
   const { data: reviews, error: reviewsErr } = await supabase
     .from('question_reviews')

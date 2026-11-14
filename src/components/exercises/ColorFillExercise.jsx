@@ -8,6 +8,7 @@ import AudioPlayer from '../ui/AudioPlayer'
 import CelebrationScreen from '../ui/CelebrationScreen'
 import { useAuth } from '../../hooks/useAuth'
 import { useProgress } from '../../hooks/useProgress'
+import { useAttemptRecorder } from '../../hooks/useAttemptRecorder'
 import { useFeedback } from '../../hooks/useFeedback'
 import ExerciseHeader from '../ui/ExerciseHeader'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -73,6 +74,8 @@ const ColorFillExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const { playFeedback, showMeme, currentMeme, playCelebration, passGif } = useFeedback()
   const { canCreateContent } = usePermissions()
   const isTeacherView = canCreateContent()
+  // Saves each submitted try for teacher reports (students only)
+  const attemptRecorder = useAttemptRecorder(exerciseId, !!user && !testMode && !isTeacherView)
 
   const [exercise, setExercise] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -120,6 +123,7 @@ const ColorFillExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const textFields = content?.text_fields || []
   // Only questions are answered and graded; text-only boxes are just shown on the image
   const questionFields = textFields.filter(isQuestionField)
+  attemptRecorder.setExpectedCount(regions.length + questionFields.length)
   // The teacher decides per exercise whether students may see the correct answers after submitting
   const canRevealAnswers = content?.settings?.reveal_answers === 'after_submit'
   const palette = content?.palette || []
@@ -320,38 +324,26 @@ const ColorFillExercise = ({ testMode = false, exerciseData = null, onAnswersCol
   const missingRegions = regions.length - filledRegions
   const canSubmit = missingRegions === 0 && unansweredText === 0
 
-  const saveAttempts = async (result, attemptNumber, timeSpent) => {
-    if (!user || !exerciseId || isTeacherView) return
-
-    const base = {
-      user_id: user.id,
-      exercise_id: exerciseId,
-      exercise_type: 'color_fill',
-      attempt_number: attemptNumber,
-      response_time: timeSpent
-    }
-    const rows = [
+  // Each submit is one try: one row per region (color names, not ids) and per question box
+  const saveAttempt = (result) => {
+    const colorName = (colorId) => (colorId ? palette.find(c => c.id === colorId)?.name || colorId : null)
+    attemptRecorder.record([
       ...regions.map((region, index) => ({
-        ...base,
-        question_id: region.id,
-        question_index: index,
-        selected_answer: userAnswers[region.id] || null,
-        correct_answer: region.correct_color_id || null,
-        is_correct: result.byRegion[region.id]
+        questionId: region.id,
+        questionIndex: index,
+        selected: colorName(userAnswers[region.id]),
+        correct: colorName(region.correct_color_id),
+        isCorrect: result.byRegion[region.id]
       })),
       ...questionFields.map((field, index) => ({
-        ...base,
-        question_id: field.id,
-        question_index: regions.length + index,
-        selected_answer: userAnswers[field.id] || null,
-        correct_answer: field.answer || null,
-        is_correct: result.byText[field.id]
+        questionId: field.id,
+        questionIndex: regions.length + index,
+        selected: userAnswers[field.id] || null,
+        correct: field.answer || null,
+        isCorrect: result.byText[field.id]
       }))
-    ]
-    if (rows.length === 0) return
-
-    const { error } = await supabase.from('question_attempts').insert(rows)
-    if (error) console.log('⚠️ Could not save question attempt:', error.message)
+    ])
+    attemptRecorder.submit()
   }
 
   const handleSubmit = async () => {
@@ -368,7 +360,7 @@ const ColorFillExercise = ({ testMode = false, exerciseData = null, onAnswersCol
     setIsSubmitted(true)
     playFeedback(passed)
 
-    await saveAttempts(result, attemptNumber, timeSpent)
+    saveAttempt(result)
 
     if (!passed) return
 

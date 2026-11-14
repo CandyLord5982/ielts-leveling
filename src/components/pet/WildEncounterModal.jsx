@@ -51,6 +51,8 @@ const getCatchRate = (ballRarity, petRarity) => {
   return CATCH_RATE[ballRarity]?.[petRarity] ?? 50
 }
 
+const BALL_RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary']
+
 const BallImage = ({ ball, className = '' }) => {
   if (ball?.image_url) {
     return <img src={ball.image_url} alt={ball.name} className={`object-contain ${className}`} />
@@ -157,9 +159,9 @@ const Confetti = ({ color, intensity = 1 }) => {
       return {
         id: i,
         fromLeft,
-        vx: (fromLeft ? 1 : -1) * (12 + Math.random() * 40), // vw sideways
-        peak: 45 + Math.random() * 35,                        // vh up
-        fall: 25 + Math.random() * 45,                        // vh back down from the peak
+        vx: (fromLeft ? 1 : -1) * (20 + Math.random() * 60), // vw sideways
+        peak: 60 + Math.random() * 40,                        // vh up
+        fall: 35 + Math.random() * 55,                        // vh back down from the peak
         delay: (i % 12) * 0.025 + Math.floor((i / count) * 3) * 0.45, // three volleys
         duration: 2.4 + Math.random() * 1.4,
         w: strip ? 5 : 8,
@@ -214,7 +216,11 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
   const { attemptCatch } = usePet()
 
   const [phase, setPhase] = useState('entrance')
-  const [selectedBallIndex, setSelectedBallIndex] = useState(0)
+  // Chosen by item id, not list position: the list changes after each throw (inventory reload,
+  // a ball type running out), and a position would then point at a different ball
+  const [selectedBallId, setSelectedBallId] = useState(null)
+  // The ball actually thrown, frozen for the throw/impact/shake/escape animations
+  const [thrownBall, setThrownBall] = useState(null)
   const [catchResult, setCatchResult] = useState(null)
   const [shakeCount, setShakeCount] = useState(0)
   const [nickname, setNickname] = useState('')
@@ -235,9 +241,13 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
   const rafRef = useRef(null)
   const totalShakesRef = useRef(null)
 
-  const balls = getBallsInInventory()
+  // Weakest to strongest, so the selector keeps the same order between throws
+  const balls = [...getBallsInInventory()].sort((a, b) =>
+    BALL_RARITY_ORDER.indexOf(a.item?.rarity) - BALL_RARITY_ORDER.indexOf(b.item?.rarity))
   const rarity = pet?.rarity || 'common'
-  const selectedBall = balls[selectedBallIndex]?.item
+  // Falls back to the first ball when nothing is chosen yet or the chosen one ran out
+  const selectedBall = (balls.find(b => b.item?.id === selectedBallId) || balls[0])?.item
+  const animatedBall = thrownBall || selectedBall
   const caught = catchResult?.caught
   const isDuplicate = catchResult?.duplicate
 
@@ -374,6 +384,7 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
 
     dragPosRef.current = { x: 0, y: 0 }
     setIsDragging(false)
+    setThrownBall(selectedBall)
     setPhase('throwing')
     playSfx('/sound/woosh.mp3', 0.5)
     setAttemptsLeft(prev => prev - 1)
@@ -435,15 +446,11 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
       const timer = setTimeout(() => setPhase('result'), 600)
       return () => clearTimeout(timer)
     }
-    // Increasing tension — each shake takes longer (much longer on the last throw), and each
-    // click is louder than the one before
+    // Increasing tension — each shake takes longer (much longer on the last throw)
     const delay = isLastThrow ? 900 + shakeCount * 300 : 600 + shakeCount * 150
-    const timer = setTimeout(() => {
-      playSfx('/sound/pop2.mp3', Math.min(1, 0.4 + shakeCount * 0.2))
-      setShakeCount(prev => prev + 1)
-    }, delay)
+    const timer = setTimeout(() => setShakeCount(prev => prev + 1), delay)
     return () => clearTimeout(timer)
-  }, [phase, shakeCount, totalShakes, isLastThrow, playSfx])
+  }, [phase, shakeCount, totalShakes, isLastThrow])
 
   // Result phase
   useEffect(() => {
@@ -695,13 +702,13 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
               </div>
             ) : (
               <div className="flex justify-center gap-3">
-                {balls.map((ballItem, index) => {
-                  const isSelected = index === selectedBallIndex
+                {balls.map((ballItem) => {
+                  const isSelected = ballItem.item.id === selectedBall?.id
                   const catchRate = getCatchRate(ballItem.item.rarity, rarity)
                   return (
                     <button
                       key={ballItem.item.id}
-                      onClick={() => setSelectedBallIndex(index)}
+                      onClick={() => setSelectedBallId(ballItem.item.id)}
                       className={`relative flex flex-col items-center p-2 rounded-xl transition-all duration-200 ${
                         isSelected
                           ? 'bg-white/15 ring-2 ring-white/40 scale-110 shadow-lg shadow-white/5'
@@ -772,7 +779,7 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
                 {/* Motion trail */}
                 <div className="absolute inset-0 w-14 h-14 rounded-full bg-white/10 blur-md scale-150" />
                 <div className="w-14 h-14 relative z-10">
-                  <BallImage ball={selectedBall} className="w-full h-full animate-[spin_0.35s_linear_infinite]" />
+                  <BallImage ball={animatedBall} className="w-full h-full animate-[spin_0.35s_linear_infinite]" />
                 </div>
               </div>
             </div>
@@ -785,7 +792,7 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
         <div className="absolute inset-0 flex items-center justify-center">
           <Particles count={12} color="#fff" burst spread={100} />
           <div className="w-20 h-20">
-            <BallImage ball={selectedBall} className="w-full h-full animate-[impactBounce_0.4s_ease-out]" />
+            <BallImage ball={animatedBall} className="w-full h-full animate-[impactBounce_0.4s_ease-out]" />
           </div>
         </div>
       )}
@@ -805,7 +812,7 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
               transition: 'transform 0.15s ease-in-out',
             }}
           >
-            <BallImage ball={selectedBall} className="w-full h-full" />
+            <BallImage ball={animatedBall} className="w-full h-full" />
             {/* Impact sparks on each shake */}
             {shakeCount > 0 && (
               <div className="absolute -inset-4 pointer-events-none">
@@ -1010,6 +1017,7 @@ const WildEncounterModal = ({ pet, zoneId = null, onClose, onCatchComplete }) =>
                       setShakeCount(0)
                       totalShakesRef.current = null
                       setThrowTrajectory(null)
+                      setThrownBall(null)
                       setPhase('encounter')
                     }}
                     className="mt-4 px-10 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 transition-all hover:scale-105 active:scale-95 text-lg"
